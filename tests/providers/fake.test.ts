@@ -23,7 +23,16 @@ test('FakeProvider', async (t) => {
   })
 
   await t.test('auth interface', async () => {
-    const status = await provider.auth.status()
+    // Before login, status should show not logged in
+    let status = await provider.auth.status()
+    assert.strictEqual(status.loggedIn, false)
+
+    // After login, status should show logged in
+    const loginStatus = await provider.auth.login({ mode: 'no-browser', scopes: [] })
+    assert.strictEqual(loginStatus.loggedIn, true)
+    assert.strictEqual(loginStatus.user?.id, 'fake-user')
+
+    status = await provider.auth.status()
     assert.strictEqual(status.loggedIn, true)
     assert.strictEqual(status.user?.id, 'fake-user')
   })
