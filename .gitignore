@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+# Never commit local sple credentials or state (FR-AUTH-3, NFR-3)
+tokens.json
+config.local.json
+.DS_Store
