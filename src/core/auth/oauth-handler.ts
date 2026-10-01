@@ -91,7 +91,7 @@ export class LoopbackServer {
 
   /**
    * Wait for an OAuth redirect with the given state parameter.
-   * Rejects if an error is present, state is missing, state doesn't match,
+   * Rejects if state is missing, state doesn't match, error is present,
    * or no code is provided.
    * Times out after 10 minutes.
    */
@@ -105,28 +105,37 @@ export class LoopbackServer {
           this.timeoutId = null
         }
 
-        // Check for error parameter
-        if (redirect.error) {
-          reject(new Error(`OAuth error: ${redirect.error}`))
+        // Check state matches first (before error check)
+        if (redirect.state !== params.state) {
+          this.redirectHandler = null
+          this.expectedState = null
+          reject(new Error('State validation failed'))
           return
         }
 
-        // Check state matches
-        if (redirect.state !== params.state) {
-          reject(new Error(`State mismatch: expected ${params.state}, got ${redirect.state}`))
+        // Check for error parameter
+        if (redirect.error) {
+          this.redirectHandler = null
+          this.expectedState = null
+          reject(new Error(`OAuth error: ${redirect.error}`))
           return
         }
 
         // Check code is present
         if (!redirect.code) {
+          this.redirectHandler = null
+          this.expectedState = null
           reject(new Error('No authorization code in redirect'))
           return
         }
 
+        // Success: resolve and clean up
+        this.redirectHandler = null
+        this.expectedState = null
         resolve({ code: redirect.code, state: redirect.state })
       }
 
-      // Timeout after 10 minutes (RFC 6234 recommends 10 minute timeout)
+      // Timeout after 10 minutes
       this.timeoutId = setTimeout(() => {
         this.redirectHandler = null
         this.expectedState = null
@@ -137,6 +146,27 @@ export class LoopbackServer {
   }
 
   private handleRequest(req: IncomingMessage, res: ServerResponse): void {
+    // Validate Host header to prevent DNS rebinding attacks
+    const hostHeader = req.headers.host
+    if (!hostHeader) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' })
+      res.end('Missing Host header')
+      return
+    }
+
+    // Extract port from baseUrl for comparison
+    const baseUrlPort = this.baseUrl.match(/:(\d+)\/$/)?.[1]
+    const expectedHosts = [
+      `localhost:${baseUrlPort}`,
+      `127.0.0.1:${baseUrlPort}`
+    ]
+
+    if (!expectedHosts.includes(hostHeader)) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' })
+      res.end('Invalid host')
+      return
+    }
+
     // Parse the request URL using WHATWG URL API
     const urlPath = req.url || ''
     const url = new URL(urlPath, this.baseUrl)
@@ -160,19 +190,19 @@ export class LoopbackServer {
       return
     }
 
+    // Validate state before checking error (prevents request cancellation)
+    if (state !== this.expectedState) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' })
+      res.end('Invalid state')
+      this.redirectHandler({ state, code: code || '' })
+      return
+    }
+
     // If there's an error parameter, return 400 and notify handler
     if (error) {
       res.writeHead(400, { 'Content-Type': 'text/plain' })
       res.end(`OAuth error: ${error}`)
       this.redirectHandler({ state, error })
-      return
-    }
-
-    // If state doesn't match expected, return 400 and notify handler
-    if (state !== this.expectedState) {
-      res.writeHead(400, { 'Content-Type': 'text/plain' })
-      res.end('State mismatch')
-      this.redirectHandler({ state, code: code || '' })
       return
     }
 
