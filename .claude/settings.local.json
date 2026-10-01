@@ -13,7 +13,11 @@
       "Bash(npm run *)",
       "Bash(npm test *)",
       "Bash(node *)",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(gh api *)",
+      "Bash(gh run *)",
+      "Bash(git stash *)",
+      "Bash(git branch *)"
     ]
   }
 }

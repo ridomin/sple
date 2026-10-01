@@ -1,0 +1,109 @@
+import { test } from 'node:test'
+import * as assert from 'node:assert'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { loadTokens, saveTokens, deleteTokens, StoredToken } from '../../../src/core/config/token-store.js'
+
+test('token store', async (t) => {
+  let tempDir: string
+
+  await t.before(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'sple-tokens-'))
+  })
+
+  await t.after(() => {
+    rmSync(tempDir, { recursive: true })
+  })
+
+  const mockToken: StoredToken = {
+    accessToken: 'access_123',
+    refreshToken: 'refresh_456',
+    expiresAt: '2026-10-02T00:00:00Z',
+    scopes: ['playlist-read', 'playlist-modify'],
+    userId: 'test-user',
+    grantedAt: '2026-10-01T00:00:00Z',
+  }
+
+  await t.test('saveTokens and loadTokens', () => {
+    saveTokens('spotify', mockToken, tempDir)
+    const loaded = loadTokens('spotify', tempDir)
+
+    assert.notStrictEqual(loaded, null)
+    assert.deepStrictEqual(loaded, mockToken)
+  })
+
+  await t.test('loadTokens returns null if provider not found', () => {
+    const loaded = loadTokens('youtube-music', tempDir)
+    assert.strictEqual(loaded, null)
+  })
+
+  await t.test('loadTokens returns null if file does not exist', () => {
+    const newDir = mkdtempSync(join(tmpdir(), 'sple-tokens-empty-'))
+    const loaded = loadTokens('spotify', newDir)
+    rmSync(newDir, { recursive: true })
+
+    assert.strictEqual(loaded, null)
+  })
+
+  await t.test('deleteTokens removes provider data', () => {
+    saveTokens('spotify', mockToken, tempDir)
+    deleteTokens('spotify', tempDir)
+    const loaded = loadTokens('spotify', tempDir)
+
+    assert.strictEqual(loaded, null)
+  })
+
+  await t.test('validates required fields', () => {
+    const invalidToken = { accessToken: '', userId: '', grantedAt: '', scopes: [] } as unknown as StoredToken
+    assert.throws(() => saveTokens('spotify', invalidToken, tempDir), /must have a non-empty/)
+  })
+
+  await t.test('handles tokens without refreshToken', () => {
+    const tokenWithoutRefresh: StoredToken = {
+      accessToken: 'access',
+      scopes: ['read'],
+      userId: 'user',
+      grantedAt: '2026-10-01T00:00:00Z',
+    }
+    saveTokens('spotify', tokenWithoutRefresh, tempDir)
+    const loaded = loadTokens('spotify', tempDir)
+
+    assert.strictEqual(loaded?.refreshToken, undefined)
+    assert.strictEqual(loaded?.accessToken, 'access')
+  })
+
+  await t.test('handles tokens without expiresAt', () => {
+    const tokenWithoutExpiry: StoredToken = {
+      accessToken: 'access',
+      scopes: ['read'],
+      userId: 'user',
+      grantedAt: '2026-10-01T00:00:00Z',
+    }
+    saveTokens('youtube-music', tokenWithoutExpiry, tempDir)
+    const loaded = loadTokens('youtube-music', tempDir)
+
+    assert.strictEqual(loaded?.expiresAt, undefined)
+  })
+
+  await t.test('supports multiple providers', () => {
+    const token1: StoredToken = { ...mockToken, userId: 'user1' }
+    const token2: StoredToken = { ...mockToken, userId: 'user2' }
+
+    saveTokens('spotify', token1, tempDir)
+    saveTokens('youtube-music', token2, tempDir)
+
+    assert.strictEqual(loadTokens('spotify', tempDir)?.userId, 'user1')
+    assert.strictEqual(loadTokens('youtube-music', tempDir)?.userId, 'user2')
+  })
+
+  await t.test('overwrites existing tokens', () => {
+    const token1: StoredToken = { ...mockToken, accessToken: 'old' }
+    const token2: StoredToken = { ...mockToken, accessToken: 'new' }
+
+    saveTokens('spotify', token1, tempDir)
+    saveTokens('spotify', token2, tempDir)
+
+    assert.strictEqual(loadTokens('spotify', tempDir)?.accessToken, 'new')
+  })
+})
