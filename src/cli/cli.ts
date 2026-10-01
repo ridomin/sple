@@ -31,6 +31,8 @@ Commands:
 
 Options:
   --provider <name>  Specify the provider (${PROVIDER_IDS.join(', ')}); default: spotify
+  --no-browser       auth login: print the URL instead of opening a browser
+  --manual           auth login: paste the redirect URL manually
   --verbose          Enable verbose output (stderr)
   --help, -h         Show this help message
   --version, -v      Show version number
@@ -60,6 +62,8 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
         allowPositionals: true,
         options: {
           provider: { type: 'string' },
+          'no-browser': { type: 'boolean' },
+          manual: { type: 'boolean' },
           verbose: { type: 'boolean' },
           version: { type: 'boolean', short: 'v' },
           help: { type: 'boolean', short: 'h' },
@@ -91,7 +95,18 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
     }
     if (config.verbose) io.err(`[sple] provider=${config.provider} command=${command}`)
 
-    // Real commands arrive in M1.
+    if (command === 'auth') {
+      const provider = registry.create(config.provider, config)
+      const { handleAuthCommand } = await import('./commands/auth.js')
+      const authArgs = [
+        ...positionals.slice(1),
+        ...(values['no-browser'] ? ['--no-browser'] : []),
+        ...(values.manual ? ['--manual'] : []),
+      ]
+      return await handleAuthCommand(authArgs, provider, io)
+    }
+
+    // Other commands arrive in M1.
     throw new UsageError(`Command '${command}' is not implemented yet`)
   } catch (error) {
     io.err(formatErrorMessage(error))
