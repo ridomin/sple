@@ -46,7 +46,6 @@ export interface LoopbackRedirect {
  */
 export class LoopbackServer {
   private server: Server | null = null
-  private listening = false
   private redirectHandler: ((result: RedirectParams) => void) | null = null
   private expectedState: string | null = null
   private timeoutId: NodeJS.Timeout | null = null
@@ -69,7 +68,6 @@ export class LoopbackServer {
           return
         }
         this.baseUrl = `http://localhost:${addr.port}/`
-        this.listening = true
         resolve(this.baseUrl)
       })
 
@@ -84,7 +82,6 @@ export class LoopbackServer {
     if (this.server) {
       this.server.close()
       this.server = null
-      this.listening = false
     }
     if (this.timeoutId) {
       clearTimeout(this.timeoutId)
