@@ -5,7 +5,19 @@
       "Bash(git init *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git config *)"
+      "Bash(git config *)",
+      "Bash(git push *)",
+      "Bash(gh pr *)",
+      "Bash(git checkout *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(node *)",
+      "Bash(git pull *)",
+      "Bash(gh api *)",
+      "Bash(gh run *)",
+      "Bash(git stash *)",
+      "Bash(git branch *)"
     ]
   }
 }

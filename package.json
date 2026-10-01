@@ -1,0 +1,42 @@
+{
+  "name": "sple",
+  "version": "0.1.0",
+  "description": "CLI tool for managing music-streaming playlists with multi-provider support",
+  "type": "module",
+  "main": "dist/cli/cli.js",
+  "bin": {
+    "sple": "dist/cli/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./providers/fake": "./dist/providers/fake/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit",
+    "test": "node --test --import=tsx tests/**/*.test.ts",
+    "test:watch": "node --test --watch --import=tsx tests/**/*.test.ts",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "music",
+    "playlist",
+    "spotify",
+    "youtube-music",
+    "amazon-music",
+    "cli"
+  ],
+  "author": "Rido",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^7.0.2"
+  }
+}
