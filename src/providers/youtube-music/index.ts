@@ -22,21 +22,24 @@ const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
   quotaModel: { kind: 'rate-limited' },
 }
 
-export const YOUTUBE_MUSIC_PROVIDER: Provider = {
-  id: 'youtube-music',
-  displayName: 'YouTube Music',
-  capabilities: YOUTUBE_MUSIC_CAPABILITIES,
-  auth: new YouTubeMusicAuth(
-    process.env.SPLE_YOUTUBE_MUSIC_CLIENT_ID || '',
-    process.env.SPLE_GOOGLE_CLIENT_SECRET || ''
-  ),
-  search: () => Promise.reject(new Error('Not implemented')),
-  listPlaylists: () => Promise.reject(new Error('Not implemented')),
-  getPlaylist: () => Promise.reject(new Error('Not implemented')),
-  getPlaylistTracks: () => Promise.reject(new Error('Not implemented')),
-  getLikedTracks: () => Promise.reject(new Error('Not implemented')),
-  createPlaylist: () => Promise.reject(new Error('Not implemented')),
-  removePlaylist: () => Promise.reject(new Error('Not implemented')),
-  resolveTrack: () => Promise.reject(new Error('Not implemented')),
-  populatePlaylist: () => Promise.reject(new Error('Not implemented')),
+export function createYouTubeMusicProvider(
+  clientId: string,
+  clientSecret: string,
+  configDir?: string
+): Provider {
+  return {
+    id: 'youtube-music',
+    displayName: 'YouTube Music',
+    capabilities: YOUTUBE_MUSIC_CAPABILITIES,
+    auth: new YouTubeMusicAuth(clientId, clientSecret, configDir),
+    search: () => Promise.reject(new Error('Not implemented')),
+    listPlaylists: () => Promise.reject(new Error('Not implemented')),
+    getPlaylist: () => Promise.reject(new Error('Not implemented')),
+    getPlaylistTracks: () => Promise.reject(new Error('Not implemented')),
+    getLikedTracks: () => Promise.reject(new Error('Not implemented')),
+    createPlaylist: () => Promise.reject(new Error('Not implemented')),
+    removePlaylist: () => Promise.reject(new Error('Not implemented')),
+    resolveTrack: () => Promise.reject(new Error('Not implemented')),
+    populatePlaylist: () => Promise.reject(new Error('Not implemented')),
+  }
 }

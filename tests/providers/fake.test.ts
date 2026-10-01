@@ -1,5 +1,8 @@
 import { test } from 'node:test'
 import * as assert from 'node:assert'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import FakeProvider from '../../src/providers/fake/index.js'
 import type { FakePlaylist, FakeTrack } from '../../src/providers/fake/index.js'
 import {
@@ -11,8 +14,15 @@ import {
 test('FakeProvider', async (t) => {
   let provider: FakeProvider
 
+  let tempDir: string
+
   await t.before(() => {
-    provider = new FakeProvider()
+    tempDir = mkdtempSync(join(tmpdir(), 'sple-fake-'))
+    provider = new FakeProvider({ configDir: tempDir })
+  })
+
+  await t.after(() => {
+    rmSync(tempDir, { recursive: true, force: true })
   })
 
   await t.test('initialization with default config', () => {

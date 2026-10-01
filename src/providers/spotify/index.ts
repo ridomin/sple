@@ -23,18 +23,20 @@ const SPOTIFY_CAPABILITIES: ProviderCapabilities = {
   quotaModel: { kind: 'rate-limited' },
 }
 
-export const SPOTIFY_PROVIDER: Provider = {
-  id: 'spotify',
-  displayName: 'Spotify',
-  capabilities: SPOTIFY_CAPABILITIES,
-  auth: new SpotifyAuth(process.env.SPLE_SPOTIFY_CLIENT_ID || ''),
-  search: () => Promise.reject(new Error('Not implemented')),
-  listPlaylists: () => Promise.reject(new Error('Not implemented')),
-  getPlaylist: () => Promise.reject(new Error('Not implemented')),
-  getPlaylistTracks: () => Promise.reject(new Error('Not implemented')),
-  getLikedTracks: () => Promise.reject(new Error('Not implemented')),
-  createPlaylist: () => Promise.reject(new Error('Not implemented')),
-  removePlaylist: () => Promise.reject(new Error('Not implemented')),
-  resolveTrack: () => Promise.reject(new Error('Not implemented')),
-  populatePlaylist: () => Promise.reject(new Error('Not implemented')),
+export function createSpotifyProvider(clientId: string, configDir?: string): Provider {
+  return {
+    id: 'spotify',
+    displayName: 'Spotify',
+    capabilities: SPOTIFY_CAPABILITIES,
+    auth: new SpotifyAuth(clientId, configDir),
+    search: () => Promise.reject(new Error('Not implemented')),
+    listPlaylists: () => Promise.reject(new Error('Not implemented')),
+    getPlaylist: () => Promise.reject(new Error('Not implemented')),
+    getPlaylistTracks: () => Promise.reject(new Error('Not implemented')),
+    getLikedTracks: () => Promise.reject(new Error('Not implemented')),
+    createPlaylist: () => Promise.reject(new Error('Not implemented')),
+    removePlaylist: () => Promise.reject(new Error('Not implemented')),
+    resolveTrack: () => Promise.reject(new Error('Not implemented')),
+    populatePlaylist: () => Promise.reject(new Error('Not implemented')),
+  }
 }

@@ -39,3 +39,4 @@ config.local.json
 tmp/
 temp/
 *.tmp
+.claude/settings.local.json

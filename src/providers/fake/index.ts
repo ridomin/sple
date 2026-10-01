@@ -44,6 +44,8 @@ export interface FakeProviderConfig {
   configDir?: string
 }
 
+let loginCounter = 0
+
 export class FakeProvider implements Provider {
   readonly id: ProviderId = 'fake'
   readonly displayName = 'Fake Provider'
@@ -82,7 +84,7 @@ export class FakeProvider implements Provider {
       login: async (opts) => {
         const scopes = opts.scopes.length > 0 ? opts.scopes : ['all']
         const token: StoredToken = {
-          accessToken: `fake-access-token-${Date.now()}`,
+          accessToken: `fake-access-token-${Date.now()}-${++loginCounter}`,
           refreshToken: `fake-refresh-token-${Date.now()}`,
           expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
           scopes,

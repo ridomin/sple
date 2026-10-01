@@ -1,5 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { run } from '../../../src/cli/cli.js'
 import { ProviderRegistry } from '../../../src/cli/provider-registry.js'
 import { FakeProvider } from '../../../src/providers/fake/index.js'
@@ -11,6 +14,8 @@ import { EXIT_CODES } from '../../../src/cli/exit-codes.js'
 import { AuthRequiredError, UsageError } from '../../../src/core/provider/errors.js'
 import type { AuthStatus, ProviderAuth } from '../../../src/core/provider/provider.js'
 
+const TEST_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'sple-cli-auth-'))
+
 function makeIO() {
   const out: string[] = []
   const err: string[] = []
@@ -18,7 +23,7 @@ function makeIO() {
 }
 
 function providerWith(auth: Partial<ProviderAuth>) {
-  const p = new FakeProvider()
+  const p = new FakeProvider({ configDir: TEST_CONFIG_DIR })
   p.auth = { ...p.auth, ...auth } as ProviderAuth
   return p
 }
@@ -32,7 +37,7 @@ const loggedIn = (extra: Partial<AuthStatus> = {}): AuthStatus => ({
 
 async function exec(argv: string[]) {
   const { io, out, err } = makeIO()
-  const registry = new ProviderRegistry().register('fake', () => new FakeProvider())
+  const registry = new ProviderRegistry().register('fake', () => new FakeProvider({ configDir: TEST_CONFIG_DIR }))
   const code = await run(argv, { io, registry, env: {} })
   return { code, out: out.join('\n'), err: err.join('\n') }
 }
@@ -137,7 +142,7 @@ test('logout: error returns 1', async () => {
 
 test('dispatcher: usage errors thrown', async () => {
   const { io } = makeIO()
-  const p = new FakeProvider()
+  const p = new FakeProvider({ configDir: TEST_CONFIG_DIR })
   await assert.rejects(handleAuthCommand([], p, io), UsageError)
   await assert.rejects(handleAuthCommand(['x'], p, io), UsageError)
   await assert.rejects(handleAuthCommand(['status', '--manual'], p, io), UsageError)

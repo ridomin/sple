@@ -4,7 +4,6 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { SpotifyAuth } from '../../../src/providers/spotify/auth.js'
-import { deleteTokens } from '../../../src/core/config/token-store.js'
 
 test('SpotifyAuth', async (t) => {
   let tempDir: string
@@ -14,17 +13,11 @@ test('SpotifyAuth', async (t) => {
   })
 
   await t.after(() => {
-    rmSync(tempDir, { recursive: true })
-    // Clean up any tokens saved globally
-    try {
-      deleteTokens('spotify')
-    } catch {
-      // Ignore if tokens file doesn't exist
-    }
+    rmSync(tempDir, { recursive: true, force: true })
   })
 
   await t.test('returns auth status after login (stub)', async () => {
-    const auth = new SpotifyAuth('test-client-id')
+    const auth = new SpotifyAuth('test-client-id', tempDir)
     const status = await auth.login({ mode: 'no-browser', scopes: [] })
 
     assert.equal(status.loggedIn, true)
@@ -35,15 +28,10 @@ test('SpotifyAuth', async (t) => {
   })
 
   await t.test('returns not logged in before login', async () => {
-    // Clean up any existing tokens first
-    try {
-      deleteTokens('spotify')
-    } catch {
-      // Ignore if tokens file doesn't exist
-    }
+    await new SpotifyAuth('test-client-id', tempDir).logout()
 
     // Create a fresh auth instance without login
-    const auth = new SpotifyAuth('test-client-id')
+    const auth = new SpotifyAuth('test-client-id', tempDir)
     const status = await auth.status()
 
     assert.equal(status.loggedIn, false)
@@ -52,7 +40,7 @@ test('SpotifyAuth', async (t) => {
   })
 
   await t.test('logs out successfully', async () => {
-    const auth = new SpotifyAuth('test-client-id')
+    const auth = new SpotifyAuth('test-client-id', tempDir)
     await auth.login({ mode: 'no-browser', scopes: [] })
     const result = await auth.logout()
 
@@ -61,7 +49,7 @@ test('SpotifyAuth', async (t) => {
   })
 
   await t.test('provides correct scopes for Spotify', async () => {
-    const auth = new SpotifyAuth('test-client-id')
+    const auth = new SpotifyAuth('test-client-id', tempDir)
     const status = await auth.login({ mode: 'no-browser', scopes: [] })
 
     const expectedScopes = [
@@ -74,7 +62,7 @@ test('SpotifyAuth', async (t) => {
   })
 
   await t.test('handles cleanup gracefully', async () => {
-    const auth = new SpotifyAuth('test-client-id')
+    const auth = new SpotifyAuth('test-client-id', tempDir)
     await auth.login({ mode: 'no-browser', scopes: [] })
     // Should not throw
     auth.cleanup()

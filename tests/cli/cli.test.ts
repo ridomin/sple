@@ -89,7 +89,7 @@ test('loadEnvFile handles missing and present files', () => {
 
 test('registry instantiates all three providers', () => {
   const reg = createDefaultRegistry()
-  const cfg = loadConfig({}, {})
+  const cfg = loadConfig({}, { SPLE_SPOTIFY_CLIENT_ID: 'sid', SPLE_YOUTUBE_MUSIC_CLIENT_ID: 'yid' })
   assert.deepStrictEqual(reg.list().sort(), ['fake', 'spotify', 'youtube-music'])
   for (const id of reg.list()) {
     assert.strictEqual(reg.create(id, cfg).id, id)

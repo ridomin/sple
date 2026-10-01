@@ -4,7 +4,6 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { YouTubeMusicAuth } from '../../../src/providers/youtube-music/auth.js'
-import { deleteTokens } from '../../../src/core/config/token-store.js'
 
 test('YouTubeMusicAuth', async (t) => {
   let tempDir: string
@@ -14,17 +13,11 @@ test('YouTubeMusicAuth', async (t) => {
   })
 
   await t.after(() => {
-    rmSync(tempDir, { recursive: true })
-    // Clean up any tokens saved globally
-    try {
-      deleteTokens('youtube-music')
-    } catch {
-      // Ignore if tokens file doesn't exist
-    }
+    rmSync(tempDir, { recursive: true, force: true })
   })
 
   await t.test('returns auth status after login (stub)', async () => {
-    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret')
+    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret', tempDir)
     const status = await auth.login({ mode: 'no-browser', scopes: [] })
 
     assert.equal(status.loggedIn, true)
@@ -35,15 +28,10 @@ test('YouTubeMusicAuth', async (t) => {
   })
 
   await t.test('returns not logged in before login', async () => {
-    // Clean up any existing tokens first
-    try {
-      deleteTokens('youtube-music')
-    } catch {
-      // Ignore if tokens file doesn't exist
-    }
+    await new YouTubeMusicAuth('test-client-id', 'test-client-secret', tempDir).logout()
 
     // Create a fresh auth instance without login
-    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret')
+    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret', tempDir)
     const status = await auth.status()
 
     assert.equal(status.loggedIn, false)
@@ -52,7 +40,7 @@ test('YouTubeMusicAuth', async (t) => {
   })
 
   await t.test('logs out successfully', async () => {
-    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret')
+    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret', tempDir)
     await auth.login({ mode: 'no-browser', scopes: [] })
     const result = await auth.logout()
 
@@ -62,7 +50,7 @@ test('YouTubeMusicAuth', async (t) => {
   })
 
   await t.test('provides correct scopes for YouTube Music', async () => {
-    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret')
+    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret', tempDir)
     const status = await auth.login({ mode: 'no-browser', scopes: [] })
 
     const expectedScopes = ['https://www.googleapis.com/auth/youtube']
@@ -70,7 +58,7 @@ test('YouTubeMusicAuth', async (t) => {
   })
 
   await t.test('handles cleanup gracefully', async () => {
-    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret')
+    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret', tempDir)
     await auth.login({ mode: 'no-browser', scopes: [] })
     // Should not throw
     auth.cleanup()

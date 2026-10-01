@@ -7,7 +7,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
   private config: OAuthConfig
   private oauthHandler?: OAuthHandler
 
-  constructor(clientId: string, clientSecret: string) {
+  constructor(clientId: string, clientSecret: string, private readonly configDir?: string) {
     this.config = {
       clientId,
       clientSecret,
@@ -20,30 +20,35 @@ export class YouTubeMusicAuth implements ProviderAuth {
     const handler = new OAuthHandler(this.config, 'https://accounts.google.com/o/oauth2/v2/auth')
     this.oauthHandler = handler
 
-    await handler.initiateLogin(opts.mode)
+    try {
+      await handler.initiateLogin(opts.mode)
 
-    // Stub response
-    const stubToken = {
-      accessToken: 'stub-google-access-token',
-      refreshToken: 'stub-google-refresh-token',
-      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
-      scopes: this.config.scopes,
-      userId: 'stub-user@gmail.com',
-      grantedAt: new Date().toISOString(),
-    }
+      // Stub response
+      const stubToken = {
+        accessToken: 'stub-google-access-token',
+        refreshToken: 'stub-google-refresh-token',
+        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+        scopes: this.config.scopes,
+        userId: 'stub-user@gmail.com',
+        grantedAt: new Date().toISOString(),
+      }
 
-    await saveTokens('youtube-music', stubToken)
+      await saveTokens('youtube-music', stubToken, this.configDir)
 
-    return {
-      loggedIn: true,
-      user: { id: 'stub-user@gmail.com', displayName: 'Stub User' },
-      scopes: this.config.scopes,
-      expiresAt: stubToken.expiresAt,
+      return {
+        loggedIn: true,
+        user: { id: 'stub-user@gmail.com', displayName: 'Stub User' },
+        scopes: this.config.scopes,
+        expiresAt: stubToken.expiresAt,
+      }
+    } finally {
+      // Stub flow never awaits a redirect; release the loopback server
+      handler.cleanup()
     }
   }
 
   async status(): Promise<AuthStatus> {
-    const token = await loadTokens('youtube-music')
+    const token = await loadTokens('youtube-music', this.configDir)
 
     if (!token) {
       return {
@@ -61,7 +66,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
   }
 
   async logout(): Promise<{ revoked: boolean; deletedData: string[] }> {
-    await deleteTokens('youtube-music')
+    await deleteTokens('youtube-music', this.configDir)
 
     // Google supports revocation; in M1 we'd call the revoke endpoint
     return {

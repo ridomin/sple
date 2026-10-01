@@ -2,8 +2,8 @@ import type { Provider } from '../core/provider/provider.js'
 import type { ProviderId } from '../core/provider/capabilities.js'
 import { UsageError } from '../core/provider/errors.js'
 import { FakeProvider } from '../providers/fake/index.js'
-import { SPOTIFY_PROVIDER } from '../providers/spotify/index.js'
-import { YOUTUBE_MUSIC_PROVIDER } from '../providers/youtube-music/index.js'
+import { createSpotifyProvider } from '../providers/spotify/index.js'
+import { createYouTubeMusicProvider } from '../providers/youtube-music/index.js'
 import type { Config } from './config.js'
 
 export type ProviderFactory = (config: Config) => Provider
@@ -33,9 +33,27 @@ export class ProviderRegistry {
   }
 }
 
+function requireClientId(value: string | undefined, envVar: string, name: string): string {
+  if (!value || value.trim() === '') {
+    throw new UsageError(
+      `Missing ${name} client ID. Set ${envVar} in your environment or .env file.`
+    )
+  }
+  return value
+}
+
 export function createDefaultRegistry(): ProviderRegistry {
   return new ProviderRegistry()
-    .register('spotify', () => SPOTIFY_PROVIDER)
-    .register('youtube-music', () => YOUTUBE_MUSIC_PROVIDER)
+    .register('spotify', (config) =>
+      createSpotifyProvider(
+        requireClientId(config.spotifyClientId, 'SPLE_SPOTIFY_CLIENT_ID', 'Spotify')
+      )
+    )
+    .register('youtube-music', (config) =>
+      createYouTubeMusicProvider(
+        requireClientId(config.youtubeMusicClientId, 'SPLE_YOUTUBE_MUSIC_CLIENT_ID', 'YouTube Music'),
+        config.googleClientSecret ?? ''
+      )
+    )
     .register('fake', () => new FakeProvider())
 }

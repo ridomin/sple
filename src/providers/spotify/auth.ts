@@ -7,7 +7,7 @@ export class SpotifyAuth implements ProviderAuth {
   private config: OAuthConfig
   private oauthHandler?: OAuthHandler
 
-  constructor(clientId: string) {
+  constructor(clientId: string, private readonly configDir?: string) {
     this.config = {
       clientId,
       scopes: [
@@ -24,36 +24,41 @@ export class SpotifyAuth implements ProviderAuth {
     const handler = new OAuthHandler(this.config, 'https://accounts.spotify.com/authorize')
     this.oauthHandler = handler
 
-    await handler.initiateLogin(opts.mode)
+    try {
+      await handler.initiateLogin(opts.mode)
 
-    // In real implementation, we'd:
-    // 1. Print login.authorizationUrl (or open browser for loopback)
-    // 2. Wait for redirect
-    // 3. Exchange code for token via POST to https://accounts.spotify.com/api/token
-    // 4. Save token to token-store
+      // In real implementation, we'd:
+      // 1. Print login.authorizationUrl (or open browser for loopback)
+      // 2. Wait for redirect
+      // 3. Exchange code for token via POST to https://accounts.spotify.com/api/token
+      // 4. Save token to token-store
 
-    // Stub response
-    const stubToken = {
-      accessToken: 'stub-spotify-access-token',
-      refreshToken: 'stub-spotify-refresh-token',
-      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
-      scopes: this.config.scopes,
-      userId: 'stub-spotify-user',
-      grantedAt: new Date().toISOString(),
-    }
+      // Stub response
+      const stubToken = {
+        accessToken: 'stub-spotify-access-token',
+        refreshToken: 'stub-spotify-refresh-token',
+        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+        scopes: this.config.scopes,
+        userId: 'stub-spotify-user',
+        grantedAt: new Date().toISOString(),
+      }
 
-    await saveTokens('spotify', stubToken)
+      await saveTokens('spotify', stubToken, this.configDir)
 
-    return {
-      loggedIn: true,
-      user: { id: 'stub-spotify-user', displayName: 'Stub Spotify User' },
-      scopes: this.config.scopes,
-      expiresAt: stubToken.expiresAt,
+      return {
+        loggedIn: true,
+        user: { id: 'stub-spotify-user', displayName: 'Stub Spotify User' },
+        scopes: this.config.scopes,
+        expiresAt: stubToken.expiresAt,
+      }
+    } finally {
+      // Stub flow never awaits a redirect; release the loopback server
+      handler.cleanup()
     }
   }
 
   async status(): Promise<AuthStatus> {
-    const token = await loadTokens('spotify')
+    const token = await loadTokens('spotify', this.configDir)
 
     if (!token) {
       return {
@@ -71,7 +76,7 @@ export class SpotifyAuth implements ProviderAuth {
   }
 
   async logout(): Promise<{ revoked: boolean; deletedData: string[] }> {
-    await deleteTokens('spotify')
+    await deleteTokens('spotify', this.configDir)
 
     // Spotify does not support revocation, so we just delete local tokens
     return {
