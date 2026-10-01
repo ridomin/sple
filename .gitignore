@@ -29,6 +29,7 @@ Thumbs.db
 .env.*
 .env.local
 .env.*.local
+sample.env
 
 # Never commit local sple credentials or state (FR-AUTH-3, NFR-3)
 tokens.json
@@ -38,3 +39,4 @@ config.local.json
 tmp/
 temp/
 *.tmp
+.claude/settings.local.json

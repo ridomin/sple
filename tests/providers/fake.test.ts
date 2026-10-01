@@ -1,5 +1,8 @@
 import { test } from 'node:test'
 import * as assert from 'node:assert'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import FakeProvider from '../../src/providers/fake/index.js'
 import type { FakePlaylist, FakeTrack } from '../../src/providers/fake/index.js'
 import {
@@ -11,8 +14,15 @@ import {
 test('FakeProvider', async (t) => {
   let provider: FakeProvider
 
+  let tempDir: string
+
   await t.before(() => {
-    provider = new FakeProvider()
+    tempDir = mkdtempSync(join(tmpdir(), 'sple-fake-'))
+    provider = new FakeProvider({ configDir: tempDir })
+  })
+
+  await t.after(() => {
+    rmSync(tempDir, { recursive: true, force: true })
   })
 
   await t.test('initialization with default config', () => {
@@ -23,7 +33,16 @@ test('FakeProvider', async (t) => {
   })
 
   await t.test('auth interface', async () => {
-    const status = await provider.auth.status()
+    // Before login, status should show not logged in
+    let status = await provider.auth.status()
+    assert.strictEqual(status.loggedIn, false)
+
+    // After login, status should show logged in
+    const loginStatus = await provider.auth.login({ mode: 'no-browser', scopes: [] })
+    assert.strictEqual(loginStatus.loggedIn, true)
+    assert.strictEqual(loginStatus.user?.id, 'fake-user')
+
+    status = await provider.auth.status()
     assert.strictEqual(status.loggedIn, true)
     assert.strictEqual(status.user?.id, 'fake-user')
   })

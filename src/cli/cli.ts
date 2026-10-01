@@ -1,16 +1,23 @@
 #!/usr/bin/env node
 
-import { version } from '../index.js'
+import { parseArgs } from 'node:util'
+import { pathToFileURL } from 'node:url'
+import { realpathSync } from 'node:fs'
+import { loadConfig, loadEnvFile, PROVIDER_IDS } from './config.js'
+import { EXIT_CODES, getExitCode, formatErrorMessage } from './exit-codes.js'
+import { createDefaultRegistry, type ProviderRegistry } from './provider-registry.js'
+import { readPackageVersion } from './version.js'
+import { UsageError } from '../core/provider/errors.js'
 
-const args = process.argv.slice(2)
-
-if (args.includes('--version') || args.includes('-v')) {
-  console.log(`sple v${version}`)
-  process.exit(0)
+export interface CliIO {
+  out: (msg: string) => void
+  err: (msg: string) => void
 }
 
-if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
-  console.log(`sple v${version}
+export const COMMANDS = ['auth', 'search', 'playlist', 'export', 'import', 'migrate'] as const
+
+export function helpText(version: string): string {
+  return `sple v${version}
 
 Usage: sple <command> [options]
 
@@ -23,16 +30,104 @@ Commands:
   migrate    Migrate playlists between providers
 
 Options:
-  --provider <name>  Specify the provider (spotify, youtube-music)
-  --verbose          Enable verbose output
+  --provider <name>  Specify the provider (${PROVIDER_IDS.join(', ')}); default: spotify
+  --no-browser       auth login: print the URL instead of opening a browser
+  --manual           auth login: paste the redirect URL manually
+  --verbose          Enable verbose output (stderr)
   --help, -h         Show this help message
   --version, -v      Show version number
-
-See docs/README.md for detailed documentation.
-`)
-  process.exit(0)
+`
 }
 
-console.error(`Unknown command: ${args[0]}`)
-console.error('Run "sple --help" for usage information')
-process.exit(1)
+export interface RunOptions {
+  io?: CliIO
+  env?: NodeJS.ProcessEnv
+  registry?: ProviderRegistry
+  version?: string
+}
+
+/** Run the CLI and return the process exit code. Never calls process.exit. */
+export async function run(argv: string[], opts: RunOptions = {}): Promise<number> {
+  const io: CliIO = opts.io ?? {
+    out: (m) => console.log(m),
+    err: (m) => console.error(m),
+  }
+  const version = opts.version ?? readPackageVersion()
+
+  try {
+    let parsed
+    try {
+      parsed = parseArgs({
+        args: argv,
+        allowPositionals: true,
+        options: {
+          provider: { type: 'string' },
+          'no-browser': { type: 'boolean' },
+          manual: { type: 'boolean' },
+          verbose: { type: 'boolean' },
+          version: { type: 'boolean', short: 'v' },
+          help: { type: 'boolean', short: 'h' },
+        },
+      })
+    } catch (e) {
+      throw new UsageError(e instanceof Error ? e.message : String(e))
+    }
+    const { values, positionals } = parsed
+
+    if (values.version) {
+      io.out(`sple v${version}`)
+      return EXIT_CODES.SUCCESS
+    }
+    if (values.help || positionals.length === 0) {
+      io.out(helpText(version))
+      return EXIT_CODES.SUCCESS
+    }
+
+    const config = loadConfig({ provider: values.provider, verbose: values.verbose }, opts.env)
+    const registry = opts.registry ?? createDefaultRegistry()
+    if (!registry.has(config.provider)) {
+      throw new UsageError(`Unknown provider '${config.provider}'`)
+    }
+
+    const command = positionals[0]
+    if (!(COMMANDS as readonly string[]).includes(command)) {
+      throw new UsageError(`Unknown command: ${command}. Run "sple --help" for usage information`)
+    }
+    if (config.verbose) io.err(`[sple] provider=${config.provider} command=${command}`)
+
+    if (command === 'auth') {
+      const provider = registry.create(config.provider, config)
+      const { handleAuthCommand } = await import('./commands/auth.js')
+      const authArgs = [
+        ...positionals.slice(1),
+        ...(values['no-browser'] ? ['--no-browser'] : []),
+        ...(values.manual ? ['--manual'] : []),
+      ]
+      return await handleAuthCommand(authArgs, provider, io)
+    }
+
+    // Other commands arrive in M1.
+    throw new UsageError(`Command '${command}' is not implemented yet`)
+  } catch (error) {
+    io.err(formatErrorMessage(error))
+    return getExitCode(error)
+  }
+}
+
+function isMain(): boolean {
+  if (!process.argv[1]) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+  } catch {
+    return false
+  }
+}
+
+if (isMain()) {
+  try {
+    loadEnvFile()
+  } catch (e) {
+    console.error(`Failed to load .env: ${formatErrorMessage(e)}`)
+  }
+  process.exitCode = await run(process.argv.slice(2))
+}

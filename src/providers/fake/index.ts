@@ -14,6 +14,8 @@ import {
   AccessRestrictedError,
   QuotaExhaustedError,
 } from '../../core/provider/errors.js'
+import { loadTokens, saveTokens, deleteTokens } from '../../core/config/token-store.js'
+import type { StoredToken } from '../../core/config/token-store.js'
 
 export interface FakePlaylist {
   id: string
@@ -39,7 +41,10 @@ export interface FakeProviderConfig {
   initialPlaylists?: FakePlaylist[]
   initialTracks?: FakeTrack[]
   userId?: string
+  configDir?: string
 }
+
+let loginCounter = 0
 
 export class FakeProvider implements Provider {
   readonly id: ProviderId = 'fake'
@@ -50,12 +55,14 @@ export class FakeProvider implements Provider {
   private userId: string
   private nextPlaylistId = 1
   private quotaBucket = 1000
+  private configDir?: string
 
   capabilities: ProviderCapabilities
   auth: ProviderAuth
 
   constructor(config: FakeProviderConfig = {}) {
     this.userId = config.userId ?? 'fake-user'
+    this.configDir = config.configDir
 
     // Build capabilities with proper types
     const caps: any = {
@@ -74,17 +81,43 @@ export class FakeProvider implements Provider {
     this.capabilities = caps as ProviderCapabilities
 
     this.auth = {
-      login: async () => ({
-        loggedIn: true,
-        user: { id: this.userId, displayName: 'Fake User' },
-        scopes: ['all'],
-      }),
-      logout: async () => ({ revoked: true, deletedData: [] }),
-      status: async () => ({
-        loggedIn: true,
-        user: { id: this.userId, displayName: 'Fake User' },
-        scopes: ['all'],
-      }),
+      login: async (opts) => {
+        const scopes = opts.scopes.length > 0 ? opts.scopes : ['all']
+        const token: StoredToken = {
+          accessToken: `fake-access-token-${Date.now()}-${++loginCounter}`,
+          refreshToken: `fake-refresh-token-${Date.now()}`,
+          expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+          scopes,
+          userId: this.userId,
+          grantedAt: new Date().toISOString(),
+        }
+        await saveTokens('fake', token, this.configDir)
+        return {
+          loggedIn: true,
+          user: { id: this.userId, displayName: 'Fake User' },
+          scopes,
+          expiresAt: token.expiresAt,
+        }
+      },
+      logout: async () => {
+        await deleteTokens('fake', this.configDir)
+        return { revoked: true, deletedData: ['access_token', 'refresh_token'] }
+      },
+      status: async () => {
+        const token = await loadTokens('fake', this.configDir)
+        if (!token) {
+          return {
+            loggedIn: false,
+            scopes: [],
+          }
+        }
+        return {
+          loggedIn: true,
+          user: { id: token.userId, displayName: token.userId },
+          scopes: token.scopes,
+          expiresAt: token.expiresAt,
+        }
+      },
     } as ProviderAuth
 
     // Initialize with provided data

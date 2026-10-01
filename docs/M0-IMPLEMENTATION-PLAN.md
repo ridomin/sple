@@ -144,7 +144,9 @@
 
 ### Phase 7: Auth Interface Stubs
 
-**[M0-9] Implement auth interface and login flow (stubs)**
+**[M0-9] Status: ✅ COMPLETE** (commit: 41dd5eb)
+
+Implement auth interface and login flow (stubs)
 - Create `src/core/auth/auth.ts` with `ProviderAuth` interface (from ADR-0003)
 - Create `src/core/auth/oauth-handler.ts` with PKCE flow, loopback redirect, `--no-browser` / `--manual` modes
 - Implement `sple auth login [--provider X] [--no-browser | --manual]` command
@@ -154,12 +156,12 @@
 - Tests with mock OAuth responses (no real provider APIs)
 
 **Acceptance criteria:**
-- `sple auth login --provider spotify` initiates PKCE flow
-- `--no-browser` prints the URL only
-- `--manual` waits for pasted redirect URL
-- `sple auth status` shows logged-in user and scopes
-- `sple auth logout` deletes tokens and returns success
-- Tokens are stored and loaded from token-store
+- ✅ `sple auth login --provider spotify` initiates PKCE flow
+- ✅ `--no-browser` prints the URL only
+- ✅ `--manual` waits for pasted redirect URL
+- ✅ `sple auth status` shows logged-in user and scopes
+- ✅ `sple auth logout` deletes tokens and returns success
+- ✅ Tokens are stored and loaded from token-store
 
 ---
 
