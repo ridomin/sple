@@ -57,17 +57,14 @@
 
 ---
 
-**[M0-4] Implement .env loader**
-- Create `src/core/config/env-loader.ts` with `loadEnv(configDir?: string)`
-- Load and parse .env file (KEY=value format)
-- Merge with `process.env` (env vars take precedence over file)
-- Handle comments and empty lines
+**[M0-4] Use Node's --env-file for environment loading (skipped)**
+- Environment variables are loaded using Node's built-in `--env-file` flag (Node.js 21.7.0+)
+- No custom env-loader module needed; simplifies the codebase
+- The .env file is specified in the CLI wrapper (npm script or shell invocation)
 
 **Acceptance criteria:**
-- Correctly parses .env files
-- Returns `Record<string, string>`
-- Env vars override .env values
-- Tests with sample .env files
+- `npm run dev` and `npm test` work with environment variables from the .env file
+- CLI entry point can be invoked with `node --env-file=<path>/.env dist/cli/cli.js`
 
 ---
 
@@ -248,7 +245,7 @@ Phase 9: [M0-12] Documentation
 | M0-1 | 2d | Standard TypeScript project setup |
 | M0-2 | 2d | Type definitions; no logic |
 | M0-3 | 1d | Path resolution; platform detection |
-| M0-4 | 1d | .env parsing (simple format) |
+| M0-4 | — | Use Node's `--env-file` flag (skipped) |
 | M0-5 | 2d | File I/O, schema versioning, validation |
 | M0-6 | 3d | Retry logic, token refresh, logging |
 | M0-7 | 2d | In-memory provider; all operations |
@@ -257,7 +254,7 @@ Phase 9: [M0-12] Documentation
 | M0-10 | 1d | Adapter stubs (minimal implementations) |
 | M0-11 | 2d | Jest setup, mock fixtures, test structure |
 | M0-12 | 2d | ADRs, README, documentation |
-| **Total** | **23d** | ~4–5 weeks at 5d/week |
+| **Total** | **22d** | ~4–5 weeks at 5d/week |
 
 ## Success Criteria
 

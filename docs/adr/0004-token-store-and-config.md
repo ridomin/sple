@@ -110,9 +110,7 @@ Tokens are stored in a versioned JSON file alongside `.env`:
 
 Both modules handle schema versioning and migration (if tokens.json is v0 or v1, ensure it's upgraded to v1).
 
-**`src/core/config/env-loader.ts`** — Loads and parses the .env file. Provides:
-- `loadEnv(configDir?: string): Record<string, string>`: Reads and parses .env. Merges with `process.env`.
-- Does not validate variables; the caller (e.g., `src/cli/config.ts`) validates and maps them to config objects.
+**Environment variable loading** — Rather than a custom .env loader, environment variables are loaded using Node's built-in `--env-file` flag, which is available in Node.js 21.7.0+. The CLI entry point is invoked as `node --env-file=<configDir>/.env dist/cli/cli.js` or wrapped in an npm script. This simplifies the code and eliminates a custom module.
 
 ### 4. HTTP client integration (from ADR-0003)
 
@@ -148,7 +146,7 @@ Token refresh is transparent to the `Provider` interface and CLI.
 
 ## Consequences
 
-- M0 implements `config/paths.ts`, `config/token-store.ts`, and `env-loader.ts`.
+- M0 implements `config/paths.ts` and `config/token-store.ts`.
 - The `.env` file is documented in user docs and the setup guide; users learn to add `SPLE_SPOTIFY_CLIENT_ID=…` and other variables there.
 - Each adapter's HTTP client calls `tokenStore.loadTokens()` and `tokenStore.saveTokens()` during initialization and on 401 refresh.
 - The fake provider (M0) uses the same token-store and paths modules as real providers, so tests can verify token refresh logic.
