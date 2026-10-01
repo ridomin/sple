@@ -24,8 +24,8 @@ test('FakeProvider', async (t) => {
 
   await t.test('auth interface', async () => {
     const status = await provider.auth.status()
-    assert.strictEqual(status.isLoggedIn, true)
-    assert.strictEqual(status.userId, 'fake-user')
+    assert.strictEqual(status.loggedIn, true)
+    assert.strictEqual(status.user?.id, 'fake-user')
   })
 
   await t.test('creates playlist', async () => {
@@ -43,16 +43,17 @@ test('FakeProvider', async (t) => {
   })
 
   await t.test('lists playlists', async () => {
-    await provider.createPlaylist({
+    const p = new FakeProvider()
+    await p.createPlaylist({
       name: 'Playlist 1',
       public: false,
     })
-    await provider.createPlaylist({
+    await p.createPlaylist({
       name: 'Playlist 2',
       public: false,
     })
 
-    const result = await provider.listPlaylists({ limit: 10 })
+    const result = await p.listPlaylists({ limit: 10 })
 
     assert.ok(result.items.length >= 2)
     assert.strictEqual(result.items[0].name, 'Playlist 1')
@@ -93,31 +94,59 @@ test('FakeProvider', async (t) => {
   })
 
   await t.test('throws error when removing non-owned playlist', async () => {
-    const provider2 = new FakeProvider({ userId: 'other-user' })
-    const created = await provider.createPlaylist({
-      name: 'Other Playlist',
-      public: false,
-    })
+    const p = new FakeProvider({ userId: 'user2' })
 
+    // Create a playlist owned by a different user
+    const fakePlaylist: FakePlaylist = {
+      id: 'owned-by-user1',
+      name: 'Owned by user1',
+      owner: 'user1',
+      public: false,
+      collaborative: false,
+      trackIds: [],
+    }
+    // Access private property for testing only
+    ;(p as any).playlists.set('owned-by-user1', fakePlaylist)
+
+    // user2 should not be able to remove user1's playlist
     await assert.rejects(
-      () => provider2.removePlaylist(created.ref),
+      () => p.removePlaylist('owned-by-user1'),
       AccessRestrictedError
     )
   })
 
   await t.test('respects owned-only access', async () => {
-    const provider2 = new FakeProvider({
-      userId: 'other-user',
+    const p = new FakeProvider({
+      userId: 'user1',
       capabilities: { playlistItemsAccess: 'owned-only' },
     })
 
-    const created = await provider.createPlaylist({
-      name: 'Owned by user 1',
+    // Create a playlist owned by user1
+    const playlist1 = await p.createPlaylist({
+      name: 'Owned by user1',
       public: false,
     })
 
+    // Should be able to get it (user1 is the owner)
+    const retrieved = await p.getPlaylist(playlist1.ref)
+    assert.ok(retrieved)
+
+    // Simulate access from a different user by manually adding a non-owned playlist
+    // This verifies the ownership check works
+    const fakePlaylist: FakePlaylist = {
+      id: 'fake-pl',
+      name: 'Not owned by user1',
+      owner: 'user2',
+      public: false,
+      collaborative: false,
+      trackIds: [],
+    }
+    // Access private property for testing only
+    ;(p as any).playlists.set('fake-pl', fakePlaylist)
+
+    // Should fail due to owned-only access
     await assert.rejects(
-      () => provider2.getPlaylist(created.ref),
+      () => p.getPlaylist('fake-pl'),
       (error: any) =>
         error instanceof AccessRestrictedError &&
         error.reason === 'not-owned'
