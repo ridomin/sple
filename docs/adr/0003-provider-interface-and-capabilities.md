@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-01)
 - **Date:** 2026-10-01
 - **Deciders:** project owner (user); architect (author)
-- **Related:** `docs/requirements.md` PRV-1…6, FR-AUTH, FR-PL, FR-EXP, FR-MIG, §8, §10 (spikes S1–S7); ADR 0001 (Amazon Music); ADR 0002 (YouTube Music)
+- **Related:** `docs/requirements.md` PRV-1…6, FR-AUTH, FR-PL, FR-EXP, FR-MIG, §8, §10 (spikes S1–S7); ADR 0001 (Amazon Music); ADR 0002 (YouTube Music); ADR 0004 (Token store and config)
 - **Supersedes:** the capability types and tables in ADR 0001 ("Capability matrix") and ADR 0002 (§4.1)
 
 ## Context
@@ -85,7 +85,18 @@ export interface ProviderCapabilities {
 
 `likedSongs.write` is the literal type `false`: writing likes is out of scope (requirements §9). Lifting it needs a new ADR.
 
-### 2. Provider interface
+### 2. HTTP client architecture
+
+Each adapter has its own HTTP client instance, bound to its provider ID at initialization. The HTTP client is **completely internal** to the adapter and is never exposed in the `Provider` interface. This keeps the abstraction clean and allows adapters to evolve their HTTP layer without affecting the CLI or core.
+
+The HTTP client owns:
+- **Token refresh:** detects 401 responses, calls the token-store module (see ADR-0004) to refresh, and retries the request transparently.
+- **Retry logic:** exponential backoff and jitter for transient errors (5xx, 429, network), honoring `Retry-After` headers (NFR-4).
+- **Rate limiting:** respects provider quota/rate limits using the `quotaModel` declared in capabilities.
+
+The `Provider` interface does not expose the HTTP client. The CLI never knows HTTP clients exist.
+
+### 3. Provider interface
 
 ```ts
 // src/core/provider/provider.ts
@@ -143,7 +154,9 @@ export interface Provider {
 }
 ```
 
-Typed errors, mapped to exit codes (CLI-4) in one place in the CLI layer:
+### 4. Error handling
+
+Typed errors, mapped to exit codes (CLI-4) in one place in the CLI layer. Adapters throw only these types; the closed set ensures predictable CLI behavior.
 
 | Error | Exit code | Example |
 |---|---|---|
@@ -153,7 +166,9 @@ Typed errors, mapped to exit codes (CLI-4) in one place in the CLI layer:
 | `AccessRestrictedError` (`reason: 'not-owned' \| 'premium-required' \| …`) | 1 | Spotify non-owned playlist (FR-PL-2) |
 | `UsageError` | 2 | `--offset` on a `cursor-forward` provider |
 
-### 3. Declared values
+Error types are defined in `src/core/provider/errors.ts` as a closed set. Adapters must catch provider SDK errors and wrap them in one of these types before throwing.
+
+### 5. Declared capability values
 
 | Capability | Spotify | YouTube Music (Data API v3) | Notes |
 |---|---|---|---|
@@ -183,13 +198,16 @@ Amazon Music has no declared values: the provider is rejected (ADR 0001). The fi
 - **Keep each ADR's type and reconcile during implementation.** Rejected: the implementer would have to make design decisions, and the two shapes conflict.
 - **Flat boolean flags only** (ADR 0001 style). Rejected: they can't express quota buckets and costs (FR-MIG-5) or approximate liked-songs reads.
 - **Branching on provider ID in the CLI.** Rejected: violates PRV-5 (adding a provider must not change core commands).
+- **Expose the HTTP client in the `Provider` interface.** Rejected: breaks the abstraction boundary. HTTP client details should be internal to each adapter. The CLI never needs direct access.
 
 ## Consequences
 
 - M0 implements these types, a fake provider that declares them (with configurable values so tests can cover `owned-only`, `cursor-forward`, `daily-buckets`, …), and the error-to-exit-code mapping.
+- M0 also implements the HTTP client base class (used by all adapters), token-store module, and config/paths module (see ADR-0004).
 - The capability tables in ADR 0001 and ADR 0002 are historical; this ADR is the source of truth.
 - Spike results S1 and S2 may change two Spotify values before M1 ships; that is a value change, not a type change.
 - New capabilities need an amendment to this ADR.
+- Token refresh happens transparently in each adapter's HTTP client; the `Provider` interface and CLI are unaware of refresh logic or token file I/O.
 
 ## Sources
 
