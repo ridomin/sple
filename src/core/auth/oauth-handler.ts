@@ -1,5 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { OAuthConfig } from './auth.js'
 
 /**
  * Generate a PKCE code verifier and challenge (RFC 7636).
@@ -223,3 +224,137 @@ export class LoopbackServer {
   }
 }
 
+export type AuthMode = 'loopback' | 'no-browser' | 'manual'
+
+export interface LoginRequest {
+  authorizationUrl: string
+  redirectUri?: string
+  state: string
+  codeVerifier: string
+}
+
+export interface CompleteLoginOptions {
+  userProvidedUrl?: string
+  userInput?: (prompt: string) => Promise<string>
+}
+
+export interface CompleteLoginResult {
+  code: string
+  state: string
+  codeVerifier: string
+}
+
+/**
+ * Orchestrates PKCE OAuth 2.0 authorization-code flows (loopback, no-browser, manual).
+ * Does not exchange the code for tokens; the provider does that using the
+ * returned code and codeVerifier.
+ */
+export class OAuthHandler {
+  private loopbackServer: LoopbackServer | null = null
+
+  constructor(
+    private readonly config: OAuthConfig,
+    private readonly authorizationEndpoint: string
+  ) {}
+
+  /**
+   * Begin a login flow. In loopback mode this starts the loopback server
+   * (async because binding a port is async); call cleanup() or completeLogin()
+   * to release it.
+   */
+  async initiateLogin(mode: AuthMode): Promise<LoginRequest> {
+    // Release any server left over from a previous initiation
+    this.cleanup()
+
+    const { codeVerifier, codeChallenge } = generatePKCEPair()
+    const state = randomBytes(32).toString('hex')
+
+    let redirectUri: string | undefined = this.config.redirectUri
+    if (mode === 'loopback') {
+      const server = new LoopbackServer()
+      redirectUri = await server.start()
+      this.loopbackServer = server
+    }
+
+    return {
+      authorizationUrl: this.buildAuthorizationUrl(codeChallenge, state, redirectUri),
+      redirectUri,
+      state,
+      codeVerifier,
+    }
+  }
+
+  /**
+   * Complete a login flow. Sources of the redirect, in priority order:
+   * userProvidedUrl, the loopback server, then the userInput callback.
+   */
+  async completeLogin(
+    login: LoginRequest,
+    opts: CompleteLoginOptions = {}
+  ): Promise<CompleteLoginResult> {
+    try {
+      if (opts.userProvidedUrl !== undefined) {
+        return this.parseRedirectUrl(opts.userProvidedUrl, login)
+      }
+
+      if (this.loopbackServer) {
+        const redirect = await this.loopbackServer.waitForRedirect({ state: login.state })
+        return { code: redirect.code, state: redirect.state, codeVerifier: login.codeVerifier }
+      }
+
+      if (opts.userInput) {
+        const input = await opts.userInput('Paste the redirect URL here: ')
+        return this.parseRedirectUrl(input, login)
+      }
+
+      throw new Error('completeLogin requires a loopback server, userProvidedUrl, or userInput')
+    } finally {
+      this.cleanup()
+    }
+  }
+
+  /** Stop the loopback server if running. */
+  cleanup(): void {
+    if (this.loopbackServer) {
+      this.loopbackServer.stop()
+      this.loopbackServer = null
+    }
+  }
+
+  private buildAuthorizationUrl(codeChallenge: string, state: string, redirectUri?: string): string {
+    const url = new URL(this.authorizationEndpoint)
+    url.searchParams.set('client_id', this.config.clientId)
+    url.searchParams.set('response_type', 'code')
+    url.searchParams.set('code_challenge', codeChallenge)
+    url.searchParams.set('code_challenge_method', 'S256')
+    url.searchParams.set('state', state)
+    url.searchParams.set('scope', this.config.scopes.join(' '))
+    if (redirectUri) {
+      url.searchParams.set('redirect_uri', redirectUri)
+    }
+    return url.toString()
+  }
+
+  private parseRedirectUrl(raw: string, login: LoginRequest): CompleteLoginResult {
+    let url: URL
+    try {
+      url = new URL(raw.trim())
+    } catch {
+      throw new Error('Invalid redirect URL')
+    }
+    const error = url.searchParams.get('error')
+    const code = url.searchParams.get('code')
+    const state = url.searchParams.get('state')
+
+    if (state !== login.state) {
+      throw new Error('State mismatch in redirect URL')
+    }
+    if (error) {
+      throw new Error(`OAuth error: ${error}`)
+    }
+    if (!code) {
+      throw new Error('Invalid redirect URL: missing code')
+    }
+    return { code, state, codeVerifier: login.codeVerifier }
+  }
+}
