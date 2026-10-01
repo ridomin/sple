@@ -1,6 +1,6 @@
 # sple — Requirements
 
-> Status: **Draft v0.2** (2026-10-01). v0.2 includes the outcomes of the requirements review held on 2026-10-01 (see [§10](#10-open-questions)). Open questions are tracked in §10. Decisions that resolve them go in `docs/adr/`.
+> Status: **Draft v0.3** (2026-10-01). v0.3 incorporates the grill-me review of v0.2. See [§2](#2-users-and-goals) (personas), [§4.1–4.3](#4-functional-requirements) (flags), [§10](#10-open-questions) (spikes), and [§11](#11-milestones) (M2). Open questions and decisions are tracked in §10 and `docs/adr/`.
 
 ## 1. Purpose
 
@@ -8,11 +8,11 @@
 
 ## 2. Users and goals
 
-| Persona | Goal |
-|---|---|
-| **Power listener** | Back up their playlists, bulk-edit them faster than the app allows, and script repetitive tasks. |
-| **Switcher** | Move their library from Spotify to another service without rebuilding playlists by hand. |
-| **Developer / scripter** | Pipe `sple` output into other tools (`jq`, spreadsheets, cron jobs). |
+| Persona | Goal | First delivery |
+|---|---|---|
+| **Power listener** | Back up their playlists, bulk-edit them faster than the app allows, and script repetitive tasks. | M1 (MVP) |
+| **Switcher** | Move their library from Spotify to another service without rebuilding playlists by hand. | M4b (post-MVP) |
+| **Developer / scripter** | Pipe `sple` output into other tools (`jq`, spreadsheets, cron jobs). | M1 (MVP) |
 
 Each user runs `sple` locally against **their own account**. `sple` is not a hosted service and has no server component.
 
@@ -50,17 +50,16 @@ Priority: **M** = must have (MVP), **S** = should have (MVP if time allows), **L
 | FR-SEARCH-2 | M | Supports `--limit` and pagination (`--offset`, or `--all` with a safety cap counted in results, not pages). `--offset` is available only on providers with offset pagination (`paginationModel`). The page size follows `maxSearchPageSize` (Spotify: 10 since Feb 2026), so `--limit` above it costs several requests. |
 | FR-SEARCH-3 | S | Supports field filters where the provider has them (e.g. `artist:`, `album:`, `year:` on Spotify; `isrc:` only if spike S1 confirms it still works). |
 | FR-SEARCH-4 | M | Results include IDs, URIs, and URLs, so they can be piped into other commands or tools. |
-| FR-SEARCH-5 | S | `sple playlist list --mine` and a search filter over the user's own playlists (name substring/regex). |
 
 ### 4.3 Playlist management (FR-PL)
 
 | ID | P | Requirement |
 |---|---|---|
-| FR-PL-1 | M | `sple playlist list [--owned \| --followed]` lists the current user's playlists: name, ID, track count, owner, an `owned` column, and public/collaborative flags. |
-| FR-PL-2 | M | `sple playlist show <playlist>` lists the tracks in a playlist. `<playlist>` can be an ID, a URI, a URL, or an unambiguous name. On providers where `playlistItemsAccess` is `owned-only` (Spotify), a playlist the user doesn't own fails early (exit 1) with a message explaining the restriction and the workaround: copy its tracks into a playlist you own in the provider's app, then use that. |
+| FR-PL-1 | M | `sple playlist list [--owned \| --followed] [--filter <substring\|regex>]` lists the current user's playlists: name, ID, track count, owner, an `owned` column, and public/collaborative flags. `--filter` matches by playlist name. |
+| FR-PL-2 | M | `sple playlist show <playlist>` lists the tracks in a playlist. `<playlist>` can be an ID, a URI, a URL, or a name. If the name matches multiple playlists, the command fails with exit 2 and lists the ambiguous matches. On providers where `playlistItemsAccess` is `owned-only` (Spotify), a playlist the user doesn't own fails early (exit 1) with a message explaining the restriction and the workaround: copy its tracks into a playlist you own in the provider's app, then use that. |
 | FR-PL-3 | M | `sple playlist create <name> [--description] [--public\|--private] [--collaborative]` |
-| FR-PL-4 | M | `sple playlist remove <playlist>` removes a playlist from the user's library. On Spotify this is an *unfollow*, because the API cannot delete playlists; Amazon Music and YouTube truly delete. The CLI and docs must say what `remove` does on each provider (`canDeletePlaylist`). |
-| FR-PL-5 | S | `sple playlist edit <playlist>` changes the name, description, or visibility. |
+| FR-PL-4 | M | `sple playlist remove <playlist>` removes a playlist from the user's library. `<playlist>` can be an ID, a URI, a URL, or a name; name matching follows FR-PL-2 (exit 2 on ambiguity). On Spotify this is an *unfollow*, because the API cannot delete playlists; Amazon Music and YouTube truly delete. The CLI and docs must say what `remove` does on each provider (`canDeletePlaylist`). |
+| FR-PL-5 | S | `sple playlist edit <playlist>` changes the name, description, or visibility. `<playlist>` can be an ID, a URI, a URL, or a name; name matching follows FR-PL-2 (exit 2 on ambiguity). |
 | FR-PL-6 | M | Every command that changes data supports `--dry-run`. `playlist remove` asks for confirmation unless `--yes` is passed. |
 
 > **Scope note:** `sple` manages playlists as whole units. It has no commands for editing a playlist's tracks (add, remove, dedupe, reorder), and it never writes likes / saved tracks. The only time `sple` writes tracks is when it fills a newly created playlist during import or migration (FR-EXP-7, FR-MIG); that happens inside the provider adapter and is never exposed as a command.
@@ -190,7 +189,7 @@ Priority: **M** = must have (MVP), **S** = should have (MVP if time allows), **L
 - Support for Spotify Free accounts.
 - Real-time two-way sync between providers. One-shot migration only; incremental sync may come later.
 
-## 10. Open questions
+## 10. Open questions and decisions
 
 1. ~~**"Add/remove playlists"**~~ **Resolved (2026-10-01):** create and remove whole playlists only. No track editing.
 2. ~~**Export formats**~~ **Resolved (2026-10-01):** JSON and CSV only. No M3U/XSPF.
@@ -211,16 +210,19 @@ Priority: **M** = must have (MVP), **S** = should have (MVP if time allows), **L
 13. ~~**Multi-provider login**~~ **Resolved (2026-10-01):** FR-AUTH-6 promoted to M; one account per provider.
 14. ~~**Headless login**~~ **Resolved (2026-10-01):** `--no-browser` and `--manual`; no device flow (FR-AUTH-1).
 15. ~~**Liked Songs migration target**~~ **Resolved (2026-10-01):** a private playlist, never likes (FR-MIG-1).
+16. ~~**MVP value**~~ **Resolved (grill-me):** M1 (Spotify-only, no migration) is an acceptable first release. Switcher persona is post-MVP, delivered in M4b.
+17. ~~**Playlist name matching**~~ **Resolved (grill-me):** ambiguous names (matching multiple playlists) fail with exit 2 and list the matches. Applies to all commands that accept a playlist name (show, remove, edit). Users can use IDs or URIs to bypass ambiguity.
+18. ~~**Playlist filtering**~~ **Resolved (grill-me):** use `--owned` and `--followed` flags; drop `--mine`. Add `--filter <substring|regex>` to `playlist list` for name filtering (FR-PL-1). Move playlist-level search capability from FR-SEARCH-5 to FR-PL-1.
 
 ### Spikes (verify against the live API before the milestone noted)
 
-| ID | Before | Question |
-|---|---|---|
-| S1 | M1 | Does Spotify `q=isrc:<ISRC>` still return results for a Development Mode app? Sets `isrcSearchMode` (`filter` or `none`). |
-| S2 | M1 | Can a Development Mode app read the tracks of a playlist where the user is a collaborator but not the owner? Refines `playlistItemsAccess`. |
-| S3 | M1 | Current maximum `limit` on `GET /playlists/{id}/items` and `GET /me/tracks` (NFR-5 assumes 50). |
-| S4 | M1 | What error does a Spotify login or first call produce when the app owner has no Premium? Needed for the FR-AUTH-2 message. |
-| S5–S7 | M4a | YouTube spikes from ADR-0002 §6: `LM` playlist access, Desktop-client token exchange with PKCE and without the secret, daily playlist-creation cap. |
+| ID | Before | Question | Resolution rule |
+|---|---|---|---|
+| S1 | M1 | Does Spotify `q=isrc:<ISRC>` still return results for a Development Mode app? Sets `isrcSearchMode` (`filter` or `none`). | Contradicting result → update requirements + ADR-0003 before M1 coding. |
+| S2 | M1 | Can a Development Mode app read the tracks of a playlist where the user is a collaborator but not the owner? Refines `playlistItemsAccess`. | Contradicting result → update requirements + ADR-0003 before M1 coding. |
+| S3 | M1 | Current maximum `limit` on `GET /playlists/{id}/items` and `GET /me/tracks` (NFR-5 assumes 50). | Contradicting result → update requirements + ADR-0003 before M1 coding. |
+| S4 | M1 | What error does a Spotify login or first call produce when the app owner has no Premium? Needed for the FR-AUTH-2 message. | Contradicting result → update requirements + ADR-0003 before M1 coding. |
+| S5–S7 | M4a | YouTube spikes from ADR-0002 §6: `LM` playlist access, Desktop-client token exchange with PKCE and without the secret, daily playlist-creation cap. | Contradicting result → update requirements + ADR-0003 before coding. |
 
 ## 11. Milestones
 
@@ -228,8 +230,8 @@ Priority: **M** = must have (MVP), **S** = should have (MVP if time allows), **L
 |---|---|
 | **M0 — Foundations** | Repo tooling, provider interface + capabilities ([ADR-0003](adr/0003-provider-interface-and-capabilities.md)) + fake provider, config, multi-provider token store (FR-AUTH-3/6), HTTP client, ADRs for the stack and canonical model. |
 | **M1 — Spotify MVP** | Spikes S1–S4 first. FR-AUTH (M), FR-SEARCH (M), FR-PL (M), FR-EXP (M, including Liked Songs), CLI-1…8. |
-| **M2 — Spotify polish** | The S items: playlist edit, export all. |
+| **M2 — Spotify polish** | FR-PL-5 (edit), FR-SEARCH-3 (field filters), FR-EXP-5 (export all), FR-PL-1 `--filter` option. |
 | **M3 — Import + matching** | FR-EXP-7, matching engine (strategy chain, metadata matching as the core), match report (tested against the fake provider). |
 | **M4a — YouTube Music, read-only** | Spikes S5–S7 first. `docs/PRIVACY.md` (NFR-9) before any YouTube data is stored. Google auth (login/logout with revocation/status), search, `playlist list/show`, export, approximate Liked export. Uses `youtube.readonly` only. |
-| **M4b — YouTube Music, writes + migrate** | Create/remove playlists, populate-playlist, quota ledger and cost estimate, resumable `migrate` (FR-MIG). |
+| **M4b — YouTube Music, writes + migrate** | Create/remove playlists, populate-playlist, quota ledger and cost estimate, resumable `migrate` (FR-MIG). Enables Switcher persona. |
 | **Later** | Other providers, unscheduled. |
