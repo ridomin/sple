@@ -2,18 +2,26 @@ import createDebug from 'debug'
 import type { ProviderId } from '../provider/capabilities.js'
 import type { StoredToken } from '../config/token-store.js'
 import { saveTokens } from '../config/token-store.js'
-import { AuthRequiredError, RateLimitError } from '../provider/errors.js'
+import {
+  AuthRequiredError,
+  NotFoundError,
+  AccessRestrictedError,
+  ProviderError,
+  RateLimitError,
+} from '../provider/errors.js'
 
 const log = createDebug('sple:http')
 const logRetry = createDebug('sple:http:retry')
-const logToken = createDebug('sple:http:token')
 const logError = createDebug('sple:http:error')
 
 export interface HttpClientOptions {
   providerId: ProviderId
-  onRefreshToken?: (token: StoredToken) => Promise<StoredToken>
+  getToken?: () => Promise<StoredToken | null>
+  refresh?: (token: StoredToken) => Promise<StoredToken>
+  mapError?: (res: HttpResponse) => ProviderError | undefined
   configDir?: string
   maxRetries?: number
+  maxWaitMs?: number
 }
 
 export interface HttpRequest {
@@ -31,21 +39,82 @@ export interface HttpResponse {
 
 export class HttpClient {
   private providerId: ProviderId
-  private onRefreshToken?: (token: StoredToken) => Promise<StoredToken>
+  private getToken?: () => Promise<StoredToken | null>
+  private refresh?: (token: StoredToken) => Promise<StoredToken>
+  private mapError?: (res: HttpResponse) => ProviderError | undefined
   private configDir?: string
   private maxRetries: number
+  private maxWaitMs: number
   private baseDelay = 100 // ms
   private maxDelay = 10000 // ms
+  private refreshPromise: Promise<StoredToken> | null = null
 
   constructor(options: HttpClientOptions) {
     this.providerId = options.providerId
-    this.onRefreshToken = options.onRefreshToken
+    this.getToken = options.getToken
+    this.refresh = options.refresh
+    this.mapError = options.mapError
     this.configDir = options.configDir
     this.maxRetries = options.maxRetries ?? 3
+    this.maxWaitMs = options.maxWaitMs ?? 120000
   }
 
   async request(req: HttpRequest): Promise<HttpResponse> {
-    return this.requestWithRetry(req, 0, false)
+    // Proactively refresh if token exists and is expiring soon
+    const token = await this.getToken?.()
+    if (token && this.refresh && this.isExpiringSoon(token)) {
+      await this.performRefresh(token)
+    }
+
+    // Inject token if available
+    let requestHeaders = req.headers ?? {}
+    if (token && !requestHeaders.Authorization) {
+      requestHeaders = {
+        ...requestHeaders,
+        Authorization: `Bearer ${token.accessToken}`,
+      }
+    }
+
+    return this.requestWithRetry({ ...req, headers: requestHeaders }, 0, false)
+  }
+
+  async requestJson<T>(
+    req: HttpRequest,
+    validate: (x: unknown) => T
+  ): Promise<T> {
+    const response = await this.request(req)
+    const parsed = JSON.parse(response.body)
+    return validate(parsed)
+  }
+
+  private isExpiringSoon(token: StoredToken): boolean {
+    if (!token.expiresAt) return false
+    const expiresAt = new Date(token.expiresAt).getTime()
+    const now = Date.now()
+    const secondsUntilExpiry = (expiresAt - now) / 1000
+    return secondsUntilExpiry < 60
+  }
+
+  private async performRefresh(token: StoredToken): Promise<StoredToken> {
+    if (!this.refresh) {
+      throw new AuthRequiredError('Token refresh not available', 'no-token')
+    }
+
+    // Single-flight: reuse in-flight refresh
+    if (this.refreshPromise) {
+      return this.refreshPromise
+    }
+
+    this.refreshPromise = this.refresh(token)
+    try {
+      const newToken = await this.refreshPromise
+      if (this.configDir) {
+        await saveTokens(this.providerId, newToken, this.configDir)
+      }
+      return newToken
+    } finally {
+      this.refreshPromise = null
+    }
   }
 
   private async requestWithRetry(
@@ -65,50 +134,119 @@ export class HttpClient {
       const headers = this.headersToMap(response.headers)
       const body = await response.text()
 
-      log(`${req.method} ${req.url} → ${response.status} (${duration}ms)`)
+      // Log without secrets
+      const path = this.truncateQueryValues(req.url)
+      log(`${req.method} ${path} → ${response.status} (${duration}ms)`)
 
-      if (response.status === 401) {
-        if (!hasRefreshed && this.onRefreshToken) {
-          logToken('Token expired, attempting refresh')
-          return this.refreshAndRetry(req, attempt)
-        } else {
-          logError('Received 401 and cannot refresh token')
-          throw new AuthRequiredError('Authentication required', 'no-token')
-        }
-      }
-
-      if (response.status === 429 || response.status === 503) {
-        const retryAfter = this.parseRetryAfter(headers)
-        logRetry(`Rate limited (${response.status}), retry after ${retryAfter}ms`)
-
-        if (attempt < this.maxRetries) {
-          await this.delay(retryAfter)
-          return this.requestWithRetry(req, attempt + 1, hasRefreshed)
-        }
-
-        logError(`Rate limited after ${attempt} retries`)
-        throw new RateLimitError(`Rate limited: ${response.status}`, retryAfter)
-      }
-
-      if (!response.ok) {
-        logError(`HTTP ${response.status}: ${body}`)
-        const error = new Error(`HTTP ${response.status}`)
-        ;(error as any).status = response.status
-        throw error
-      }
-
-      return {
+      const httpResponse: HttpResponse = {
         status: response.status,
         headers,
         body,
       }
+
+      // Try provider-specific error mapping first
+      if (!response.ok && this.mapError) {
+        const mappedError = this.mapError(httpResponse)
+        if (mappedError) {
+          logError(`Mapped error ${response.status} to ${mappedError.name}`)
+          throw mappedError
+        }
+      }
+
+      if (response.status === 401) {
+        if (!hasRefreshed && this.refresh && this.getToken) {
+          const token = await this.getToken()
+          if (token) {
+            const newToken = await this.performRefresh(token)
+            const updatedHeaders = {
+              ...req.headers,
+              Authorization: `Bearer ${newToken.accessToken}`,
+            }
+            return this.requestWithRetry(
+              { ...req, headers: updatedHeaders },
+              attempt,
+              true
+            )
+          }
+        }
+        logError('Received 401 and cannot refresh token')
+        throw new AuthRequiredError('Authentication required', 'no-token')
+      }
+
+      if (response.status === 429) {
+        const retryAfterMs = this.parseRetryAfter(headers)
+        logRetry(
+          `Rate limited (429), retry after ${retryAfterMs}ms, max wait ${this.maxWaitMs}ms`
+        )
+
+        // If retry wait exceeds maxWaitMs or after maxRetries, throw immediately
+        if (retryAfterMs > this.maxWaitMs) {
+          logError(`Rate limited: retry-after ${retryAfterMs}ms exceeds maxWaitMs`)
+          throw new RateLimitError(
+            `Rate limited: retry-after exceeds max wait`,
+            retryAfterMs
+          )
+        }
+
+        if (attempt < this.maxRetries) {
+          await this.delay(retryAfterMs)
+          return this.requestWithRetry(req, attempt + 1, hasRefreshed)
+        }
+
+        logError(`Rate limited after ${attempt} retries`)
+        throw new RateLimitError(`Rate limited after ${attempt} retries`, retryAfterMs)
+      }
+
+      if (response.status === 503) {
+        const retryAfterMs = this.parseRetryAfter(headers)
+        logRetry(`Service unavailable (503), retry after ${retryAfterMs}ms`)
+
+        if (attempt < this.maxRetries) {
+          await this.delay(retryAfterMs)
+          return this.requestWithRetry(req, attempt + 1, hasRefreshed)
+        }
+
+        logError(`Service unavailable after ${attempt} retries`)
+        throw new Error(`Service unavailable after ${attempt} retries`)
+      }
+
+      if (!response.ok) {
+        // Default error mappings
+        if (response.status === 404) {
+          logError(`Not found (404)`)
+          throw new NotFoundError('Resource not found', 'other')
+        }
+        if (response.status === 403) {
+          logError(`Access restricted (403)`)
+          throw new AccessRestrictedError('Access restricted', 'other')
+        }
+        if (response.status === 400) {
+          logError(`Invalid request (400)`)
+          throw new ProviderError(`Invalid request: ${response.status}`)
+        }
+
+        logError(`HTTP ${response.status}`)
+        const error = new Error(`HTTP ${response.status}`)
+        const errorWithStatus = error as Error & { status: number }
+        errorWithStatus.status = response.status
+        throw errorWithStatus
+      }
+
+      return httpResponse
     } catch (error) {
       // Network errors and 5xx errors trigger retry
       const isNetworkError = error instanceof TypeError
+      const errorWithStatus = error as Error & { status?: number }
       const isServerError =
-        (error as any).status >= 500 && (error as any).status < 600
+        errorWithStatus.status !== undefined &&
+        errorWithStatus.status >= 500 &&
+        errorWithStatus.status < 600
 
-      if ((isNetworkError || isServerError) && attempt < this.maxRetries) {
+      if (
+        (isNetworkError || isServerError) &&
+        attempt < this.maxRetries &&
+        !this.isProviderError(error)
+      ) {
         const delay = this.calculateBackoff(attempt)
         logRetry(`Attempt ${attempt + 1}/${this.maxRetries} after ${delay}ms`)
         await this.delay(delay)
@@ -120,43 +258,14 @@ export class HttpClient {
     }
   }
 
-  private async refreshAndRetry(
-    req: HttpRequest,
-    attempt: number
-  ): Promise<HttpResponse> {
-    if (!this.onRefreshToken) {
-      throw new AuthRequiredError('Token refresh not available', 'no-token')
-    }
-
-    try {
-      logToken(`Refreshing token for ${this.providerId}`)
-
-      // Call the refresh handler - it may or may not load the old token
-      // The handler is responsible for getting the refresh token and calling the provider's refresh endpoint
-      const newToken = await this.onRefreshToken({} as any)
-
-      if (this.configDir) {
-        await saveTokens(this.providerId, newToken, this.configDir)
-        logToken(`Token refreshed and saved`)
-      } else {
-        logToken(`Token refreshed`)
-      }
-
-      // Update auth header with new token
-      const updatedHeaders = {
-        ...req.headers,
-        Authorization: `Bearer ${newToken.accessToken}`,
-      }
-
-      return this.requestWithRetry(
-        { ...req, headers: updatedHeaders },
-        attempt,
-        true
-      )
-    } catch (error) {
-      logError(`Token refresh failed: ${(error as Error).message}`)
-      throw error
-    }
+  private isProviderError(error: unknown): boolean {
+    return (
+      error instanceof AuthRequiredError ||
+      error instanceof NotFoundError ||
+      error instanceof AccessRestrictedError ||
+      error instanceof ProviderError ||
+      error instanceof RateLimitError
+    )
   }
 
   private calculateBackoff(attempt: number): number {
@@ -180,6 +289,25 @@ export class HttpClient {
       return Math.max(delay, 0)
     } catch {
       return this.calculateBackoff(0)
+    }
+  }
+
+  private truncateQueryValues(url: string): string {
+    // Truncate query parameter values for sensitive parameters
+    try {
+      const parsed = new URL(url)
+      const params = ['uris', 'q']
+      for (const param of params) {
+        if (parsed.searchParams.has(param)) {
+          const value = parsed.searchParams.get(param) || ''
+          if (value.length > 20) {
+            parsed.searchParams.set(param, value.substring(0, 20) + '...')
+          }
+        }
+      }
+      return parsed.toString()
+    } catch {
+      return url
     }
   }
 
