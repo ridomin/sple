@@ -80,6 +80,62 @@ test('login: passes mode (default loopback) and awaits result', async () => {
   assert.ok(out.includes('Token expires: 2030-01-01T00:00:00.000Z'))
 })
 
+/** Provider whose login drives the interaction like a real adapter would. */
+function interactiveProvider(pastedSink: string[] = []) {
+  return providerWith({
+    login: async ({ mode, interaction }) => {
+      assert.ok(interaction, 'handleLogin must pass an interaction')
+      await interaction.showAuthorizationUrl(`https://auth.example/authorize?mode=${mode}`, mode)
+      if (mode === 'manual') pastedSink.push(await interaction.promptForRedirectUrl('Paste: '))
+      return loggedIn()
+    },
+  })
+}
+
+test('login: URL printed to stderr in all modes; browser opened only in loopback', async () => {
+  for (const mode of ['loopback', 'no-browser', 'manual'] as const) {
+    const { io, err, out } = makeIO()
+    const opened: string[] = []
+    const pasted: string[] = []
+    const code = await handleLogin(interactiveProvider(pasted), io, {
+      mode,
+      openBrowser: async (url) => { opened.push(url) },
+      readLine: async () => 'http://127.0.0.1/callback?code=c&state=s',
+    })
+    assert.equal(code, 0, mode)
+    const url = `https://auth.example/authorize?mode=${mode}`
+    assert.ok(err.includes(url), `${mode}: URL on stderr`)
+    assert.ok(!out.some((m) => m.includes(url)), `${mode}: URL not on stdout`)
+    assert.deepEqual(opened, mode === 'loopback' ? [url] : [], `${mode}: browser`)
+    assert.deepEqual(pasted, mode === 'manual' ? ['http://127.0.0.1/callback?code=c&state=s'] : [])
+  }
+})
+
+test('login: URL is printed before the browser is opened; browser warnings go to stderr', async () => {
+  const { io, err } = makeIO()
+  let urlPrintedFirst = false
+  const code = await handleLogin(interactiveProvider(), io, {
+    mode: 'loopback',
+    openBrowser: async (url, { onWarning }) => {
+      urlPrintedFirst = err.includes(url)
+      onWarning('Warning: could not open a browser (ENOENT)')
+    },
+  })
+  assert.equal(code, 0)
+  assert.ok(urlPrintedFirst)
+  assert.ok(err.some((m) => m.includes('could not open a browser')))
+})
+
+test('login: manual stdin failure is reported as a login failure', async () => {
+  const { io, err } = makeIO()
+  const code = await handleLogin(interactiveProvider(), io, {
+    mode: 'manual',
+    readLine: async () => { throw new Error('No redirect URL received (stdin closed)') },
+  })
+  assert.equal(code, EXIT_CODES.ERROR)
+  assert.ok(err.some((m) => /stdin closed/.test(m)))
+})
+
 test('login: errors map to exit codes and use formatted messages', async () => {
   const { io, err } = makeIO()
   const p1 = providerWith({ login: async () => { throw new Error('boom') } })

@@ -31,8 +31,8 @@ Commands:
 
 Options:
   --provider <name>  Specify the provider (${PROVIDER_IDS.join(', ')}); default: spotify
-  --no-browser       auth login: print the URL instead of opening a browser
-  --manual           auth login: paste the redirect URL manually
+  --no-browser       auth login: don't open a browser (URL is printed; listener still runs)
+  --manual           auth login: no listener; paste the redirect URL from the browser
   --verbose          Enable verbose output (stderr)
   --help, -h         Show this help message
   --version, -v      Show version number

@@ -69,8 +69,24 @@ export interface AuthStatus {
   expiresAt?: string
 }
 
+export type LoginMode = 'loopback' | 'no-browser' | 'manual'
+
+/**
+ * User-facing side of an interactive login, supplied by the CLI so that
+ * provider adapters never touch stdin/stderr or the browser directly.
+ */
+export interface LoginInteraction {
+  /**
+   * Called once the authorization URL is ready, before waiting for the
+   * redirect. The CLI prints it to stderr and, in `loopback` mode, opens a browser.
+   */
+  showAuthorizationUrl(url: string, mode: LoginMode): Promise<void>
+  /** `manual` mode: read the pasted redirect URL (one line). */
+  promptForRedirectUrl(prompt: string): Promise<string>
+}
+
 export interface ProviderAuth {
-  login(opts: { mode: 'loopback' | 'no-browser' | 'manual'; scopes: string[] }): Promise<AuthStatus>
+  login(opts: { mode: LoginMode; scopes: string[]; interaction?: LoginInteraction }): Promise<AuthStatus>
   status(): Promise<AuthStatus>
   logout(): Promise<{ revoked: boolean; deletedData: string[] }>
 }

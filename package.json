@@ -34,7 +34,8 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "debug": "^4.3.4"
+    "debug": "^4.3.4",
+    "open": "^11.0.4"
   },
   "devDependencies": {
     "@types/debug": "^4.1.13",
