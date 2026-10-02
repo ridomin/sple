@@ -106,3 +106,100 @@ test('exit code mapping', () => {
   assert.strictEqual(getExitCode(new ProviderError('x')), 1)
   assert.strictEqual(getExitCode('str'), 1)
 })
+
+test('root help includes all command summaries', async () => {
+  const r = await exec(['--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple v/)
+  assert.match(r.out, /auth\s+Authentication/)
+  assert.match(r.out, /search\s+Search/)
+  assert.match(r.out, /playlist\s+Playlist/)
+  assert.match(r.out, /export\s+Export/)
+  assert.match(r.out, /import\s+Import/)
+  assert.match(r.out, /Global Options:/)
+  assert.match(r.out, /--provider/)
+  assert.match(r.out, /--json/)
+  assert.match(r.out, /--quiet/)
+  assert.match(r.out, /--verbose/)
+  assert.match(r.out, /--debug/)
+})
+
+test('search command help text', async () => {
+  const r = await exec(['search', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple search/)
+  assert.match(r.out, /search query/)
+})
+
+test('search command requires query argument', async () => {
+  const r = await exec(['search'])
+  assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
+  assert.match(r.err, /No search query provided/)
+})
+
+test('playlist command help text', async () => {
+  const r = await exec(['playlist', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /Commands:/)
+  assert.match(r.out, /list\s+List all playlists/)
+  assert.match(r.out, /show\s+Show playlist details/)
+  assert.match(r.out, /create\s+Create a new playlist/)
+  assert.match(r.out, /remove\s+Delete a playlist/)
+})
+
+test('playlist list help text', async () => {
+  const r = await exec(['playlist', 'list', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple playlist list/)
+})
+
+test('playlist show help text', async () => {
+  const r = await exec(['playlist', 'show', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple playlist show/)
+})
+
+test('playlist create help text', async () => {
+  const r = await exec(['playlist', 'create', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple playlist create/)
+})
+
+test('playlist remove help text', async () => {
+  const r = await exec(['playlist', 'remove', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple playlist remove/)
+})
+
+test('export command help text', async () => {
+  const r = await exec(['export', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple export/)
+})
+
+test('unknown playlist subcommand is a usage error', async () => {
+  const r = await exec(['playlist', 'invalid-cmd'])
+  assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
+  assert.match(r.err, /Unknown playlist subcommand/)
+  assert.match(r.err, /sple playlist --help/)
+})
+
+test('legacy commands exit with helpful message', async () => {
+  for (const cmd of ['import', 'migrate']) {
+    const r = await exec([cmd])
+    assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
+    assert.match(r.err, /later release/)
+  }
+})
+
+test('--provider flag works end-to-end for commands', async () => {
+  const r = await exec(['--provider', 'fake', 'search', 'test'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /fake/)
+})
+
+test('--provider fake playlist list works end-to-end', async () => {
+  const r = await exec(['--provider', 'fake', 'playlist', 'list'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /fake/)
+})
