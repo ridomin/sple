@@ -6,6 +6,7 @@ import { parseSpotifyPlaylistRef } from './playlist-ref.js'
 import { requiredScopes, type PlaylistVisibility, type SpotifyM1Operation } from './scopes.js'
 import { mapSpotifyPlaylistToSummary, determineItemsReadable, mapSpotifyPlaylistItems, mapSpotifyTrackToCanonical, mapSpotifySearchResults } from './mappers.js'
 import { loadTokens } from '../../core/config/token-store.js'
+import { validateSpotifySearchResponse } from './schemas.js'
 
 const SPOTIFY_CAPABILITIES: ProviderCapabilities = {
   // isrcSearchMode and playlistItemsAccess from spikes S1/S2 (ADR-0003 Amendment 1)
@@ -45,36 +46,39 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
     auth,
     parsePlaylistRef: parseSpotifyPlaylistRef,
     async search(q, page) {
-      await guard('search')
-      const token = loadTokens('spotify', configDir)
-      if (!token) throw new Error('No token found')
+      // Scope check (M1-11): search needs a logged-in user (AuthRequiredError, exit 3) but no scope.
+      const token = await auth.requireScopes(requiredScopes('search'))
 
+      // One request per call; callers split larger limits with paginate() (src/core/search.ts).
       const limit = Math.min(page.limit, SPOTIFY_CAPABILITIES.maxSearchPageSize)
-      const offset = page.offset || 0
+      const offset = page.offset ?? 0
 
-      // Build query string with all requested types
-      const typeParam = q.type
-      const queryParam = encodeURIComponent(q.text)
-      const path = `/search?q=${queryParam}&type=${typeParam}&limit=${limit}&offset=${offset}`
-
-      interface SearchResponse {
-        tracks?: { items: Array<Record<string, unknown>> }
-        albums?: { items: Array<Record<string, unknown>> }
-        artists?: { items: Array<Record<string, unknown>> }
-        playlists?: { items: Array<Record<string, unknown>> }
-      }
-
-      const response = await auth.getApi<SearchResponse>(path, token.accessToken)
+      const params = new URLSearchParams({
+        q: q.text,
+        type: q.type,
+        limit: String(limit),
+        offset: String(offset),
+      })
+      const raw = await auth.getApi<unknown>(`/search?${params.toString()}`, token.accessToken)
+      const response = validateSpotifySearchResponse(raw)
 
       const items: SearchItem[] = mapSpotifySearchResults(response)
 
-      // Calculate if there are more results based on what we got
-      // For now, we don't have total count from the response structure in a uniform way,
-      // so we indicate next only if we got a full page (limit items)
-      const hasMore = items.length >= limit
-      const next = hasMore ? { offset: offset + limit } : undefined
+      // More results exist when Spotify returns a `next` URL for the requested type,
+      // or (if `next` is missing) when offset + returned page is below `total`.
+      const typeKey = `${q.type}s` as 'tracks' | 'albums' | 'artists' | 'playlists'
+      const section = response[typeKey]
+      const total = typeof section?.total === 'number' ? section.total : undefined
+      const pageCount = section?.items.length ?? items.length
+      let hasMore: boolean
+      if (section && 'next' in section) {
+        hasMore = typeof section.next === 'string' && section.next.length > 0
+      } else {
+        hasMore = total !== undefined && offset + pageCount < total
+      }
+      const next = hasMore ? { offset: offset + pageCount } : undefined
 
-      return { items, next }
+      return { items, total, next }
     },
 
     async listPlaylists(page: PageRequest) {

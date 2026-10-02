@@ -261,10 +261,10 @@ export interface SpotifyPlaylistSearchResult {
 }
 
 export interface SpotifySearchResponse {
-  tracks?: { items: SpotifyTrack[]; total: number; offset: number; limit: number; next?: string }
-  albums?: { items: SpotifyAlbum[]; total: number; offset: number; limit: number; next?: string }
-  artists?: { items: SpotifyArtist[]; total: number; offset: number; limit: number; next?: string }
-  playlists?: { items: SpotifyPlaylistSearchResult[]; total: number; offset: number; limit: number; next?: string }
+  tracks?: { items: SpotifyTrack[]; total: number; offset: number; limit: number; next?: string | null }
+  albums?: { items: SpotifyAlbum[]; total: number; offset: number; limit: number; next?: string | null }
+  artists?: { items: SpotifyArtist[]; total: number; offset: number; limit: number; next?: string | null }
+  playlists?: { items: SpotifyPlaylistSearchResult[]; total: number; offset: number; limit: number; next?: string | null }
 }
 
 /**
@@ -287,6 +287,14 @@ export function validateSpotifySearchResponse(value: unknown): SpotifySearchResp
     throw new ProviderError(
       'Invalid Spotify search response: must contain at least one result type (tracks, albums, artists, or playlists)'
     )
+  }
+
+  for (const key of ['tracks', 'albums', 'artists', 'playlists'] as const) {
+    const section = obj[key]
+    if (section === undefined) continue
+    if (!section || typeof section !== 'object' || !Array.isArray((section as Record<string, unknown>).items)) {
+      throw new ProviderError(`Invalid Spotify search response: ${key}.items must be an array`)
+    }
   }
 
   return obj as unknown as SpotifySearchResponse

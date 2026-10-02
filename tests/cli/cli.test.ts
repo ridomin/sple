@@ -195,7 +195,8 @@ test('legacy commands exit with helpful message', async () => {
 test('--provider flag works end-to-end for commands', async () => {
   const r = await exec(['--provider', 'fake', 'search', 'test'])
   assert.strictEqual(r.code, 0)
-  assert.match(r.out, /fake/)
+  // The fake catalog has no match for "test": the empty-result notice names the provider.
+  assert.match(r.err, /Fake Provider/)
 })
 
 test('--provider fake playlist list works end-to-end', async () => {
