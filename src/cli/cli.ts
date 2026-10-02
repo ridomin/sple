@@ -23,6 +23,7 @@ export interface CommandContext {
   json: boolean
   quiet: boolean
   debug: boolean
+  yes: boolean
 }
 
 export interface CommandModule {
@@ -61,6 +62,7 @@ Global Options:
   --quiet            Quiet mode (IDs only)
   --verbose          Enable verbose output (stderr)
   --debug            Enable HTTP debug logs
+  --yes              Automatically confirm prompts
   --help, -h         Show this help message
   --version, -v      Show version number
 
@@ -101,7 +103,7 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
       if (arg === '--provider' && i + 1 < argv.length) {
         globalFlagIndices.push(i, i + 1)
         i++ // Skip the next value
-      } else if (arg === '--json' || arg === '--quiet' || arg === '--verbose' || arg === '--debug' || arg === '--help' || arg === '-h') {
+      } else if (arg === '--json' || arg === '--quiet' || arg === '--verbose' || arg === '--debug' || arg === '--yes' || arg === '--help' || arg === '-h') {
         globalFlagIndices.push(i)
       } else if (arg.startsWith('-')) {
         // Unknown global flag, let parseArgs handle it for error
@@ -125,6 +127,7 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
           quiet: { type: 'boolean' },
           verbose: { type: 'boolean' },
           debug: { type: 'boolean' },
+          yes: { type: 'boolean' },
           help: { type: 'boolean', short: 'h' },
         },
       })
@@ -183,6 +186,7 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
       json: values.json === true,
       quiet: values.quiet === true,
       debug: values.debug === true,
+      yes: values.yes === true,
     }
 
     // Route to command handler
