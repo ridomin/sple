@@ -233,3 +233,61 @@ export function isSpotifyEpisodeType(item: SpotifyPlaylistItem | { item: unknown
   const trackObj = item.item as Record<string, unknown>
   return trackObj.type === 'episode'
 }
+
+export interface SpotifyArtist {
+  id: string
+  name: string
+  uri: string
+  type: 'artist'
+}
+
+export interface SpotifyAlbum {
+  id: string
+  name: string
+  uri: string
+  type: 'album'
+  artists: Array<{ name: string }>
+  release_date?: string
+  total_tracks?: number
+}
+
+export interface SpotifyPlaylistSearchResult {
+  id: string
+  name: string
+  uri: string
+  type: 'playlist'
+  owner: { id: string; display_name?: string }
+  tracks?: { total: number }
+}
+
+export interface SpotifySearchResponse {
+  tracks?: { items: SpotifyTrack[]; total: number; offset: number; limit: number; next?: string }
+  albums?: { items: SpotifyAlbum[]; total: number; offset: number; limit: number; next?: string }
+  artists?: { items: SpotifyArtist[]; total: number; offset: number; limit: number; next?: string }
+  playlists?: { items: SpotifyPlaylistSearchResult[]; total: number; offset: number; limit: number; next?: string }
+}
+
+/**
+ * Validate and narrow a value to SpotifySearchResponse.
+ * Throws ProviderError if validation fails.
+ */
+export function validateSpotifySearchResponse(value: unknown): SpotifySearchResponse {
+  const obj = value as Record<string, unknown>
+
+  // Response must be an object with at least one search type
+  if (!obj || typeof obj !== 'object') {
+    throw new ProviderError(
+      `Invalid Spotify search response: must be an object (received: ${typeof obj})`
+    )
+  }
+
+  // At least one result type must be present
+  const hasResults = obj.tracks || obj.albums || obj.artists || obj.playlists
+  if (!hasResults) {
+    throw new ProviderError(
+      'Invalid Spotify search response: must contain at least one result type (tracks, albums, artists, or playlists)'
+    )
+  }
+
+  return obj as unknown as SpotifySearchResponse
+}
