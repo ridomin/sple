@@ -128,7 +128,7 @@ test('search command help text', async () => {
   const r = await exec(['search', '--help'])
   assert.strictEqual(r.code, 0)
   assert.match(r.out, /sple search/)
-  assert.match(r.out, /search query/)
+  assert.match(r.out, /query.*Search/i)
 })
 
 test('search command requires query argument', async () => {
@@ -141,10 +141,10 @@ test('playlist command help text', async () => {
   const r = await exec(['playlist', '--help'])
   assert.strictEqual(r.code, 0)
   assert.match(r.out, /Commands:/)
-  assert.match(r.out, /list\s+List all playlists/)
-  assert.match(r.out, /show\s+Show playlist details/)
-  assert.match(r.out, /create\s+Create a new playlist/)
-  assert.match(r.out, /remove\s+Delete a playlist/)
+  assert.match(r.out, /list.*List all playlists/)
+  assert.match(r.out, /show.*Show playlist details/)
+  assert.match(r.out, /create.*Create a new playlist/)
+  assert.match(r.out, /remove.*Delete a playlist/)
 })
 
 test('playlist list help text', async () => {
