@@ -1,0 +1,787 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.spotify.com/v1/search?q=isrc:GBAHS1600463&type=track&limit=10"
+  },
+  "status": 200,
+  "headers": {
+    "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000, h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+    "cache-control": "public, max-age=0",
+    "content-encoding": "zstd",
+    "content-length": "1807",
+    "content-type": "application/json; charset=utf-8",
+    "date": "Fri, 02 Oct 2026 09:35:03 GMT",
+    "etag": "\"MC-IjAzN2M3NDZiOTUyMzJkOWY0ZTIxNzE5YjEyZGIxZGFjIg==\"",
+    "mc-cache-policy": "public",
+    "mc-cache-ttl": "7200",
+    "mc-etag": "\"037c746b95232d9f4e21719b12db1dac\"",
+    "server": "envoy",
+    "server-timing": "edge;dur=473",
+    "strict-transport-security": "max-age=31536000",
+    "via": "HTTP/2 edgeproxy, 1.1 google",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow"
+  },
+  "body": {
+    "tracks": {
+      "href": "https://api.spotify.com/v1/search?offset=0&limit=10&query=isrc%3AGBAHS1600463&type=track&locale=*",
+      "limit": 10,
+      "next": "https://api.spotify.com/v1/search?offset=10&limit=10&query=isrc%3AGBAHS1600463&type=track&locale=*",
+      "offset": 0,
+      "previous": null,
+      "total": 100,
+      "items": [
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+                },
+                "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+                "id": "6eUKZXaKkcviH0Ku9w2n3V",
+                "name": "Ed Sheeran",
+                "type": "artist",
+                "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/5ZewPP4nTMtJTn4krePB2d"
+            },
+            "href": "https://api.spotify.com/v1/albums/5ZewPP4nTMtJTn4krePB2d",
+            "id": "5ZewPP4nTMtJTn4krePB2d",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "+-=÷× (Tour Collection: Live)",
+            "release_date": "2024-12-27",
+            "release_date_precision": "day",
+            "total_tracks": 50,
+            "type": "album",
+            "uri": "spotify:album:5ZewPP4nTMtJTn4krePB2d"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 2,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/2d6wvuDLzBJnqbP9yuJTd5"
+          },
+          "href": "https://api.spotify.com/v1/tracks/2d6wvuDLzBJnqbP9yuJTd5",
+          "id": "2d6wvuDLzBJnqbP9yuJTd5",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 14,
+          "type": "track",
+          "uri": "spotify:track:2d6wvuDLzBJnqbP9yuJTd5"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/2uT7uZVRm15Lcrjq7tX47g"
+            },
+            "href": "https://api.spotify.com/v1/albums/2uT7uZVRm15Lcrjq7tX47g",
+            "id": "2uT7uZVRm15Lcrjq7tX47g",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Shape of You - 10's Best",
+            "release_date": "2023-05-26",
+            "release_date_precision": "day",
+            "total_tracks": 100,
+            "type": "album",
+            "uri": "spotify:album:2uT7uZVRm15Lcrjq7tX47g"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/0fed0fUD5T4GAW8XBEq020"
+          },
+          "href": "https://api.spotify.com/v1/tracks/0fed0fUD5T4GAW8XBEq020",
+          "id": "0fed0fUD5T4GAW8XBEq020",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 1,
+          "type": "track",
+          "uri": "spotify:track:0fed0fUD5T4GAW8XBEq020"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/5cKxqtsjNCDZzVajpZv5o1"
+            },
+            "href": "https://api.spotify.com/v1/albums/5cKxqtsjNCDZzVajpZv5o1",
+            "id": "5cKxqtsjNCDZzVajpZv5o1",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Años 2010",
+            "release_date": "2024-05-18",
+            "release_date_precision": "day",
+            "total_tracks": 50,
+            "type": "album",
+            "uri": "spotify:album:5cKxqtsjNCDZzVajpZv5o1"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/02xg5sU33Wnn7N9Okx79IJ"
+          },
+          "href": "https://api.spotify.com/v1/tracks/02xg5sU33Wnn7N9Okx79IJ",
+          "id": "02xg5sU33Wnn7N9Okx79IJ",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 2,
+          "type": "track",
+          "uri": "spotify:track:02xg5sU33Wnn7N9Okx79IJ"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/21jZmKTUzEELezdV62en72"
+            },
+            "href": "https://api.spotify.com/v1/albums/21jZmKTUzEELezdV62en72",
+            "id": "21jZmKTUzEELezdV62en72",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Clean Pop Music",
+            "release_date": "2024-06-07",
+            "release_date_precision": "day",
+            "total_tracks": 55,
+            "type": "album",
+            "uri": "spotify:album:21jZmKTUzEELezdV62en72"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/4LbNICW5XKgRMIPsFpMAZT"
+          },
+          "href": "https://api.spotify.com/v1/tracks/4LbNICW5XKgRMIPsFpMAZT",
+          "id": "4LbNICW5XKgRMIPsFpMAZT",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 2,
+          "type": "track",
+          "uri": "spotify:track:4LbNICW5XKgRMIPsFpMAZT"
+        },
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+                },
+                "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+                "id": "6eUKZXaKkcviH0Ku9w2n3V",
+                "name": "Ed Sheeran",
+                "type": "artist",
+                "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/5xD1PSd5c5APDM0SdkkqnH"
+            },
+            "href": "https://api.spotify.com/v1/albums/5xD1PSd5c5APDM0SdkkqnH",
+            "id": "5xD1PSd5c5APDM0SdkkqnH",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "+-=÷× (Tour Collection)",
+            "release_date": "2024-09-27",
+            "release_date_precision": "day",
+            "total_tracks": 24,
+            "type": "album",
+            "uri": "spotify:album:5xD1PSd5c5APDM0SdkkqnH"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/2sMTmMYviXS6bgsWMTDZhB"
+          },
+          "href": "https://api.spotify.com/v1/tracks/2sMTmMYviXS6bgsWMTDZhB",
+          "id": "2sMTmMYviXS6bgsWMTDZhB",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 14,
+          "type": "track",
+          "uri": "spotify:track:2sMTmMYviXS6bgsWMTDZhB"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/0y2iUL7aHpMSRhFujX35gH"
+            },
+            "href": "https://api.spotify.com/v1/albums/0y2iUL7aHpMSRhFujX35gH",
+            "id": "0y2iUL7aHpMSRhFujX35gH",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "2010s Mixtape: The Greatest Hits",
+            "release_date": "2023-07-28",
+            "release_date_precision": "day",
+            "total_tracks": 54,
+            "type": "album",
+            "uri": "spotify:album:0y2iUL7aHpMSRhFujX35gH"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/37Aft8lcchXFBZaCMIWMGl"
+          },
+          "href": "https://api.spotify.com/v1/tracks/37Aft8lcchXFBZaCMIWMGl",
+          "id": "37Aft8lcchXFBZaCMIWMGl",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 30,
+          "type": "track",
+          "uri": "spotify:track:37Aft8lcchXFBZaCMIWMGl"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/5V2ZGNWwBi6nwHVPjLUFhV"
+            },
+            "href": "https://api.spotify.com/v1/albums/5V2ZGNWwBi6nwHVPjLUFhV",
+            "id": "5V2ZGNWwBi6nwHVPjLUFhV",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Classroom Music Clean",
+            "release_date": "2024-05-30",
+            "release_date_precision": "day",
+            "total_tracks": 60,
+            "type": "album",
+            "uri": "spotify:album:5V2ZGNWwBi6nwHVPjLUFhV"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/5tpPk6a704pYB4t1yYNYo5"
+          },
+          "href": "https://api.spotify.com/v1/tracks/5tpPk6a704pYB4t1yYNYo5",
+          "id": "5tpPk6a704pYB4t1yYNYo5",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 25,
+          "type": "track",
+          "uri": "spotify:track:5tpPk6a704pYB4t1yYNYo5"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/1GKaGNoNx5XviPx5htPgKd"
+            },
+            "href": "https://api.spotify.com/v1/albums/1GKaGNoNx5XviPx5htPgKd",
+            "id": "1GKaGNoNx5XviPx5htPgKd",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "SONGS EVERYONE KNOWS",
+            "release_date": "2024-06-01",
+            "release_date_precision": "day",
+            "total_tracks": 79,
+            "type": "album",
+            "uri": "spotify:album:1GKaGNoNx5XviPx5htPgKd"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/0CBBqoc7p7GyBI7jMDXitY"
+          },
+          "href": "https://api.spotify.com/v1/tracks/0CBBqoc7p7GyBI7jMDXitY",
+          "id": "0CBBqoc7p7GyBI7jMDXitY",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 1,
+          "type": "track",
+          "uri": "spotify:track:0CBBqoc7p7GyBI7jMDXitY"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/3k0twva3pLIh944hHAqjwn"
+            },
+            "href": "https://api.spotify.com/v1/albums/3k0twva3pLIh944hHAqjwn",
+            "id": "3k0twva3pLIh944hHAqjwn",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Pop Hits 2000 - 2024 - 100 Best Songs",
+            "release_date": "2025-01-08",
+            "release_date_precision": "day",
+            "total_tracks": 100,
+            "type": "album",
+            "uri": "spotify:album:3k0twva3pLIh944hHAqjwn"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/0YTLvgBniX6BvOlGBsvp9R"
+          },
+          "href": "https://api.spotify.com/v1/tracks/0YTLvgBniX6BvOlGBsvp9R",
+          "id": "0YTLvgBniX6BvOlGBsvp9R",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 1,
+          "type": "track",
+          "uri": "spotify:track:0YTLvgBniX6BvOlGBsvp9R"
+        },
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+                },
+                "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+                "id": "6eUKZXaKkcviH0Ku9w2n3V",
+                "name": "Ed Sheeran",
+                "type": "artist",
+                "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/3T4tUhGYeRNVUGevb0wThu"
+            },
+            "href": "https://api.spotify.com/v1/albums/3T4tUhGYeRNVUGevb0wThu",
+            "id": "3T4tUhGYeRNVUGevb0wThu",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "÷ (Deluxe)",
+            "release_date": "2017-03-03",
+            "release_date_precision": "day",
+            "total_tracks": 16,
+            "type": "album",
+            "uri": "spotify:album:3T4tUhGYeRNVUGevb0wThu"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6eUKZXaKkcviH0Ku9w2n3V"
+              },
+              "href": "https://api.spotify.com/v1/artists/6eUKZXaKkcviH0Ku9w2n3V",
+              "id": "6eUKZXaKkcviH0Ku9w2n3V",
+              "name": "Ed Sheeran",
+              "type": "artist",
+              "uri": "spotify:artist:6eUKZXaKkcviH0Ku9w2n3V"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 233712,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "GBAHS1600463"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/7qiZfU4dY1lWllzX7mPBI3"
+          },
+          "href": "https://api.spotify.com/v1/tracks/7qiZfU4dY1lWllzX7mPBI3",
+          "id": "7qiZfU4dY1lWllzX7mPBI3",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Shape of You",
+          "track_number": 4,
+          "type": "track",
+          "uri": "spotify:track:7qiZfU4dY1lWllzX7mPBI3"
+        }
+      ]
+    }
+  }
+}
