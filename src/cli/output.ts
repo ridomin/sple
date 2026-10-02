@@ -47,7 +47,7 @@ function calculateLayout(
   terminalWidth: number
 ): TableLayout {
   // Initial column widths: max of header and values
-  const columnWidths = columns.map((col, colIdx) => {
+  const columnWidths = columns.map((col) => {
     let maxWidth = col.name.length
     for (const row of data) {
       const val = formatValue(row[col.name], col.formatter)

@@ -85,7 +85,7 @@ export function logHttpCall(
  * Configure global logging based on context flags.
  * Maps --verbose to info logs and --debug to all logs including HTTP.
  */
-export function setupGlobalLogging(ctx: CommandContext): void {
+export function setupGlobalLogging(_ctx: CommandContext): void {
   // Future: could set up a global debug namespace handler here
   // For now, individual loggers handle the verbose/debug flags
 }
