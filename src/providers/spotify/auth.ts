@@ -1,7 +1,65 @@
-import type { ProviderAuth, AuthStatus } from '../../core/provider/provider.js'
-import { loadTokens, saveTokens, deleteTokens } from '../../core/config/token-store.js'
+import createDebug from 'debug'
+import type { ProviderAuth, AuthStatus, LoginInteraction, LoginMode } from '../../core/provider/provider.js'
+import { loadTokens, saveTokens, deleteTokens, type StoredToken } from '../../core/config/token-store.js'
 import { OAuthHandler } from '../../core/auth/oauth-handler.js'
 import type { OAuthConfig } from '../../core/auth/auth.js'
+import { AuthRequiredError, ProviderError, UsageError } from '../../core/provider/errors.js'
+import { mapApiError, mapTokenEndpointError, type TokenGrant } from './errors.js'
+
+export const SPOTIFY_AUTHORIZE_URL = 'https://accounts.spotify.com/authorize'
+export const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
+export const SPOTIFY_ME_URL = 'https://api.spotify.com/v1/me'
+
+export const SPOTIFY_DEFAULT_SCOPES = [
+  'playlist-read-private',
+  'playlist-read-collaborative',
+  'playlist-modify-public',
+  'playlist-modify-private',
+]
+
+// Logs method, path, status, and duration only. Token-endpoint request and
+// response bodies (and any token string) are never logged, even in debug mode.
+const log = createDebug('sple:spotify:auth')
+
+interface TokenResponse {
+  access_token: string
+  token_type?: string
+  expires_in?: number
+  refresh_token?: string
+  scope?: string
+}
+
+interface MeResponse {
+  id: string
+  display_name?: string | null
+}
+
+function parseTokenResponse(body: string): TokenResponse {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    throw new ProviderError('Spotify token endpoint returned an invalid response')
+  }
+  const r = parsed as Record<string, unknown> | null
+  if (!r || typeof r !== 'object' || typeof r.access_token !== 'string' || !r.access_token) {
+    throw new ProviderError('Spotify token endpoint returned no access token')
+  }
+  return {
+    access_token: r.access_token,
+    expires_in: typeof r.expires_in === 'number' ? r.expires_in : undefined,
+    refresh_token: typeof r.refresh_token === 'string' && r.refresh_token ? r.refresh_token : undefined,
+    scope: typeof r.scope === 'string' ? r.scope : undefined,
+  }
+}
+
+function parseScopes(scope: string): string[] {
+  return scope.split(/\s+/).filter((s) => s.length > 0)
+}
+
+function expiresAtFrom(expiresIn: number | undefined): string | undefined {
+  return expiresIn === undefined ? undefined : new Date(Date.now() + expiresIn * 1000).toISOString()
+}
 
 export class SpotifyAuth implements ProviderAuth {
   private config: OAuthConfig
@@ -10,51 +68,100 @@ export class SpotifyAuth implements ProviderAuth {
   constructor(clientId: string, private readonly configDir?: string) {
     this.config = {
       clientId,
-      scopes: [
-        'playlist-read-private',
-        'playlist-read-collaborative',
-        'playlist-modify-public',
-        'playlist-modify-private',
-      ],
+      scopes: [...SPOTIFY_DEFAULT_SCOPES],
     }
   }
 
-  async login(opts: { mode: 'loopback' | 'no-browser' | 'manual'; scopes: string[] }): Promise<AuthStatus> {
-    // Stub: in M1, this will call Spotify's /authorize and /token endpoints
-    const handler = new OAuthHandler(this.config, 'https://accounts.spotify.com/authorize')
+  async login(opts: {
+    mode: LoginMode
+    scopes: string[]
+    interaction?: LoginInteraction
+  }): Promise<AuthStatus> {
+    if (!opts.interaction) {
+      throw new UsageError('Spotify login requires an interactive session')
+    }
+    const scopes = opts.scopes.length > 0 ? opts.scopes : this.config.scopes
+    const handler = new OAuthHandler({ ...this.config, scopes }, SPOTIFY_AUTHORIZE_URL)
     this.oauthHandler = handler
 
+    // 1-3: initiate, show/open the URL, wait for the redirect (or pasted URL)
+    let redirect: { code: string; codeVerifier: string; redirectUri: string }
     try {
-      await handler.initiateLogin(opts.mode)
-
-      // In real implementation, we'd:
-      // 1. Print login.authorizationUrl (or open browser for loopback)
-      // 2. Wait for redirect
-      // 3. Exchange code for token via POST to https://accounts.spotify.com/api/token
-      // 4. Save token to token-store
-
-      // Stub response
-      const stubToken = {
-        accessToken: 'stub-spotify-access-token',
-        refreshToken: 'stub-spotify-refresh-token',
-        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
-        scopes: this.config.scopes,
-        userId: 'stub-spotify-user',
-        grantedAt: new Date().toISOString(),
-      }
-
-      await saveTokens('spotify', stubToken, this.configDir)
-
-      return {
-        loggedIn: true,
-        user: { id: 'stub-spotify-user', displayName: 'Stub Spotify User' },
-        scopes: this.config.scopes,
-        expiresAt: stubToken.expiresAt,
-      }
+      redirect = await handler.runLogin(opts.mode, opts.interaction)
+    } catch (error) {
+      if (error instanceof ProviderError) throw error
+      throw new ProviderError(`Spotify authorization failed: ${(error as Error).message}`)
     } finally {
-      // Stub flow never awaits a redirect; release the loopback server
       handler.cleanup()
     }
+
+    // 4: exchange the code. redirect_uri is the exact string sent to /authorize.
+    const grantedAt = new Date().toISOString()
+    const tokens = await this.postToken(
+      {
+        grant_type: 'authorization_code',
+        code: redirect.code,
+        redirect_uri: redirect.redirectUri,
+        client_id: this.config.clientId,
+        code_verifier: redirect.codeVerifier,
+      },
+      'authorization_code'
+    )
+
+    // 5: identity
+    const me = await this.fetchMe(tokens.access_token)
+
+    // 6: persist with the *granted* scopes from the token response
+    const stored: StoredToken = {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAt: expiresAtFrom(tokens.expires_in),
+      scopes: tokens.scope !== undefined ? parseScopes(tokens.scope) : [],
+      userId: me.id,
+      displayName: me.display_name ?? undefined,
+      grantedAt,
+    }
+    saveTokens('spotify', stored, this.configDir)
+
+    return {
+      loggedIn: true,
+      user: { id: stored.userId, displayName: stored.displayName },
+      scopes: stored.scopes,
+      expiresAt: stored.expiresAt,
+    }
+  }
+
+  /**
+   * Exchange the stored refresh token for a new access token and persist it.
+   * Keeps the old refresh token unless Spotify rotates it.
+   * `invalid_grant` → AuthRequiredError(…, 'revoked') (exit 3).
+   */
+  async refresh(token: StoredToken): Promise<StoredToken> {
+    if (!token.refreshToken) {
+      throw new AuthRequiredError(
+        'No Spotify refresh token stored; run "sple auth login"',
+        'token-expired'
+      )
+    }
+
+    const tokens = await this.postToken(
+      {
+        grant_type: 'refresh_token',
+        refresh_token: token.refreshToken,
+        client_id: this.config.clientId,
+      },
+      'refresh_token'
+    )
+
+    const refreshed: StoredToken = {
+      ...token,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? token.refreshToken,
+      expiresAt: expiresAtFrom(tokens.expires_in),
+      scopes: tokens.scope !== undefined ? parseScopes(tokens.scope) : token.scopes,
+    }
+    saveTokens('spotify', refreshed, this.configDir)
+    return refreshed
   }
 
   async status(): Promise<AuthStatus> {
@@ -87,5 +194,59 @@ export class SpotifyAuth implements ProviderAuth {
 
   cleanup(): void {
     this.oauthHandler?.cleanup()
+  }
+
+  private async postToken(params: Record<string, string>, grant: TokenGrant): Promise<TokenResponse> {
+    const start = Date.now()
+    let res: Response
+    try {
+      res = await fetch(SPOTIFY_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(params).toString(),
+      })
+    } catch {
+      log(`POST /api/token (${grant}) → network error`)
+      throw new ProviderError('Could not reach the Spotify token endpoint')
+    }
+    const body = await res.text()
+    log(`POST /api/token (${grant}) → ${res.status} (${Date.now() - start}ms)`)
+
+    if (!res.ok) {
+      throw mapTokenEndpointError(res.status, body, grant, res.headers.get('retry-after'))
+    }
+    return parseTokenResponse(body)
+  }
+
+  private async fetchMe(accessToken: string): Promise<MeResponse> {
+    const start = Date.now()
+    let res: Response
+    try {
+      res = await fetch(SPOTIFY_ME_URL, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+    } catch {
+      log('GET /v1/me → network error')
+      throw new ProviderError('Could not reach the Spotify API')
+    }
+    log(`GET /v1/me → ${res.status} (${Date.now() - start}ms)`)
+
+    if (!res.ok) {
+      throw mapApiError(res.status, res.headers.get('retry-after'))
+    }
+    let parsed: unknown
+    try {
+      parsed = await res.json()
+    } catch {
+      throw new ProviderError('Spotify /me returned an invalid response')
+    }
+    const me = parsed as Record<string, unknown> | null
+    if (!me || typeof me.id !== 'string' || !me.id) {
+      throw new ProviderError('Spotify /me returned no user id')
+    }
+    return {
+      id: me.id,
+      display_name: typeof me.display_name === 'string' ? me.display_name : null,
+    }
   }
 }
