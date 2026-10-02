@@ -5,17 +5,16 @@ import { OAuthHandler } from '../../core/auth/oauth-handler.js'
 import type { OAuthConfig } from '../../core/auth/auth.js'
 import { AuthRequiredError, ProviderError, UsageError } from '../../core/provider/errors.js'
 import { mapApiError, mapTokenEndpointError, type TokenGrant } from './errors.js'
+import { SPOTIFY_LOGIN_SCOPES, assertScopes } from './scopes.js'
 
 export const SPOTIFY_AUTHORIZE_URL = 'https://accounts.spotify.com/authorize'
 export const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
 export const SPOTIFY_ME_URL = 'https://api.spotify.com/v1/me'
 
-export const SPOTIFY_DEFAULT_SCOPES = [
-  'playlist-read-private',
-  'playlist-read-collaborative',
-  'playlist-modify-public',
-  'playlist-modify-private',
-]
+export const SPOTIFY_ACCOUNT_APPS_URL = 'https://www.spotify.com/account/apps/'
+
+/** Scopes requested at login: the union of the M1 scope table (scopes.ts). */
+export const SPOTIFY_DEFAULT_SCOPES: readonly string[] = SPOTIFY_LOGIN_SCOPES
 
 // Logs method, path, status, and duration only. Token-endpoint request and
 // response bodies (and any token string) are never logged, even in debug mode.
@@ -68,7 +67,7 @@ export class SpotifyAuth implements ProviderAuth {
   constructor(clientId: string, private readonly configDir?: string) {
     this.config = {
       clientId,
-      scopes: [...SPOTIFY_DEFAULT_SCOPES],
+      scopes: [...SPOTIFY_LOGIN_SCOPES],
     }
   }
 
@@ -108,7 +107,7 @@ export class SpotifyAuth implements ProviderAuth {
       'authorization_code'
     )
 
-    // 5: identity
+    // 5: identity. A Premium error here (S4) throws before anything is saved.
     const me = await this.fetchMe(tokens.access_token)
 
     // 6: persist with the *granted* scopes from the token response
@@ -182,14 +181,31 @@ export class SpotifyAuth implements ProviderAuth {
     }
   }
 
-  async logout(): Promise<{ revoked: boolean; deletedData: string[] }> {
+  async logout(): Promise<{ revoked: boolean; deletedData: string[]; notice?: string }> {
     await deleteTokens('spotify', this.configDir)
 
-    // Spotify does not support revocation, so we just delete local tokens
+    // Spotify has no token revocation endpoint, so only local tokens are deleted.
     return {
       revoked: false,
-      deletedData: ['access_token'],
+      deletedData: ['access_token', 'refresh_token'],
+      notice:
+        'Spotify has no revoke endpoint. To revoke sple\'s access to your account, ' +
+        `remove the app at ${SPOTIFY_ACCOUNT_APPS_URL}`,
     }
+  }
+
+  /**
+   * Check, before an API call, that a token is stored and that it was granted
+   * every scope in `required` (FR-AUTH-5). Returns the stored token.
+   * No token → AuthRequiredError('no-token'); missing scope → 'missing-scope' naming it.
+   */
+  async requireScopes(required: readonly string[]): Promise<StoredToken> {
+    const token = loadTokens('spotify', this.configDir)
+    if (!token) {
+      throw new AuthRequiredError('Not logged in to Spotify; run "sple auth login"', 'no-token')
+    }
+    assertScopes(token.scopes, required)
+    return token
   }
 
   cleanup(): void {
@@ -232,7 +248,8 @@ export class SpotifyAuth implements ProviderAuth {
     log(`GET /v1/me → ${res.status} (${Date.now() - start}ms)`)
 
     if (!res.ok) {
-      throw mapApiError(res.status, res.headers.get('retry-after'))
+      const body = await res.text().catch(() => '')
+      throw mapApiError(res.status, res.headers.get('retry-after'), body)
     }
     let parsed: unknown
     try {

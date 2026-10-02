@@ -88,7 +88,11 @@ export interface LoginInteraction {
 export interface ProviderAuth {
   login(opts: { mode: LoginMode; scopes: string[]; interaction?: LoginInteraction }): Promise<AuthStatus>
   status(): Promise<AuthStatus>
-  logout(): Promise<{ revoked: boolean; deletedData: string[] }>
+  /**
+   * Delete stored tokens and, where supported, revoke the grant. `notice` is
+   * an optional provider-specific line for the user (e.g. how to revoke manually).
+   */
+  logout(): Promise<{ revoked: boolean; deletedData: string[]; notice?: string }>
 }
 
 export interface Provider {

@@ -52,7 +52,7 @@ export function getExitCode(error: unknown): number {
 export function formatErrorMessage(error: unknown): string {
   if (error instanceof AuthRequiredError) {
     if (error.scope) {
-      return `Authentication required: missing scope '${error.scope}'`
+      return `Missing scope '${error.scope}'. Run "sple auth login" to grant ${error.scope}`
     }
     return 'Authentication required. Run "sple auth login" to log in.'
   }

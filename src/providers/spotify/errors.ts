@@ -76,13 +76,52 @@ export function mapTokenEndpointError(
   )
 }
 
+export const SPOTIFY_SETUP_DOCS_URL =
+  'https://github.com/ridomin/sple/blob/main/docs/user/spotify-setup.md'
+
+export const PREMIUM_REQUIRED_MESSAGE =
+  'Spotify Premium is required. Spotify only allows the owner of a Development Mode app ' +
+  '(your own Client ID) to use the Web API with an active Premium subscription. ' +
+  `See ${SPOTIFY_SETUP_DOCS_URL}`
+
+/**
+ * Read `error.message` from a Spotify Web API error body
+ * (`{"error":{"status":403,"message":"…"}}`). Used only for matching; the
+ * text is never copied into error messages or logs.
+ */
+function parseApiErrorMessage(body: string | undefined): string | undefined {
+  if (!body) return undefined
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: unknown } }
+    const message = parsed.error?.message
+    return typeof message === 'string' ? message : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Premium detection rule. Spike S4 is unverified, so this is the documented
+ * fallback heuristic: a 403 whose `error.message` matches /premium/i.
+ */
+export function isPremiumRequired(status: number, body: string | undefined): boolean {
+  return status === 403 && /premium/i.test(parseApiErrorMessage(body) ?? '')
+}
+
 /**
  * Map a non-2xx response from a Spotify Web API call (e.g. `GET /v1/me`).
- * Premium detection (S4) is added in M1-11.
+ * `body` is only inspected for Premium detection (S4 fallback heuristic).
  */
-export function mapApiError(status: number, retryAfter: string | null = null): ProviderError {
+export function mapApiError(
+  status: number,
+  retryAfter: string | null = null,
+  body?: string
+): ProviderError {
   if (status === 401) {
     return new AuthRequiredError('Spotify access token rejected; run "sple auth login"', 'token-expired')
+  }
+  if (isPremiumRequired(status, body)) {
+    return new AccessRestrictedError(PREMIUM_REQUIRED_MESSAGE, 'premium-required')
   }
   if (status === 403) {
     return new AccessRestrictedError('Spotify denied access to this resource', 'other')

@@ -33,6 +33,8 @@ Options:
   --provider <name>  Specify the provider (${PROVIDER_IDS.join(', ')}); default: spotify
   --no-browser       auth login: don't open a browser (URL is printed; listener still runs)
   --manual           auth login: no listener; paste the redirect URL from the browser
+  --all              auth logout: log out of every provider
+  --json             auth status: JSON output
   --verbose          Enable verbose output (stderr)
   --help, -h         Show this help message
   --version, -v      Show version number
@@ -64,6 +66,8 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
           provider: { type: 'string' },
           'no-browser': { type: 'boolean' },
           manual: { type: 'boolean' },
+          all: { type: 'boolean' },
+          json: { type: 'boolean' },
           verbose: { type: 'boolean' },
           version: { type: 'boolean', short: 'v' },
           help: { type: 'boolean', short: 'h' },
@@ -96,14 +100,20 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
     if (config.verbose) io.err(`[sple] provider=${config.provider} command=${command}`)
 
     if (command === 'auth') {
-      const provider = registry.create(config.provider, config)
       const { handleAuthCommand } = await import('./commands/auth.js')
-      const authArgs = [
-        ...positionals.slice(1),
-        ...(values['no-browser'] ? ['--no-browser'] : []),
-        ...(values.manual ? ['--manual'] : []),
-      ]
-      return await handleAuthCommand(authArgs, provider, io)
+      return await handleAuthCommand(
+        positionals.slice(1),
+        {
+          registry,
+          config,
+          providerExplicit: values.provider !== undefined,
+          noBrowser: values['no-browser'],
+          manual: values.manual,
+          json: values.json,
+          all: values.all,
+        },
+        io
+      )
     }
 
     // Other commands arrive in M1.

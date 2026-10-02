@@ -11,6 +11,7 @@
 | `s2-collab-{pl,items}.json` | S2 | collaborative playlist (readable) |
 | `s2-followed-{pl,items}.json` | S2 | followed playlist (`/items` returns 403) |
 | `s2-editorial-{pl,items}.json` | S2 | editorial playlist (404) |
+| `premium-required.json` | S4 | **Synthetic, not recorded.** Hand-written `GET /me` 403 body used to test the S4 fallback rule (403 + `error.message` matching `/premium/i`). Replace with a sanitized recording once S4 is run with a non-Premium account. |
 
 ## Sanitization
 

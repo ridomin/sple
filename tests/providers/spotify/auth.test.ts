@@ -6,7 +6,20 @@ import { tmpdir, platform } from 'node:os'
 import createDebug from 'debug'
 import { SpotifyAuth } from '../../../src/providers/spotify/auth.js'
 import { loadTokens, saveTokens, type StoredToken } from '../../../src/core/config/token-store.js'
-import { AuthRequiredError, ProviderError, RateLimitError } from '../../../src/core/provider/errors.js'
+import {
+  AccessRestrictedError,
+  AuthRequiredError,
+  ProviderError,
+  RateLimitError,
+} from '../../../src/core/provider/errors.js'
+import { createSpotifyProvider } from '../../../src/providers/spotify/index.js'
+import { SPOTIFY_LOGIN_SCOPES } from '../../../src/providers/spotify/scopes.js'
+import {
+  mapApiError,
+  PREMIUM_REQUIRED_MESSAGE,
+  SPOTIFY_SETUP_DOCS_URL,
+} from '../../../src/providers/spotify/errors.js'
+import { handleLogin } from '../../../src/cli/commands/auth/login.js'
 import { getExitCode, EXIT_CODES } from '../../../src/cli/exit-codes.js'
 import type { LoginInteraction } from '../../../src/core/provider/provider.js'
 
@@ -370,4 +383,81 @@ test('status and logout use the stored token', async () => {
   assert.equal(result.revoked, false)
   assert.equal((await auth.status()).loggedIn, false)
   assert.ok(!readFileSync(join(tempDir, 'tokens.json'), 'utf-8').includes(ACCESS))
+})
+
+// ---- M1-11: scopes and Premium detection ----
+
+test('login requests exactly the union of the M1 scope table', async () => {
+  mockFetch({
+    'https://accounts.spotify.com/api/token': tokenOk(),
+    'https://api.spotify.com/v1/me': meOk,
+  })
+  const { interaction, getAuthUrl } = manualInteraction(
+    (u) => `http://127.0.0.1/callback?code=${CODE}&state=${u.searchParams.get('state')}`
+  )
+  await new SpotifyAuth('client-123', tempDir).login({ mode: 'manual', scopes: [], interaction })
+  const requested = getAuthUrl().searchParams.get('scope')!.split(' ').sort()
+  assert.deepEqual(requested, [...SPOTIFY_LOGIN_SCOPES].sort())
+  assert.deepEqual(requested, [
+    'playlist-modify-private',
+    'playlist-modify-public',
+    'playlist-read-collaborative',
+    'playlist-read-private',
+    'user-library-read',
+  ])
+})
+
+test('login: Premium error on /me (S4 fixture) → exit 1, documented message, no token saved', async () => {
+  const fixture = readFileSync(
+    new URL('../../fixtures/spotify/premium-required.json', import.meta.url),
+    'utf-8'
+  )
+  mockFetch({
+    'https://accounts.spotify.com/api/token': tokenOk(),
+    'https://api.spotify.com/v1/me': () =>
+      new Response(fixture, { status: 403, headers: { 'Content-Type': 'application/json' } }),
+  })
+  const { interaction } = manualInteraction(
+    (u) => `http://127.0.0.1/callback?code=${CODE}&state=${u.searchParams.get('state')}`
+  )
+  const provider = createSpotifyProvider('client-123', tempDir)
+  // Swap in the manual interaction while going through the CLI login handler.
+  const login = provider.auth.login.bind(provider.auth)
+  provider.auth.login = (opts) => login({ ...opts, mode: 'manual', interaction })
+
+  const err: string[] = []
+  const code = await handleLogin(provider, { out: () => {}, err: (m) => err.push(m) })
+  assert.equal(code, EXIT_CODES.ERROR)
+  assert.equal(err.length, 1)
+  assert.match(err[0], /Spotify Premium is required/)
+  assert.ok(err[0].includes(SPOTIFY_SETUP_DOCS_URL))
+  assert.equal(loadTokens('spotify', tempDir), null)
+  assert.throws(() => readFileSync(join(tempDir, 'tokens.json')), /ENOENT/)
+  assertNoSecretsLogged()
+})
+
+test('mapApiError: Premium rule is 403 + /premium/i only', () => {
+  const premium = mapApiError(403, null, JSON.stringify({ error: { status: 403, message: 'PREMIUM_REQUIRED' } }))
+  assert.ok(premium instanceof AccessRestrictedError)
+  assert.equal(premium.reason, 'premium-required')
+  assert.equal(premium.message, PREMIUM_REQUIRED_MESSAGE)
+
+  const other = mapApiError(403, null, JSON.stringify({ error: { status: 403, message: 'Forbidden' } }))
+  assert.ok(other instanceof AccessRestrictedError)
+  assert.equal(other.reason, 'other')
+  // Body text never leaks into the message.
+  assert.ok(!other.message.includes('Forbidden'))
+
+  assert.equal((mapApiError(403, null, 'not json') as AccessRestrictedError).reason, 'other')
+  assert.equal((mapApiError(403) as AccessRestrictedError).reason, 'other')
+  // A non-403 mentioning Premium is not the Premium rule.
+  assert.ok(!(mapApiError(400, null, JSON.stringify({ error: { message: 'premium' } })) instanceof AccessRestrictedError))
+})
+
+test('logout returns a notice with the account Apps page URL', async () => {
+  saveTokens('spotify', storedToken(), tempDir)
+  const result = await new SpotifyAuth('client-123', tempDir).logout()
+  assert.equal(result.revoked, false)
+  assert.match(result.notice ?? '', /no revoke endpoint/)
+  assert.ok(result.notice?.includes('https://www.spotify.com/account/apps/'))
 })
