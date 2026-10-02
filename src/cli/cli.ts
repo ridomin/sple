@@ -20,6 +20,9 @@ export interface CommandContext {
   config: Config
   io: CliIO
   version: string
+  json: boolean
+  quiet: boolean
+  debug: boolean
 }
 
 export interface CommandModule {
@@ -166,8 +169,21 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
 
     if (config.verbose) io.err(`[sple] provider=${config.provider} command=${command}`)
 
+    // Validate mutually exclusive flags
+    if (values.json && values.quiet) {
+      throw new UsageError('--json and --quiet cannot be used together')
+    }
+
     // Create command context
-    const ctx: CommandContext = { registry, config, io, version }
+    const ctx: CommandContext = {
+      registry,
+      config,
+      io,
+      version,
+      json: values.json === true,
+      quiet: values.quiet === true,
+      debug: values.debug === true,
+    }
 
     // Route to command handler
     if (command === 'auth') {
