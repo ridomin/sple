@@ -1,4 +1,4 @@
-import type { CanonicalTrack, PlaylistSummary } from '../../core/provider/provider.js'
+import type { CanonicalTrack, PlaylistSummary, SearchItem } from '../../core/provider/provider.js'
 import type { UnsupportedItem } from '../../cli/output/types.js'
 import { ProviderError } from '../../core/provider/errors.js'
 import {
@@ -7,9 +7,14 @@ import {
   validateSpotifyPlaylistItems,
   isSpotifyTrackType,
   isSpotifyEpisodeType,
+  validateSpotifySearchResponse,
   type SpotifyTrack,
   type SpotifyPlaylist,
   type SpotifyPlaylistItem,
+  type SpotifySearchResponse,
+  type SpotifyArtist,
+  type SpotifyAlbum,
+  type SpotifyPlaylistSearchResult,
 } from './schemas.js'
 
 /**
@@ -229,6 +234,17 @@ export function mapSpotifyPlaylistToSummary(
     summary.description = validated.description
   }
 
+  // Add visibility fields from Spotify response
+  const publicFlag = (validated as unknown as Record<string, unknown>).public
+  if (typeof publicFlag === 'boolean') {
+    summary.public = publicFlag
+  }
+
+  const collaborativeFlag = (validated as unknown as Record<string, unknown>).collaborative
+  if (typeof collaborativeFlag === 'boolean') {
+    summary.collaborative = collaborativeFlag
+  }
+
   // Add URL (construct from ID)
   summary.url = `https://open.spotify.com/playlist/${validated.id}`
 
@@ -259,4 +275,150 @@ export function determineItemsReadable(
     return isOwned || isCollaborative
   }
   return false
+}
+
+/**
+ * Convert a Spotify track search result to a SearchItem.
+ */
+function mapSpotifySearchTrack(track: SpotifyTrack): SearchItem {
+  const canonical = mapSpotifyTrackToCanonical(track)
+  return {
+    id: track.id,
+    ref: track.uri,
+    url: `https://open.spotify.com/track/${track.id}`,
+    name: track.name,
+    type: 'track',
+    track: canonical,
+  }
+}
+
+/**
+ * Convert a Spotify album search result to a SearchItem.
+ */
+function mapSpotifySearchAlbum(album: SpotifyAlbum): SearchItem {
+  const artists = album.artists && album.artists.length > 0
+    ? album.artists.map((a) => a.name)
+    : ['Unknown Artist']
+
+  return {
+    id: album.id,
+    ref: album.uri,
+    url: `https://open.spotify.com/album/${album.id}`,
+    name: album.name,
+    type: 'album',
+    artists,
+    releaseDate: album.release_date,
+    trackCount: album.total_tracks,
+  }
+}
+
+/**
+ * Convert a Spotify artist search result to a SearchItem.
+ */
+function mapSpotifySearchArtist(artist: SpotifyArtist): SearchItem {
+  return {
+    id: artist.id,
+    ref: artist.uri,
+    url: `https://open.spotify.com/artist/${artist.id}`,
+    name: artist.name,
+    type: 'artist',
+  }
+}
+
+/**
+ * Convert a Spotify playlist search result to a SearchItem.
+ */
+function mapSpotifySearchPlaylist(playlist: SpotifyPlaylistSearchResult): SearchItem {
+  return {
+    id: playlist.id,
+    ref: playlist.uri,
+    url: `https://open.spotify.com/playlist/${playlist.id}`,
+    name: playlist.name,
+    type: 'playlist',
+    owner: {
+      id: playlist.owner.id,
+      displayName: playlist.owner.display_name,
+    },
+    trackCount: playlist.tracks?.total,
+  }
+}
+
+/**
+ * Convert Spotify search response to SearchItem array.
+ * Filters out unsupported types (episodes, etc.) silently.
+ *
+ * @param response - Raw Spotify search response (will be validated)
+ * @returns Array of SearchItem objects
+ */
+export function mapSpotifySearchResults(response: unknown): SearchItem[] {
+  let validated: SpotifySearchResponse
+
+  try {
+    validated = validateSpotifySearchResponse(response)
+  } catch (error) {
+    if (error instanceof ProviderError) {
+      throw error
+    }
+    throw new ProviderError(`Failed to validate Spotify search response: ${String(error)}`)
+  }
+
+  const results: SearchItem[] = []
+
+  // Map tracks
+  if (validated.tracks?.items) {
+    for (const track of validated.tracks.items) {
+      try {
+        results.push(mapSpotifySearchTrack(track))
+      } catch (error) {
+        if (error instanceof ProviderError) {
+          throw error
+        }
+        throw new ProviderError(`Failed to map search track: ${String(error)}`)
+      }
+    }
+  }
+
+  // Map albums
+  if (validated.albums?.items) {
+    for (const album of validated.albums.items) {
+      try {
+        results.push(mapSpotifySearchAlbum(album))
+      } catch (error) {
+        if (error instanceof ProviderError) {
+          throw error
+        }
+        throw new ProviderError(`Failed to map search album: ${String(error)}`)
+      }
+    }
+  }
+
+  // Map artists
+  if (validated.artists?.items) {
+    for (const artist of validated.artists.items) {
+      try {
+        results.push(mapSpotifySearchArtist(artist))
+      } catch (error) {
+        if (error instanceof ProviderError) {
+          throw error
+        }
+        throw new ProviderError(`Failed to map search artist: ${String(error)}`)
+      }
+    }
+  }
+
+  // Map playlists
+  if (validated.playlists?.items) {
+    for (const playlist of validated.playlists.items) {
+      try {
+        results.push(mapSpotifySearchPlaylist(playlist))
+      } catch (error) {
+        if (error instanceof ProviderError) {
+          throw error
+        }
+        throw new ProviderError(`Failed to map search playlist: ${String(error)}`)
+      }
+    }
+  }
+
+  return results
 }
