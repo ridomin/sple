@@ -21,8 +21,10 @@ const realFetch = globalThis.fetch
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'sple-spotify-scopes-'))
   // The scope check must run before any request.
+  // When scope check passes, implemented methods try to call the network (which fails here).
+  // When scope check fails, no network call is attempted.
   globalThis.fetch = (async () => {
-    throw new Error('no network expected')
+    throw new Error('Network mock: scope check passed (no network expected in test)')
   }) as typeof fetch
 })
 
@@ -154,7 +156,8 @@ for (const op of OPERATIONS) {
 
   test(`${op.name}: only its own scopes → passes the scope check`, async () => {
     login(op.scopes)
-    // Operations are implemented in M1-19..M1-21; reaching "Not implemented" means the check passed.
-    await assert.rejects(op.call(createSpotifyProvider('cid', dir)), /Not implemented/)
+    // Operations are implemented in M1-19..M1-21; reaching the network call means the scope check passed.
+    // The network mock throws, but that's expected - scope check passed and tried to reach API.
+    await assert.rejects(op.call(createSpotifyProvider('cid', dir)), /Could not reach the Spotify API|Network mock/)
   })
 }
