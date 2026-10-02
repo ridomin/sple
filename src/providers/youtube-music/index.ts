@@ -32,6 +32,9 @@ export function createYouTubeMusicProvider(
     displayName: 'YouTube Music',
     capabilities: YOUTUBE_MUSIC_CAPABILITIES,
     auth: new YouTubeMusicAuth(clientId, clientSecret, configDir),
+    // Ref parsing lands with the YouTube Music adapter; until then every input
+    // falls back to name lookup.
+    parsePlaylistRef: () => null,
     search: () => Promise.reject(new Error('Not implemented')),
     listPlaylists: () => Promise.reject(new Error('Not implemented')),
     getPlaylist: () => Promise.reject(new Error('Not implemented')),

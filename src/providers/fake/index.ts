@@ -6,6 +6,8 @@ import type {
   Page,
   PageRequest,
   ProviderAuth,
+  SearchItem,
+  SearchType,
 } from '../../core/provider/provider.js'
 import type { ProviderCapabilities } from '../../core/provider/capabilities.js'
 import type { ProviderId } from '../../core/provider/capabilities.js'
@@ -45,6 +47,9 @@ export interface FakeProviderConfig {
 }
 
 let loginCounter = 0
+
+const FAKE_PLAYLIST_URI = /^fake:playlist:([A-Za-z0-9_-]+)$/
+const FAKE_PLAYLIST_ID = /^[0-9]+$/
 
 export class FakeProvider implements Provider {
   readonly id: ProviderId = 'fake'
@@ -89,6 +94,7 @@ export class FakeProvider implements Provider {
           expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
           scopes,
           userId: this.userId,
+          displayName: 'Fake User',
           grantedAt: new Date().toISOString(),
         }
         await saveTokens('fake', token, this.configDir)
@@ -113,7 +119,7 @@ export class FakeProvider implements Provider {
         }
         return {
           loggedIn: true,
-          user: { id: token.userId, displayName: token.userId },
+          user: { id: token.userId, displayName: token.displayName ?? token.userId },
           scopes: token.scopes,
           expiresAt: token.expiresAt,
         }
@@ -138,42 +144,99 @@ export class FakeProvider implements Provider {
     }
   }
 
+  /**
+   * Fake ref grammar: `fake:playlist:<id>` (id = [A-Za-z0-9_-]+) or a bare
+   * numeric ID (the shape createPlaylist generates). Anything else is treated
+   * as a name. Pure; does not check whether the playlist exists.
+   */
+  parsePlaylistRef(input: string): string | null {
+    const trimmed = input.trim()
+    const uri = FAKE_PLAYLIST_URI.exec(trimmed)
+    if (uri) return uri[1]
+    if (FAKE_PLAYLIST_ID.test(trimmed)) return trimmed
+    return null
+  }
+
   async search(
-    q: { text: string; type: 'track' | 'album' | 'artist' | 'playlist' },
+    q: { text: string; type: SearchType },
     page: PageRequest
-  ): Promise<Page<unknown>> {
+  ): Promise<Page<SearchItem>> {
     const limit = page.limit ?? this.capabilities.maxSearchPageSize
     const offset = page.offset ?? 0
+    const needle = q.text.toLowerCase()
+    const matches = (value: string): boolean => value.toLowerCase().includes(needle)
 
-    if (q.type === 'track') {
-      const results = Array.from(this.tracks.values()).filter(
-        (track) =>
-          track.title.toLowerCase().includes(q.text.toLowerCase()) ||
-          track.artists.some((a) =>
-            a.toLowerCase().includes(q.text.toLowerCase())
-          )
-      )
+    let results: SearchItem[]
 
-      return {
-        items: results.slice(offset, offset + limit).map((t) => this.trackToCanonical(t)),
-        next: offset + limit < results.length ? { offset: offset + limit } : undefined,
+    switch (q.type) {
+      case 'track':
+        results = Array.from(this.tracks.values())
+          .filter((t) => matches(t.title) || t.artists.some(matches))
+          .map((t) => ({
+            type: 'track',
+            id: t.id,
+            ref: t.id,
+            name: t.title,
+            track: this.trackToCanonical(t),
+          }))
+        break
+
+      case 'album': {
+        const albums = new Map<string, { artists: Set<string>; trackCount: number }>()
+        for (const t of this.tracks.values()) {
+          if (!t.album || !(matches(t.album) || t.artists.some(matches))) continue
+          const entry = albums.get(t.album) ?? { artists: new Set<string>(), trackCount: 0 }
+          t.artists.forEach((a) => entry.artists.add(a))
+          entry.trackCount++
+          albums.set(t.album, entry)
+        }
+        results = Array.from(albums, ([name, a]) => ({
+          type: 'album',
+          id: `album:${name}`,
+          ref: `album:${name}`,
+          name,
+          artists: Array.from(a.artists),
+          trackCount: a.trackCount,
+        }))
+        break
       }
+
+      case 'artist': {
+        const artists = new Set<string>()
+        for (const t of this.tracks.values()) {
+          t.artists.filter(matches).forEach((a) => artists.add(a))
+        }
+        results = Array.from(artists, (name) => ({
+          type: 'artist',
+          id: `artist:${name}`,
+          ref: `artist:${name}`,
+          name,
+        }))
+        break
+      }
+
+      case 'playlist':
+        results = Array.from(this.playlists.values())
+          .filter((p) => matches(p.name))
+          .map((p) => ({
+            type: 'playlist',
+            id: p.id,
+            ref: p.id,
+            name: p.name,
+            owner: { id: p.owner, displayName: p.owner },
+            trackCount: p.trackIds.length,
+          }))
+        break
+
+      default:
+        results = []
     }
 
-    if (q.type === 'playlist') {
-      const results = Array.from(this.playlists.values()).filter((p) =>
-        p.name.toLowerCase().includes(q.text.toLowerCase())
-      )
-
-      return {
-        items: results
-          .slice(offset, offset + limit)
-          .map((p) => this.playlistToSummary(p)),
-        next: offset + limit < results.length ? { offset: offset + limit } : undefined,
-      }
+    return {
+      items: results.slice(offset, offset + limit),
+      next: offset + limit < results.length ? { offset: offset + limit } : undefined,
+      total: results.length,
     }
-
-    return { items: [] }
   }
 
   async listPlaylists(page: PageRequest): Promise<Page<PlaylistSummary>> {
@@ -195,16 +258,6 @@ export class FakeProvider implements Provider {
       throw new NotFoundError(`Playlist ${ref} not found`, 'playlist')
     }
 
-    if (
-      this.capabilities.playlistItemsAccess === 'owned-only' &&
-      playlist.owner !== this.userId
-    ) {
-      throw new AccessRestrictedError(
-        'This playlist is not owned by the logged-in user',
-        'not-owned'
-      )
-    }
-
     return this.playlistToSummary(playlist)
   }
 
@@ -212,6 +265,13 @@ export class FakeProvider implements Provider {
     const playlist = this.playlists.get(ref)
     if (!playlist) {
       throw new NotFoundError(`Playlist ${ref} not found`, 'playlist')
+    }
+
+    if (!this.isItemsReadable(playlist)) {
+      throw new AccessRestrictedError(
+        'Items of this playlist are not readable by the logged-in user',
+        'not-owned'
+      )
     }
 
     const limit = page.limit ?? 50
@@ -386,6 +446,23 @@ export class FakeProvider implements Provider {
     }
   }
 
+  /**
+   * Mirrors ProviderCapabilities.playlistItemsAccess. For
+   * 'owned-or-collaborator' the fake uses the collaborative flag as its
+   * read-time signal; real adapters probe the provider (ADR-0003 Amendment 1).
+   */
+  private isItemsReadable(playlist: FakePlaylist): boolean {
+    const owned = playlist.owner === this.userId
+    switch (this.capabilities.playlistItemsAccess) {
+      case 'all':
+        return true
+      case 'owned-only':
+        return owned
+      case 'owned-or-collaborator':
+        return owned || playlist.collaborative
+    }
+  }
+
   private playlistToSummary(playlist: FakePlaylist): PlaylistSummary {
     return {
       ref: playlist.id,
@@ -394,7 +471,7 @@ export class FakeProvider implements Provider {
       description: playlist.description,
       owner: { id: playlist.owner, displayName: playlist.owner },
       owned: playlist.owner === this.userId,
-      itemsReadable: true,
+      itemsReadable: this.isItemsReadable(playlist),
       trackCount: playlist.trackIds.length,
       public: playlist.public,
       collaborative: playlist.collaborative,

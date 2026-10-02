@@ -43,6 +43,25 @@ export interface MatchCandidate {
   strategy: 'known-ref' | 'isrc' | 'metadata'
 }
 
+export type SearchType = 'track' | 'album' | 'artist' | 'playlist'
+
+export interface SearchItemBase {
+  id: string
+  ref: string
+  url?: string
+  name: string
+}
+
+export type SearchItem =
+  | (SearchItemBase & { type: 'track'; track: CanonicalTrack })
+  | (SearchItemBase & { type: 'album'; artists: string[]; releaseDate?: string; trackCount?: number })
+  | (SearchItemBase & { type: 'artist' })
+  | (SearchItemBase & {
+      type: 'playlist'
+      owner: { id: string; displayName?: string }
+      trackCount?: number
+    })
+
 export interface AuthStatus {
   loggedIn: boolean
   user?: { id: string; displayName?: string }
@@ -62,10 +81,13 @@ export interface Provider {
   readonly capabilities: ProviderCapabilities
   readonly auth: ProviderAuth
 
-  search(
-    q: { text: string; type: 'track' | 'album' | 'artist' | 'playlist' },
-    page: PageRequest
-  ): Promise<Page<unknown>>
+  search(q: { text: string; type: SearchType }, page: PageRequest): Promise<Page<SearchItem>>
+
+  /**
+   * Returns a provider ref if `input` is an ID, URI, or URL for this provider;
+   * otherwise null (caller falls back to name lookup). Pure, no I/O.
+   */
+  parsePlaylistRef(input: string): string | null
 
   listPlaylists(page: PageRequest): Promise<Page<PlaylistSummary>>
   getPlaylist(ref: string): Promise<PlaylistSummary>

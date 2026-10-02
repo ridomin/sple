@@ -163,13 +163,44 @@ test('FakeProvider', async (t) => {
     // Access private property for testing only
     ;(p as any).playlists.set('fake-pl', fakePlaylist)
 
-    // Should fail due to owned-only access
+    // Metadata is visible, but items are not (ADR-0003 §3)
+    const summary = await p.getPlaylist('fake-pl')
+    assert.strictEqual(summary.owned, false)
+    assert.strictEqual(summary.itemsReadable, false)
+    assert.strictEqual(retrieved.itemsReadable, true)
+
     await assert.rejects(
-      () => p.getPlaylist('fake-pl'),
+      () => p.getPlaylistTracks('fake-pl', { limit: 10 }),
       (error: any) =>
         error instanceof AccessRestrictedError &&
         error.reason === 'not-owned'
     )
+  })
+
+  await t.test('respects owned-or-collaborator access', async () => {
+    const p = new FakeProvider({
+      userId: 'user1',
+      capabilities: { playlistItemsAccess: 'owned-or-collaborator' },
+      initialTracks: [{ id: 't1', title: 'Song', artists: ['A'], duration: 1 }],
+      initialPlaylists: [
+        { id: 'collab', name: 'Collab', owner: 'user2', public: false, collaborative: true, trackIds: ['t1'] },
+        { id: 'followed', name: 'Followed', owner: 'user2', public: true, collaborative: false, trackIds: ['t1'] },
+      ],
+    })
+
+    assert.strictEqual((await p.getPlaylist('collab')).itemsReadable, true)
+    const items = await p.getPlaylistTracks('collab', { limit: 10 })
+    assert.strictEqual(items.items.length, 1)
+
+    assert.strictEqual((await p.getPlaylist('followed')).itemsReadable, false)
+    await assert.rejects(
+      () => p.getPlaylistTracks('followed', { limit: 10 }),
+      AccessRestrictedError
+    )
+
+    const listed = await p.listPlaylists({ limit: 10 })
+    const readable = Object.fromEntries(listed.items.map((i) => [i.ref, i.itemsReadable]))
+    assert.deepStrictEqual(readable, { collab: true, followed: false })
   })
 
   await t.test('searches tracks', async () => {
@@ -193,7 +224,13 @@ test('FakeProvider', async (t) => {
     )
 
     assert.strictEqual(result.items.length, 1)
-    assert.strictEqual((result.items[0] as any).title, 'Bohemian Rhapsody')
+    const item = result.items[0]
+    assert.ok(item.type === 'track')
+    assert.strictEqual(item.name, 'Bohemian Rhapsody')
+    assert.strictEqual(item.id, 'track-1')
+    assert.strictEqual(item.ref, 'track-1')
+    assert.strictEqual(item.track.title, 'Bohemian Rhapsody')
+    assert.deepStrictEqual(item.track.refs, { fake: 'track-1' })
   })
 
   await t.test('searches by artist', async () => {
@@ -210,7 +247,9 @@ test('FakeProvider', async (t) => {
     )
 
     assert.ok(result.items.length > 0)
-    assert.strictEqual((result.items[0] as any).artists[0], 'John Lennon')
+    const item = result.items[0]
+    assert.ok(item.type === 'track')
+    assert.strictEqual(item.track.artists[0], 'John Lennon')
   })
 
   await t.test('search respects limit and offset', async () => {
@@ -234,10 +273,76 @@ test('FakeProvider', async (t) => {
 
     assert.strictEqual(page1.items.length, 3)
     assert.strictEqual(page2.items.length, 3)
-    assert.notStrictEqual(
-      (page1.items[0] as any).title,
-      (page2.items[0] as any).title
-    )
+    assert.ok(page1.items[0].name)
+    assert.notStrictEqual(page1.items[0].name, page2.items[0].name)
+    assert.deepStrictEqual(page1.next, { offset: 3 })
+  })
+
+  await t.test('search returns typed album, artist, and playlist items', async () => {
+    const p = new FakeProvider({
+      initialTracks: [
+        { id: 'a1', title: 'Come Together', artists: ['The Beatles'], album: 'Abbey Road', duration: 259 },
+        { id: 'a2', title: 'Something', artists: ['The Beatles'], album: 'Abbey Road', duration: 182 },
+        { id: 'a3', title: 'Help!', artists: ['The Beatles'], album: 'Help!', duration: 139 },
+      ],
+      initialPlaylists: [
+        { id: '7', name: 'Beatles Mix', owner: 'someone', public: true, collaborative: false, trackIds: ['a1', 'a3'] },
+      ],
+    })
+
+    const albums = await p.search({ text: 'abbey', type: 'album' }, { limit: 10 })
+    assert.strictEqual(albums.items.length, 1)
+    const album = albums.items[0]
+    assert.ok(album.type === 'album')
+    assert.strictEqual(album.name, 'Abbey Road')
+    assert.deepStrictEqual(album.artists, ['The Beatles'])
+    assert.strictEqual(album.trackCount, 2)
+    assert.ok(album.id && album.ref)
+
+    const artists = await p.search({ text: 'beatles', type: 'artist' }, { limit: 10 })
+    assert.strictEqual(artists.items.length, 1)
+    const artist = artists.items[0]
+    assert.strictEqual(artist.type, 'artist')
+    assert.strictEqual(artist.name, 'The Beatles')
+
+    const playlists = await p.search({ text: 'mix', type: 'playlist' }, { limit: 10 })
+    assert.strictEqual(playlists.items.length, 1)
+    const pl = playlists.items[0]
+    assert.ok(pl.type === 'playlist')
+    assert.strictEqual(pl.ref, '7')
+    assert.strictEqual(pl.name, 'Beatles Mix')
+    assert.strictEqual(pl.owner.id, 'someone')
+    assert.strictEqual(pl.trackCount, 2)
+  })
+
+  await t.test('parsePlaylistRef', () => {
+    const p = new FakeProvider()
+    const cases: Array<[string, string | null]> = [
+      ['42', '42'],
+      ['  42  ', '42'],
+      ['fake:playlist:42', '42'],
+      ['fake:playlist:owned-by-user1', 'owned-by-user1'],
+      ['My Playlist', null],
+      ['fake-pl', null],
+      ['', null],
+      ['fake:playlist:', null],
+      ['spotify:playlist:6UGD4JQwKMz7nVZAKWQaFS', null],
+    ]
+    for (const [input, expected] of cases) {
+      assert.strictEqual(p.parsePlaylistRef(input), expected, `input: ${JSON.stringify(input)}`)
+    }
+  })
+
+  await t.test('stores and reports displayName from the token', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sple-fake-dn-'))
+    try {
+      const p = new FakeProvider({ configDir: dir })
+      await p.auth.login({ mode: 'no-browser', scopes: [] })
+      const status = await p.auth.status()
+      assert.strictEqual(status.user?.displayName, 'Fake User')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   await t.test('resolves track by title and artist', async () => {

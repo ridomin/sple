@@ -1,9 +1,10 @@
 import type { Provider } from '../../core/provider/provider.js'
 import type { ProviderCapabilities } from '../../core/provider/capabilities.js'
 import { SpotifyAuth } from './auth.js'
+import { parseSpotifyPlaylistRef } from './playlist-ref.js'
 
 const SPOTIFY_CAPABILITIES: ProviderCapabilities = {
-  // Stub capabilities; real values in M1
+  // isrcSearchMode and playlistItemsAccess from spikes S1/S2 (ADR-0003 Amendment 1)
   official: true,
   requiresRiskAcknowledgement: false,
   userSuppliedClientId: true,
@@ -12,7 +13,7 @@ const SPOTIFY_CAPABILITIES: ProviderCapabilities = {
   supportsRevocation: false,
   paginationModel: 'offset',
   maxSearchPageSize: 10,
-  playlistItemsAccess: 'owned-only',
+  playlistItemsAccess: 'owned-or-collaborator',
   likedSongs: { read: 'exact', write: false },
   isrcSearchMode: 'filter',
   searchReturnsDuration: true,
@@ -29,6 +30,7 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
     displayName: 'Spotify',
     capabilities: SPOTIFY_CAPABILITIES,
     auth: new SpotifyAuth(clientId, configDir),
+    parsePlaylistRef: parseSpotifyPlaylistRef,
     search: () => Promise.reject(new Error('Not implemented')),
     listPlaylists: () => Promise.reject(new Error('Not implemented')),
     getPlaylist: () => Promise.reject(new Error('Not implemented')),

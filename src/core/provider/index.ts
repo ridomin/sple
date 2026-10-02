@@ -19,4 +19,7 @@ export type {
   AuthStatus,
   Page,
   PageRequest,
+  SearchType,
+  SearchItem,
+  SearchItemBase,
 } from './provider.js'

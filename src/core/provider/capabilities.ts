@@ -44,7 +44,7 @@ export interface ProviderCapabilities {
 
   paginationModel: 'offset' | 'cursor-forward'
   maxSearchPageSize: number
-  playlistItemsAccess: 'all' | 'owned-only'
+  playlistItemsAccess: 'all' | 'owned-only' | 'owned-or-collaborator'
   likedSongs: { read: 'exact' | 'approximate' | 'none'; write: false; readCap?: number }
 
   isrcSearchMode: 'lookup' | 'filter' | 'none'

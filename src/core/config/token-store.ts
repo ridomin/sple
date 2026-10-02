@@ -12,6 +12,8 @@ export interface StoredToken {
   expiresAt?: string
   scopes: string[]
   userId: string
+  /** Optional, additive (schemaVersion stays 1). Lets `auth status` show a name offline. */
+  displayName?: string
   grantedAt: string
 }
 
@@ -157,5 +159,9 @@ function validateToken(token: unknown): asserts token is StoredToken {
 
   if (t.expiresAt !== undefined && typeof t.expiresAt !== 'string') {
     throw new Error('Token expiresAt must be a string if present')
+  }
+
+  if (t.displayName !== undefined && typeof t.displayName !== 'string') {
+    throw new Error('Token displayName must be a string if present')
   }
 }
