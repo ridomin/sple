@@ -2,16 +2,18 @@
 // Usage: npx tsx scripts/spikes/spotify/sanitize.ts <in.json> [out.json]  (stdout if no out)
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const SECRET_KEYS = /^(access_token|refresh_token|id_token|authorization|code|client_secret)$/i
+const SECRET_KEYS = /^(access_token|refresh_token|id_token|authorization|code|client_secret|set-cookie|cookie)$/i
 const PII_KEYS: Record<string, string> = {
   display_name: 'Test User',
   email: 'user@example.com',
+  country: 'XX',
 }
 
 export function sanitizeString(s: string): string {
   return s
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, 'Bearer REDACTED')
     .replace(/spotify:user:[A-Za-z0-9_.-]+/g, 'spotify:user:testuser0000000000000')
+    .replace(/open\.spotify\.com\/user\/[A-Za-z0-9_.-]+/g, 'open.spotify.com/user/testuser0000000000000')
     .replace(/\/users\/[A-Za-z0-9_.-]+/g, '/users/testuser0000000000000')
     .replace(/https:\/\/(?:i\.scdn\.co|mosaic\.scdn\.co|image-cdn[\w.-]*\.spotifycdn\.com|[\w.-]*\.scdn\.co)\/[^\s"]*/g, 'https://example.com/image.jpg')
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, 'user@example.com')

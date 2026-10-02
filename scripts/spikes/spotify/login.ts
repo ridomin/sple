@@ -20,7 +20,11 @@ if (!out || !clientId) {
   console.error('Usage: SPLE_SPOTIFY_CLIENT_ID=... npx tsx scripts/spikes/spotify/login.ts --out <file> [--port 8888]')
   process.exit(2)
 }
-if (/(^|\/)tokens\.json$/.test(out)) {
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  console.error('--port must be an integer between 1 and 65535')
+  process.exit(2)
+}
+if (/(^|[\\/])tokens\.json$/i.test(out)) {
   console.error('Refusing to write to tokens.json; use a scratch file.')
   process.exit(2)
 }

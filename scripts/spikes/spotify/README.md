@@ -10,11 +10,11 @@ export SPLE_SPOTIFY_CLIENT_ID=<your dev-mode app client id>
 # Register http://127.0.0.1:8888/callback as a redirect URI in the Spotify dashboard
 npx tsx scripts/spikes/spotify/login.ts --out /tmp/spotify-spike-token.json
 npx tsx scripts/spikes/spotify/call.ts --token /tmp/spotify-spike-token.json --spike me me
-npx tsx scripts/spikes/spotify/sanitize.ts scripts/spikes/spotify/out/me-1.json fixture.json
+npx tsx scripts/spikes/spotify/sanitize.ts scripts/spikes/spotify/out/me-<timestamp>.json fixture.json
 ```
 
 - `login.ts` prints an authorize URL; open it in a browser. Listens on `127.0.0.1` (not `localhost`). Refuses `tokens.json` as output.
-- `call.ts` dumps status, headers (minus `authorization`) and body to `out/<spike>-<n>.json`.
+- `call.ts` dumps status, headers (minus `authorization`) and body to `out/<spike>-<timestamp>.json`.
 - `sanitize.ts` redacts tokens, `Bearer` values, user IDs, display names, emails and image URLs.
 
 ## What not to commit
