@@ -6,6 +6,14 @@ export interface PageRequest {
   cursor?: string
 }
 
+/**
+ * Filter for `listPlaylists` (FR-PL-1).
+ * - `owned`: only playlists whose owner is the current user
+ * - `followed`: only playlists the user follows but does not own (S2 treats these as a distinct kind)
+ * Omitted: every playlist in the user's library.
+ */
+export type PlaylistFilter = 'owned' | 'followed'
+
 export interface Page<T> {
   items: T[]
   next?: { offset?: number; cursor?: string }
@@ -109,7 +117,12 @@ export interface Provider {
    */
   parsePlaylistRef(input: string): string | null
 
-  listPlaylists(page: PageRequest): Promise<Page<PlaylistSummary>>
+  /**
+   * Lists the user's playlists. With a `filter`, a page may hold fewer than
+   * `page.limit` items; `next` still follows the unfiltered offsets, and
+   * `total` is omitted because the provider total counts unfiltered items.
+   */
+  listPlaylists(page: PageRequest, filter?: PlaylistFilter): Promise<Page<PlaylistSummary>>
   getPlaylist(ref: string): Promise<PlaylistSummary>
   getPlaylistTracks(ref: string, page: PageRequest): Promise<Page<CanonicalTrack>>
   getLikedTracks(page: PageRequest): Promise<Page<CanonicalTrack>>

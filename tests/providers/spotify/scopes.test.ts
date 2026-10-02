@@ -49,6 +49,8 @@ function login(scopes: string[]) {
 }
 
 const page = { limit: 10 }
+/** Read operations take a resolved playlist ID (names are resolved before the provider call). */
+const PLAYLIST_ID = '0FRr10mglUR3E0Pq8TqlxL'
 
 /** Each M1 command's provider call, with the scopes it needs. */
 const OPERATIONS: Array<{ name: string; call: (p: Provider) => Promise<unknown>; scopes: string[] }> = [
@@ -58,10 +60,10 @@ const OPERATIONS: Array<{ name: string; call: (p: Provider) => Promise<unknown>;
     call: (p) => p.listPlaylists(page),
     scopes: ['playlist-read-private', 'playlist-read-collaborative'],
   },
-  { name: 'playlist show (getPlaylist)', call: (p) => p.getPlaylist('x'), scopes: ['playlist-read-private'] },
+  { name: 'playlist show (getPlaylist)', call: (p) => p.getPlaylist(PLAYLIST_ID), scopes: ['playlist-read-private'] },
   {
     name: 'playlist show / export (getPlaylistTracks)',
-    call: (p) => p.getPlaylistTracks('x', page),
+    call: (p) => p.getPlaylistTracks(PLAYLIST_ID, page),
     scopes: ['playlist-read-private'],
   },
   { name: 'export --liked (getLikedTracks)', call: (p) => p.getLikedTracks(page), scopes: ['user-library-read'] },

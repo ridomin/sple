@@ -1,6 +1,7 @@
 import {
   AccessRestrictedError,
   AuthRequiredError,
+  NotFoundError,
   ProviderError,
   RateLimitError,
 } from '../../core/provider/errors.js'
@@ -125,6 +126,9 @@ export function mapApiError(
   }
   if (status === 403) {
     return new AccessRestrictedError('Spotify denied access to this resource', 'other')
+  }
+  if (status === 404) {
+    return new NotFoundError('Spotify resource not found (HTTP 404)', 'other')
   }
   if (status === 429) {
     return new RateLimitError('Spotify API rate limited', parseRetryAfterMs(retryAfter))

@@ -1,6 +1,6 @@
-import type { Provider, PageRequest, PlaylistSummary, CanonicalTrack, SearchItem } from '../../core/provider/provider.js'
+import type { Provider, PageRequest, PlaylistFilter, PlaylistSummary, CanonicalTrack, SearchItem } from '../../core/provider/provider.js'
 import type { ProviderCapabilities } from '../../core/provider/capabilities.js'
-import { UsageError, AccessRestrictedError } from '../../core/provider/errors.js'
+import { UsageError, AccessRestrictedError, NotFoundError } from '../../core/provider/errors.js'
 import { SpotifyAuth } from './auth.js'
 import { parseSpotifyPlaylistRef } from './playlist-ref.js'
 import { requiredScopes, type PlaylistVisibility, type SpotifyM1Operation } from './scopes.js'
@@ -29,6 +29,46 @@ const SPOTIFY_CAPABILITIES: ProviderCapabilities = {
   quotaModel: { kind: 'rate-limited' },
 }
 
+
+/** S3 page-size limit for GET /me/tracks. */
+const LIKED_TRACKS_MAX_LIMIT = 50
+
+const NOT_READABLE_MESSAGE =
+  'Spotify only returns the tracks of playlists you own or collaborate on, and this playlist is neither. ' +
+  'Workaround: in the Spotify app, copy its tracks into a playlist you own (or ask the owner to add you ' +
+  'as a collaborator), then use that playlist.'
+
+const ACCESS_CHANGED_MESSAGE =
+  'Spotify refused to return the tracks of this playlist, although it looked readable. Access may have ' +
+  'changed (for example, you were removed as a collaborator). Spotify only returns the tracks of playlists ' +
+  'you own or collaborate on; copy its tracks into a playlist you own in the Spotify app, then use that playlist.'
+
+/**
+ * Resolve a playlist ref (ID, URI or URL) to a bare Spotify playlist ID.
+ * Names must be resolved by the caller (playlist resolver) first.
+ */
+function playlistId(ref: string): string {
+  const id = parseSpotifyPlaylistRef(ref)
+  if (!id) {
+    throw new UsageError(`"${ref}" is not a Spotify playlist ID, URI or URL`)
+  }
+  return id
+}
+
+/**
+ * itemsReadable for a playlist object (S2, capability 'owned-or-collaborator').
+ * Ownership: owner.id === current user ID. Collaborator access: S2 found that
+ * the `collaborative` flag is unreliable (a playlist the user collaborates on
+ * was recorded with `collaborative: false`); the reliable signal is that
+ * `GET /playlists/{id}` includes an `items` key only when the user can read
+ * the items. A non-owned playlist without `items` is not readable.
+ */
+function itemsReadableFor(playlist: Record<string, unknown>, userId: string): boolean {
+  const owner = playlist.owner as Record<string, unknown> | undefined
+  const isOwned = owner?.id === userId
+  const hasCollaboratorAccess = playlist.items !== undefined && playlist.items !== null
+  return determineItemsReadable(SPOTIFY_CAPABILITIES.playlistItemsAccess, isOwned, hasCollaboratorAccess)
+}
 
 export function createSpotifyProvider(clientId: string, configDir?: string): Provider {
   const auth = new SpotifyAuth(clientId, configDir)
@@ -81,13 +121,15 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
       return { items, total, next }
     },
 
-    async listPlaylists(page: PageRequest) {
+    async listPlaylists(page: PageRequest, filter?: PlaylistFilter) {
       await guard('listPlaylists')
       const token = loadTokens('spotify', configDir)
       if (!token) throw new Error('No token found')
 
       const limit = Math.min(page.limit, 50)
       const offset = page.offset || 0
+      // Spotify has no server-side owner filter on GET /me/playlists, so the
+      // filter is applied to each page after mapping (owner.id === me.id).
       const path = `/me/playlists?limit=${limit}&offset=${offset}`
 
       interface PlaylistsResponse {
@@ -97,22 +139,21 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
 
       const response = await auth.getApi<PlaylistsResponse>(path, token.accessToken)
 
-      const items: PlaylistSummary[] = response.items.map((item) => {
-        const owner = item.owner as Record<string, unknown> | undefined
-        const isOwned = owner?.id === token.userId
-        const isCollaborative = item.collaborative === true
-        const itemsReadable = determineItemsReadable(
-          SPOTIFY_CAPABILITIES.playlistItemsAccess,
-          isOwned || false,
-          isCollaborative
-        )
-        return mapSpotifyPlaylistToSummary(item, token.userId, itemsReadable)
-      })
+      const all: PlaylistSummary[] = response.items.map((item) =>
+        mapSpotifyPlaylistToSummary(item, token.userId, itemsReadableFor(item, token.userId))
+      )
+      const items =
+        filter === 'owned'
+          ? all.filter((p) => p.owned)
+          : filter === 'followed'
+            ? all.filter((p) => !p.owned)
+            : all
 
       const next =
         offset + limit < response.total ? { offset: offset + limit } : undefined
 
-      return { items, total: response.total, next }
+      // The Spotify total counts unfiltered playlists, so omit it when filtering.
+      return filter ? { items, next } : { items, total: response.total, next }
     },
 
     async getPlaylist(ref: string) {
@@ -120,21 +161,13 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
       const token = loadTokens('spotify', configDir)
       if (!token) throw new Error('No token found')
 
+      const id = playlistId(ref)
       const response = await auth.getApi<Record<string, unknown>>(
-        `/playlists/${ref}`,
+        `/playlists/${id}`,
         token.accessToken
       )
 
-      const owner = response.owner as Record<string, unknown> | undefined
-      const isOwned = owner?.id === token.userId
-      const isCollaborative = response.collaborative === true
-      const itemsReadable = determineItemsReadable(
-        SPOTIFY_CAPABILITIES.playlistItemsAccess,
-        isOwned || false,
-        isCollaborative
-      )
-
-      return mapSpotifyPlaylistToSummary(response, token.userId, itemsReadable)
+      return mapSpotifyPlaylistToSummary(response, token.userId, itemsReadableFor(response, token.userId))
     },
 
     async getPlaylistTracks(ref: string, page: PageRequest) {
@@ -142,68 +175,53 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
       const token = loadTokens('spotify', configDir)
       if (!token) throw new Error('No token found')
 
-      // First, fetch the playlist to check access
+      const id = playlistId(ref)
+
+      // First, fetch the playlist to check access (S2)
       const playlist = await auth.getApi<Record<string, unknown>>(
-        `/playlists/${ref}`,
+        `/playlists/${id}`,
         token.accessToken
       )
 
-      const owner = playlist.owner as Record<string, unknown> | undefined
-      const isOwned = owner?.id === token.userId
-      const isCollaborative = playlist.collaborative === true
-      const itemsReadable = determineItemsReadable(
-        SPOTIFY_CAPABILITIES.playlistItemsAccess,
-        isOwned || false,
-        isCollaborative
-      )
-
-      // Access control: fail fast if not readable
-      if (!itemsReadable) {
-        throw new AccessRestrictedError(
-          'You do not have permission to read items from this playlist. ' +
-            'Copy it to an owned playlist in the Spotify app to read it here.',
-          'not-owned'
-        )
+      // Access control: fail fast, before any /items request
+      if (!itemsReadableFor(playlist, token.userId)) {
+        throw new AccessRestrictedError(NOT_READABLE_MESSAGE, 'not-owned')
       }
 
-      // Then fetch the items
       const limit = Math.min(page.limit, SPOTIFY_CAPABILITIES.maxTracksPerRequest)
       const offset = page.offset || 0
-      const path = `/playlists/${ref}/items?limit=${limit}&offset=${offset}`
+      const path = `/playlists/${id}/items?limit=${limit}&offset=${offset}`
 
+      interface ItemsResponse {
+        items: Array<Record<string, unknown>>
+        total: number
+      }
+
+      let response: ItemsResponse
       try {
-        interface ItemsResponse {
-          items: Array<Record<string, unknown>>
-          total: number
-        }
-
-        const response = await auth.getApi<ItemsResponse>(path, token.accessToken)
-
-        const mappedItems = mapSpotifyPlaylistItems(response.items, offset + 1)
-        const items: CanonicalTrack[] = mappedItems
-          .filter((item) => item.track)
-          .map((item) => item.track!)
-
-        const next =
-          offset + limit < response.total ? { offset: offset + limit } : undefined
-
-        return { items, total: response.total, next }
+        response = await auth.getApi<ItemsResponse>(path, token.accessToken)
       } catch (error) {
-        // If we get 403/404 and thought it was readable, re-check
+        // The playlist looked readable, but /items returned the S2 "not readable"
+        // signal (403 or 404): access changed since the playlist was fetched.
+        // Key on the error type, never on message text. Premium-required 403s
+        // keep their own reason and pass through unchanged.
         if (
-          (error instanceof AccessRestrictedError || error instanceof Error) &&
-          itemsReadable
+          error instanceof NotFoundError ||
+          (error instanceof AccessRestrictedError && error.reason === 'other')
         ) {
-          const msg = (error as Error).message
-          if (msg.includes('403') || msg.includes('404')) {
-            throw new AccessRestrictedError(
-              'Playlist access has changed. You may no longer have permission to read this playlist.',
-              'not-owned'
-            )
-          }
+          throw new AccessRestrictedError(ACCESS_CHANGED_MESSAGE, 'not-owned')
         }
         throw error
       }
+
+      const items: CanonicalTrack[] = mapSpotifyPlaylistItems(response.items, offset + 1)
+        .filter((item) => item.track)
+        .map((item) => item.track!)
+
+      const next =
+        offset + limit < response.total ? { offset: offset + limit } : undefined
+
+      return { items, total: response.total, next }
     },
 
     async getLikedTracks(page: PageRequest) {
@@ -211,7 +229,8 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
       const token = loadTokens('spotify', configDir)
       if (!token) throw new Error('No token found')
 
-      const limit = Math.min(page.limit, SPOTIFY_CAPABILITIES.maxTracksPerRequest)
+      // S3: GET /me/tracks accepts at most 50 per page
+      const limit = Math.min(page.limit, LIKED_TRACKS_MAX_LIMIT)
       const offset = page.offset || 0
       const path = `/me/tracks?limit=${limit}&offset=${offset}`
 

@@ -5,6 +5,7 @@ import type {
   MatchCandidate,
   Page,
   PageRequest,
+  PlaylistFilter,
   ProviderAuth,
   SearchItem,
   SearchType,
@@ -239,15 +240,18 @@ export class FakeProvider implements Provider {
     }
   }
 
-  async listPlaylists(page: PageRequest): Promise<Page<PlaylistSummary>> {
+  async listPlaylists(page: PageRequest, filter?: PlaylistFilter): Promise<Page<PlaylistSummary>> {
     const limit = page.limit ?? 50
     const offset = page.offset ?? 0
     const results = Array.from(this.playlists.values())
 
+    const items = results
+      .slice(offset, offset + limit)
+      .map((p) => this.playlistToSummary(p))
+      .filter((p) => (filter === 'owned' ? p.owned : filter === 'followed' ? !p.owned : true))
+
     return {
-      items: results
-        .slice(offset, offset + limit)
-        .map((p) => this.playlistToSummary(p)),
+      items,
       next: offset + limit < results.length ? { offset: offset + limit } : undefined,
     }
   }
