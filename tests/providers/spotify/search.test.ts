@@ -346,3 +346,111 @@ test('mapSpotifySearchResults: creates proper ref URIs for all types', () => {
   assert.ok(refs.includes('spotify:artist:ghi789'))
   assert.ok(refs.includes('spotify:playlist:jkl000'))
 })
+
+test('mapSpotifySearchResults: skips null items gracefully', () => {
+  const mockSearchResponse = {
+    playlists: {
+      items: [
+        {
+          id: 'playlist1',
+          name: 'Valid Playlist 1',
+          uri: 'spotify:playlist:playlist1',
+          type: 'playlist',
+          owner: { id: 'user1', display_name: 'User 1' },
+          tracks: { total: 10 },
+        },
+        null, // Unavailable/deleted playlist
+        {
+          id: 'playlist2',
+          name: 'Valid Playlist 2',
+          uri: 'spotify:playlist:playlist2',
+          type: 'playlist',
+          owner: { id: 'user2', display_name: 'User 2' },
+          tracks: { total: 20 },
+        },
+      ],
+    },
+  }
+
+  const result = mapSpotifySearchResults(mockSearchResponse)
+
+  // Null item should be skipped, returning only 2 valid playlists
+  assert.strictEqual(result.length, 2)
+  assert.strictEqual(result[0].name, 'Valid Playlist 1')
+  assert.strictEqual(result[1].name, 'Valid Playlist 2')
+})
+
+test('mapSpotifySearchResults: skips null items in all types', () => {
+  const mockSearchResponse = {
+    tracks: {
+      items: [
+        { id: 't1', name: 'Track', uri: 'spotify:track:t1', type: 'track', artists: [] },
+        null,
+        { id: 't2', name: 'Track 2', uri: 'spotify:track:t2', type: 'track', artists: [] },
+      ],
+    },
+    albums: {
+      items: [
+        { id: 'a1', name: 'Album', uri: 'spotify:album:a1', type: 'album', artists: [] },
+        null,
+      ],
+    },
+    artists: {
+      items: [
+        { id: 'ar1', name: 'Artist', uri: 'spotify:artist:ar1', type: 'artist' },
+        null,
+        { id: 'ar2', name: 'Artist 2', uri: 'spotify:artist:ar2', type: 'artist' },
+      ],
+    },
+  }
+
+  const result = mapSpotifySearchResults(mockSearchResponse)
+
+  // Should return 2 + 1 + 2 = 5 valid items (skipping nulls)
+  assert.strictEqual(result.length, 5)
+  assert.strictEqual(result.filter((item) => item.type === 'track').length, 2)
+  assert.strictEqual(result.filter((item) => item.type === 'album').length, 1)
+  assert.strictEqual(result.filter((item) => item.type === 'artist').length, 2)
+})
+
+test('mapSpotifySearchResults: handles empty names in search results', () => {
+  const mockSearchResponse = {
+    tracks: {
+      items: [
+        { id: 't1', name: '', uri: 'spotify:track:t1', type: 'track', artists: [] },
+      ],
+    },
+    albums: {
+      items: [
+        { id: 'a1', name: '', uri: 'spotify:album:a1', type: 'album', artists: [] },
+      ],
+    },
+    artists: {
+      items: [
+        { id: 'ar1', name: '', uri: 'spotify:artist:ar1', type: 'artist' },
+      ],
+    },
+    playlists: {
+      items: [
+        { id: 'p1', name: '', uri: 'spotify:playlist:p1', type: 'playlist', owner: { id: 'user1' } },
+      ],
+    },
+  }
+
+  const result = mapSpotifySearchResults(mockSearchResponse)
+
+  // Should return 4 items with default names
+  assert.strictEqual(result.length, 4)
+
+  const track = result.find((r) => r.type === 'track')
+  assert.strictEqual(track?.name, '(untitled)')
+
+  const album = result.find((r) => r.type === 'album')
+  assert.strictEqual(album?.name, '(untitled)')
+
+  const artist = result.find((r) => r.type === 'artist')
+  assert.strictEqual(artist?.name, '(unnamed)')
+
+  const playlist = result.find((r) => r.type === 'playlist')
+  assert.strictEqual(playlist?.name, '(untitled)')
+})

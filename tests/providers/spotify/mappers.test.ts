@@ -107,6 +107,32 @@ test('mapSpotifyTrackToCanonical', async (t) => {
     assert.strictEqual(canonical.isrc, null)
   })
 
+  await t.test('handles empty track name with default value', () => {
+    const track = {
+      id: 'track123',
+      name: '',
+      artists: [{ name: 'Artist' }],
+      uri: 'spotify:track:track123',
+    }
+
+    const canonical = mapSpotifyTrackToCanonical(track)
+
+    assert.strictEqual(canonical.title, '(untitled)')
+  })
+
+  await t.test('handles empty track uri with default value', () => {
+    const track = {
+      id: 'track123',
+      name: 'Song',
+      artists: [{ name: 'Artist' }],
+      uri: '',
+    }
+
+    const canonical = mapSpotifyTrackToCanonical(track)
+
+    assert.strictEqual(canonical.refs.spotify, '(no uri)')
+  })
+
   await t.test('throws ProviderError on missing id', () => {
     const track = {
       name: 'Song',
@@ -480,6 +506,20 @@ test('mapSpotifyPlaylistToSummary', async (t) => {
     }
 
     assert.throws(() => mapSpotifyPlaylistToSummary(playlist, 'user123', true), ProviderError)
+  })
+
+  await t.test('handles empty playlist name with default value', () => {
+    const playlist = {
+      id: 'playlist123',
+      name: '',
+      owner: { id: 'user123', display_name: 'Test User' },
+      items: { total: 5 },
+    }
+
+    const summary = mapSpotifyPlaylistToSummary(playlist, 'user123', true)
+
+    assert.strictEqual(summary.name, '(untitled)')
+    assert.strictEqual(summary.id, 'playlist123')
   })
 })
 

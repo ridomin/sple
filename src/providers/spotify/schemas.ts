@@ -62,15 +62,15 @@ export function validateSpotifyTrack(value: unknown): SpotifyTrack {
     )
   }
 
-  if (typeof obj.name !== 'string' || !obj.name) {
+  if (typeof obj.name !== 'string') {
     throw new ProviderError(
-      `Invalid Spotify track: missing or invalid 'name' field (received: ${JSON.stringify(obj.name)})`
+      `Invalid Spotify track: missing or invalid 'name' field (received: ${typeof obj.name})`
     )
   }
 
-  if (typeof obj.uri !== 'string' || !obj.uri) {
+  if (typeof obj.uri !== 'string') {
     throw new ProviderError(
-      `Invalid Spotify track: missing or invalid 'uri' field (received: ${JSON.stringify(obj.uri)})`
+      `Invalid Spotify track: missing or invalid 'uri' field (received: ${typeof obj.uri})`
     )
   }
 
@@ -135,9 +135,9 @@ export function validateSpotifyPlaylist(value: unknown): SpotifyPlaylist {
     )
   }
 
-  if (typeof obj.name !== 'string' || !obj.name) {
+  if (typeof obj.name !== 'string') {
     throw new ProviderError(
-      `Invalid Spotify playlist: missing or invalid 'name' field (received: ${JSON.stringify(obj.name)})`
+      `Invalid Spotify playlist: missing or invalid 'name' field (received: ${typeof obj.name})`
     )
   }
 

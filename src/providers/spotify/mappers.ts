@@ -40,10 +40,10 @@ export function mapSpotifyTrackToCanonical(track: unknown): CanonicalTrack {
       : ['Unknown Artist']
 
   const canonical: CanonicalTrack = {
-    title: validated.name,
+    title: validated.name || '(untitled)',
     artists,
     refs: {
-      spotify: validated.uri,
+      spotify: validated.uri || '(no uri)',
     },
     isrc: null, // ADR-0005: Spotify does not provide ISRC
   }
@@ -218,7 +218,7 @@ export function mapSpotifyPlaylistToSummary(
   const summary: PlaylistSummary = {
     ref: validated.id,
     id: validated.id,
-    name: validated.name,
+    name: validated.name || '(untitled)',
     owner: {
       id: validated.owner.id,
       displayName: validated.owner.display_name,
@@ -290,7 +290,7 @@ function mapSpotifySearchTrack(track: SpotifyTrack): SearchItem {
     id: track.id,
     ref: track.uri,
     url: `https://open.spotify.com/track/${track.id}`,
-    name: track.name,
+    name: track.name || '(untitled)',
     type: 'track',
     track: canonical,
   }
@@ -308,7 +308,7 @@ function mapSpotifySearchAlbum(album: SpotifyAlbum): SearchItem {
     id: album.id,
     ref: album.uri,
     url: `https://open.spotify.com/album/${album.id}`,
-    name: album.name,
+    name: album.name || '(untitled)',
     type: 'album',
     artists,
     releaseDate: album.release_date,
@@ -324,7 +324,7 @@ function mapSpotifySearchArtist(artist: SpotifyArtist): SearchItem {
     id: artist.id,
     ref: artist.uri,
     url: `https://open.spotify.com/artist/${artist.id}`,
-    name: artist.name,
+    name: artist.name || '(unnamed)',
     type: 'artist',
   }
 }
@@ -337,7 +337,7 @@ function mapSpotifySearchPlaylist(playlist: SpotifyPlaylistSearchResult): Search
     id: playlist.id,
     ref: playlist.uri,
     url: `https://open.spotify.com/playlist/${playlist.id}`,
-    name: playlist.name,
+    name: playlist.name || '(untitled)',
     type: 'playlist',
     owner: {
       id: playlist.owner.id,
@@ -371,6 +371,7 @@ export function mapSpotifySearchResults(response: unknown): SearchItem[] {
   // Map tracks
   if (validated.tracks?.items) {
     for (const track of validated.tracks.items) {
+      if (!track) continue
       try {
         results.push(mapSpotifySearchTrack(track))
       } catch (error) {
@@ -385,6 +386,7 @@ export function mapSpotifySearchResults(response: unknown): SearchItem[] {
   // Map albums
   if (validated.albums?.items) {
     for (const album of validated.albums.items) {
+      if (!album) continue
       try {
         results.push(mapSpotifySearchAlbum(album))
       } catch (error) {
@@ -399,6 +401,7 @@ export function mapSpotifySearchResults(response: unknown): SearchItem[] {
   // Map artists
   if (validated.artists?.items) {
     for (const artist of validated.artists.items) {
+      if (!artist) continue
       try {
         results.push(mapSpotifySearchArtist(artist))
       } catch (error) {
@@ -413,6 +416,10 @@ export function mapSpotifySearchResults(response: unknown): SearchItem[] {
   // Map playlists
   if (validated.playlists?.items) {
     for (const playlist of validated.playlists.items) {
+      // Skip unavailable playlists (null items in response)
+      if (!playlist) {
+        continue
+      }
       try {
         results.push(mapSpotifySearchPlaylist(playlist))
       } catch (error) {
