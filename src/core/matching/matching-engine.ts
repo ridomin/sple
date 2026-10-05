@@ -6,7 +6,7 @@ import type {
 } from './types.js'
 import type { Provider, CanonicalTrack } from '../provider/provider.js'
 import type { ProviderCapabilities } from '../provider/capabilities.js'
-import type { CanonicalPlaylistFile, PositionedTrack } from '../export/format.js'
+import type { CanonicalPlaylistFile } from '../export/format.js'
 import { KnownRefStrategy } from './strategies/known-ref-strategy.js'
 import { IsrcStrategy } from './strategies/isrc-strategy.js'
 import { MetadataStrategy } from './strategies/metadata-strategy.js'

@@ -91,7 +91,7 @@ export class CanonicalFileReader {
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
       generator: { name: 'sple', version: 'unknown' },
-      source: { provider: 'unknown', kind: 'playlist' },
+      source: { provider: 'fake', kind: 'playlist' },
       playlist: {
         name: 'Imported Playlist',
         trackCount: tracks.length,
