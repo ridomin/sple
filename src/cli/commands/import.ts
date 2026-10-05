@@ -7,6 +7,8 @@ import { UsageError } from '../../core/provider/errors.js'
 import { CanonicalFileReader } from '../../core/import/file-reader.js'
 import { MatchingEngine } from '../../core/matching/matching-engine.js'
 import { MatchReportWriter } from '../../core/import/match-report-writer.js'
+import { PlaylistCreator } from '../../core/import/playlist-creator.js'
+import { PlaylistError } from '../../core/import/playlist-errors.js'
 
 const USAGE = 'Usage: sple import <file> [--provider <name>] [--name <name>] [--report <path>] [--min-confidence <score>] [--dry-run] [--yes]'
 
@@ -178,9 +180,20 @@ Examples:
     }
 
     if (shouldCreatePlaylist) {
-      // TODO: Implement playlist creation
       ctx.io.err(`\nCreating playlist: "${report.targetPlaylistName}"`)
-      ctx.io.err('(Playlist creation not yet implemented)')
+
+      const creator = new PlaylistCreator()
+      try {
+        const result = await creator.createPlaylistFromMatches(provider, report, report.targetPlaylistName || canonicalFile.playlist.name)
+        ctx.io.err(`✓ Playlist created: ${result.playlistUrl || result.playlistId}`)
+        ctx.io.err(`  Tracks added: ${result.tracksAdded}${result.tracksFailed > 0 ? `, Failed: ${result.tracksFailed}` : ''}`)
+      } catch (error) {
+        if (error instanceof PlaylistError) {
+          ctx.io.err(`✗ Playlist creation failed: ${error.message}`)
+          return EXIT_CODES.ERROR
+        }
+        throw error
+      }
       return EXIT_CODES.SUCCESS
     }
 
