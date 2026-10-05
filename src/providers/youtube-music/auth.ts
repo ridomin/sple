@@ -35,12 +35,13 @@ export class YouTubeMusicAuth implements ProviderAuth {
     this.oauthHandler = handler
 
     try {
-      const redirect = await handler.initiateLogin(opts.mode)
+      const login = await handler.initiateLogin(opts.mode as 'loopback' | 'no-browser' | 'manual')
+      const redirect = await handler.completeLogin(login)
 
       const tokenResult = await this.exchangeCodeForToken(
         redirect.code,
-        handler.getCodeVerifier(),
-        handler.getRedirectUri()
+        redirect.codeVerifier,
+        login.redirectUri
       )
 
       const storedToken: StoredToken = {
