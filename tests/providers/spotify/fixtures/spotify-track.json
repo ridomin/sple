@@ -1,0 +1,23 @@
+{
+  "id": "track1",
+  "name": "Test Song",
+  "uri": "spotify:track:track1",
+  "artists": [
+    {
+      "id": "artist1",
+      "name": "Test Artist"
+    }
+  ],
+  "album": {
+    "id": "album1",
+    "name": "Test Album",
+    "release_date": "2024-01-01"
+  },
+  "duration_ms": 180000,
+  "external_ids": {
+    "isrc": "USRC12345678"
+  },
+  "external_urls": {
+    "spotify": "https://open.spotify.com/track/track1"
+  }
+}

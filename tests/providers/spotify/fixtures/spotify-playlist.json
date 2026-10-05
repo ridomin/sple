@@ -1,11 +1,26 @@
 {
-  "id": "test-playlist-1",
+  "id": "test-playlist",
+  "uri": "spotify:playlist:test-playlist",
   "name": "Test Playlist",
   "description": "A test playlist",
+  "owner": {
+    "id": "user1",
+    "display_name": "Test User"
+  },
   "public": true,
-  "owner": { "id": "user123", "display_name": "Test User" },
-  "tracks": { "total": 2, "href": "https://api.spotify.com/v1/playlists/test-playlist-1/tracks" },
-  "images": [{ "url": "https://example.com/image.jpg", "height": 640, "width": 640 }],
-  "uri": "spotify:playlist:test-playlist-1",
-  "external_urls": { "spotify": "https://open.spotify.com/playlist/test-playlist-1" }
+  "collaborative": false,
+  "tracks": {
+    "total": 2,
+    "href": "https://api.spotify.com/v1/playlists/test-playlist/tracks"
+  },
+  "images": [
+    {
+      "url": "https://example.com/image.jpg",
+      "height": 300,
+      "width": 300
+    }
+  ],
+  "external_urls": {
+    "spotify": "https://open.spotify.com/playlist/test-playlist"
+  }
 }

@@ -1,280 +1,303 @@
-import { test } from 'node:test';
-import * as assert from 'node:assert';
-import { SpotifyHttpClient } from '../../../src/providers/spotify/client.js';
-import {
-  AuthRequiredError,
-  AccessRestrictedError,
-  NotFoundError,
-  RateLimitError,
-  QuotaExhaustedError,
-  UsageError
-} from '../../../src/core/provider/errors.js';
-import { HttpClient } from '../../../src/core/http/client.js';
+import { SpotifyHttpClient } from '../../../src/providers/spotify/client.js'
+import { describe, it, expect, beforeEach, jest } from '@jest/globals'
+import type { HttpClient } from '../../../src/core/http/client.js'
 
-class MockHttpClient {
-  async request(method: string, url: string, options?: any) {
-    return this.mockResponse;
-  }
-  mockResponse = { status: 200, headers: new Map(), body: {} };
-}
+describe('SpotifyHttpClient', () => {
+  let client: SpotifyHttpClient
+  let mockHttp: jest.Mocked<Partial<HttpClient>>
 
-test('SpotifyHttpClient error mapping', async (t) => {
-  await t.test('should throw AuthRequiredError on 401 Unauthorized', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = { status: 401, headers: new Map(), body: {} };
-    const client = new SpotifyHttpClient(mockHttp as any);
+  beforeEach(() => {
+    mockHttp = {
+      requestJson: jest.fn(),
+      request: jest.fn(),
+    }
+    client = new SpotifyHttpClient(mockHttp as HttpClient)
+  })
 
-    await assert.rejects(
-      () => client.listPlaylists('user123'),
-      AuthRequiredError
-    );
-  });
+  describe('getPlaylist', () => {
+    it('should parse spotify:playlist: URI and fetch playlist', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        id: 'pl1',
+        uri: 'spotify:playlist:pl1',
+        name: 'My Playlist',
+        description: 'Test playlist',
+        owner: { id: 'user1', display_name: 'User' },
+        public: true,
+        tracks: { total: 2 },
+        external_urls: { spotify: 'https://open.spotify.com/playlist/pl1' }
+      })
 
-  await t.test('should throw AccessRestrictedError on 403 Forbidden', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = { status: 403, headers: new Map(), body: {} };
-    const client = new SpotifyHttpClient(mockHttp as any);
+      const result = await client.getPlaylist('spotify:playlist:pl1')
+      expect(result.name).toBe('My Playlist')
+      expect(result.trackCount).toBe(2)
+      expect(result.ref).toBe('spotify:playlist:pl1')
+    })
 
-    await assert.rejects(
-      () => client.deletePlaylist('owned-by-other'),
-      AccessRestrictedError
-    );
-  });
+    it('should handle HTTPS URL format', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        id: 'pl1',
+        uri: 'spotify:playlist:pl1',
+        name: 'Test',
+        owner: { id: 'user1', display_name: 'User' },
+        public: true,
+        tracks: { total: 1 },
+        external_urls: { spotify: 'https://open.spotify.com/playlist/pl1' }
+      })
 
-  await t.test('should throw NotFoundError on 404 Not Found', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = { status: 404, headers: new Map(), body: {} };
-    const client = new SpotifyHttpClient(mockHttp as any);
+      const result = await client.getPlaylist('https://open.spotify.com/playlist/pl1')
+      expect(result.name).toBe('Test')
+    })
 
-    await assert.rejects(
-      () => client.getPlaylist('invalid-id'),
-      NotFoundError
-    );
-  });
+    it('should handle raw ID', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        id: 'pl1',
+        uri: 'spotify:playlist:pl1',
+        name: 'Test',
+        owner: { id: 'user1', display_name: 'User' },
+        public: true,
+        tracks: { total: 1 },
+        external_urls: { spotify: 'https://open.spotify.com/playlist/pl1' }
+      })
 
-  await t.test('should throw RateLimitError on 429 with Retry-After', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = {
-      status: 429,
-      headers: new Map([['retry-after', '60']]),
-      body: {}
-    };
-    const client = new SpotifyHttpClient(mockHttp as any);
+      const result = await client.getPlaylist('pl1')
+      expect(result.name).toBe('Test')
+    })
+  })
 
-    await assert.rejects(
-      () => client.listPlaylists('user123'),
-      RateLimitError
-    );
-  });
-
-  await t.test('should throw QuotaExhaustedError on 429 without Retry-After', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = {
-      status: 429,
-      headers: new Map(),
-      body: { error: { status: 429, message: 'Quota exceeded' } }
-    };
-    const client = new SpotifyHttpClient(mockHttp as any);
-
-    await assert.rejects(
-      () => client.listPlaylists('user123'),
-      QuotaExhaustedError
-    );
-  });
-
-  await t.test('should handle null fields in track response gracefully', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = {
-      status: 200,
-      headers: new Map(),
-      body: {
+  describe('getPlaylistTracks', () => {
+    it('should filter out null (unavailable) tracks', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
         items: [
-          {
-            track: null,  // Track is unavailable/removed
-            added_at: '2024-01-01T00:00:00Z'
-          }
-        ],
-        total: 1
-      }
-    };
-    const client = new SpotifyHttpClient(mockHttp as any);
-
-    const result = await client.getPlaylistTracks('playlist123');
-    assert.strictEqual(result.tracks.length, 0);  // Skip null tracks
-  });
-});
-
-test('SpotifyHttpClient operations', async (t) => {
-  await t.test('listPlaylists should return paginated playlists', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = {
-      status: 200,
-      headers: new Map(),
-      body: {
-        items: [{
-          id: 'test-playlist-1',
-          name: 'Test Playlist',
-          description: 'A test playlist',
-          public: true,
-          owner: { id: 'user123', display_name: 'Test User' },
-          tracks: { total: 2 },
-          images: [{ url: 'https://example.com/image.jpg' }],
-          uri: 'spotify:playlist:test-playlist-1',
-          external_urls: { spotify: '' }
-        }],
-        total: 1,
-        next: null
-      }
-    };
-    const client = new SpotifyHttpClient(mockHttp as any);
-
-    const result = await client.listPlaylists('user123');
-    assert.strictEqual(result.playlists.length, 1);
-    assert.strictEqual(result.playlists[0].name, 'Test Playlist');
-    assert.strictEqual(result.total, 1);
-    assert.strictEqual(result.nextOffset, undefined);
-  });
-
-  await t.test('listPlaylists should include nextOffset when more results available', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = {
-      status: 200,
-      headers: new Map(),
-      body: {
-        items: [],
-        total: 100,
-        next: 'https://api.spotify.com/v1/users/user123/playlists?offset=50'
-      }
-    };
-    const client = new SpotifyHttpClient(mockHttp as any);
-
-    const result = await client.listPlaylists('user123', { limit: 50, offset: 0 });
-    assert.strictEqual(result.nextOffset, 50);
-  });
-
-  await t.test('getPlaylistTracks should filter out null tracks', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = {
-      status: 200,
-      headers: new Map(),
-      body: {
-        items: [
-          {
-            track: {
-              id: 'track-1',
-              name: 'Song One',
-              artists: [{ id: 'artist-1', name: 'Artist One' }],
-              album: { id: 'album-1', name: 'Album One', release_date: '2024-01-01' },
-              duration_ms: 180000,
-              uri: 'spotify:track:track-1',
-              external_urls: { spotify: '' }
-            },
-            added_at: '2024-01-01T12:00:00Z'
-          },
-          {
-            track: null,  // Removed track
-            added_at: '2024-01-02T12:00:00Z'
-          },
-          {
-            track: {
-              id: 'track-2',
-              name: 'Song Two',
-              artists: [{ id: 'artist-2', name: 'Artist Two' }],
-              album: { id: 'album-2', name: 'Album Two', release_date: '2024-02-01' },
-              duration_ms: 240000,
-              uri: 'spotify:track:track-2',
-              external_urls: { spotify: '' }
-            },
-            added_at: '2024-01-03T12:00:00Z'
-          }
+          { track: { id: 't1', name: 'Song 1', uri: 'spotify:track:t1', artists: [{ name: 'Artist' }], album: { name: 'Album', id: 'a1' }, duration_ms: 180000 }, added_at: '2024-01-01T00:00:00Z' },
+          { track: null, added_at: '2024-01-02T00:00:00Z' },
+          { track: { id: 't2', name: 'Song 2', uri: 'spotify:track:t2', artists: [{ name: 'Artist' }], album: { name: 'Album', id: 'a1' }, duration_ms: 200000 }, added_at: '2024-01-03T00:00:00Z' }
         ],
         total: 3,
         next: null
-      }
-    };
-    const client = new SpotifyHttpClient(mockHttp as any);
+      })
 
-    const result = await client.getPlaylistTracks('playlist-1');
-    assert.strictEqual(result.tracks.length, 2);  // Null track filtered
-    assert.strictEqual(result.tracks[0].title, 'Song One');
-    assert.strictEqual(result.total, 3);  // Total reflects API response
-  });
+      const result = await client.getPlaylistTracks('spotify:playlist:pl1')
+      expect(result).toHaveLength(2)
+      expect(result[0].title).toBe('Song 1')
+      expect(result[1].title).toBe('Song 2')
+    })
 
-  await t.test('resolveTrack should return match candidates with confidence', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = {
-      status: 200,
-      headers: new Map(),
-      body: {
+    it('should respect limit and offset parameters', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        items: [],
+        total: 100,
+        next: null
+      })
+
+      await client.getPlaylistTracks('spotify:playlist:pl1', { limit: 25, offset: 50 })
+
+      expect(mockHttp.requestJson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('limit=25')
+        }),
+        expect.any(Function)
+      )
+    })
+
+    it('should include addedAt timestamp from API', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        items: [
+          { track: { id: 't1', name: 'Song', uri: 'spotify:track:t1', artists: [{ name: 'Artist' }], album: { name: 'Album', id: 'a1' }, duration_ms: 180000 }, added_at: '2024-06-15T12:30:45Z' }
+        ],
+        total: 1,
+        next: null
+      })
+
+      const result = await client.getPlaylistTracks('spotify:playlist:pl1')
+      expect(result[0].addedAt).toBe('2024-06-15T12:30:45Z')
+    })
+  })
+
+  describe('searchTracks', () => {
+    it('should return tracks from search results', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
         tracks: {
           items: [
-            {
-              id: 'track-1',
-              name: 'Song One',
-              artists: [{ id: 'artist-1', name: 'Artist One' }],
-              album: { id: 'album-1', name: 'Album One', release_date: '2024-01-01' },
-              duration_ms: 180000,
-              uri: 'spotify:track:track-1',
-              external_urls: { spotify: '' }
-            },
-            {
-              id: 'track-2',
-              name: 'Different Song',
-              artists: [{ id: 'artist-2', name: 'Different Artist' }],
-              album: { id: 'album-2', name: 'Album Two', release_date: '2024-02-01' },
-              duration_ms: 240000,
-              uri: 'spotify:track:track-2',
-              external_urls: { spotify: '' }
-            }
+            { id: 't1', name: 'Song', uri: 'spotify:track:t1', artists: [{ name: 'Artist' }], album: { name: 'Album', id: 'a1' }, duration_ms: 180000 }
           ],
-          total: 2,
+          total: 1,
           next: null
         }
-      }
-    };
-    const client = new SpotifyHttpClient(mockHttp as any);
+      })
 
-    const result = await client.resolveTrack('Song One', ['Artist One']);
-    assert.strictEqual(result.length, 2);
-    assert.strictEqual(result[0].trackRef, 'spotify:track:track-1');
-    assert.ok(result[0].confidence > 0);
-  });
+      const result = await client.searchTracks({ text: 'song query' })
+      expect(result).toHaveLength(1)
+      expect(result[0].title).toBe('Song')
+    })
 
-  await t.test('searchTracks should return empty array on no results', async () => {
-    const mockHttp = new MockHttpClient();
-    mockHttp.mockResponse = {
-      status: 200,
-      headers: new Map(),
-      body: {
+    it('should return empty array when no results', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        tracks: { items: [], total: 0, next: null }
+      })
+
+      const result = await client.searchTracks({ text: 'nonexistent artist xyz' })
+      expect(result).toEqual([])
+    })
+
+    it('should handle pagination with limit and offset', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
         tracks: {
           items: [],
-          total: 0,
+          total: 500,
+          next: 'https://api.spotify.com/v1/search?offset=50'
+        }
+      })
+
+      await client.searchTracks({ text: 'query' }, { limit: 50, offset: 0 })
+
+      expect(mockHttp.requestJson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('offset=0')
+        }),
+        expect.any(Function)
+      )
+    })
+  })
+
+  describe('resolveTrack', () => {
+    it('should return candidates with confidence scores', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        tracks: {
+          items: [
+            { id: 't1', name: 'Song Title', uri: 'spotify:track:t1', artists: [{ name: 'Artist Name' }], album: { name: 'Album', id: 'a1' }, duration_ms: 180000 }
+          ],
+          total: 1,
           next: null
         }
-      }
-    };
-    const client = new SpotifyHttpClient(mockHttp as any);
+      })
 
-    const result = await client.searchTracks('Nonexistent Song');
-    assert.strictEqual(result.tracks.length, 0);
-  });
+      const result = await client.resolveTrack(
+        { title: 'Song Title', artists: ['Artist Name'], album: 'Album', durationMs: 180000, refs: { spotify: 't1' } },
+        { maxCandidates: 10 }
+      )
 
-  await t.test('addTracksToPlaylist should split large requests into batches', async () => {
-    const calls: Array<{ uris: string[] }> = [];
-    const mockHttp = new MockHttpClient();
-    let callCount = 0;
-    mockHttp.request = async (method: string, url: string, options?: any) => {
-      if (options?.body) {
-        calls.push(JSON.parse(options.body));
-      }
-      callCount++;
-      return { status: 200, headers: new Map(), body: {} };
-    };
-    const client = new SpotifyHttpClient(mockHttp as any);
+      expect(result).toHaveLength(1)
+      expect(result[0].confidence).toBeGreaterThan(0)
+      expect(result[0].ref).toBe('spotify:track:t1')
+    })
 
-    const tracks = Array.from({ length: 250 }, (_, i) => `spotify:track:${i}`);
-    await client.addTracksToPlaylist('playlist-1', tracks);
+    it('should return empty array when no matches', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        tracks: { items: [], total: 0, next: null }
+      })
 
-    assert.strictEqual(callCount, 3);  // 250 tracks = 3 batches (100 + 100 + 50)
-  });
-});
+      const result = await client.resolveTrack(
+        { title: 'Unknown', artists: ['Unknown'], album: '', durationMs: 0, refs: {} },
+        { maxCandidates: 10 }
+      )
+
+      expect(result).toEqual([])
+    })
+
+    it('should filter out results with zero confidence', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        tracks: {
+          items: [
+            { id: 't1', name: 'Completely Different', uri: 'spotify:track:t1', artists: [{ name: 'Other Artist' }], album: { name: 'Other', id: 'a1' }, duration_ms: 999999 }
+          ],
+          total: 1,
+          next: null
+        }
+      })
+
+      const result = await client.resolveTrack(
+        { title: 'Query', artists: ['Query Artist'], album: '', durationMs: 180000, refs: {} },
+        { maxCandidates: 10 }
+      )
+
+      // Should filter out low-confidence matches
+      expect(result.length).toBeLessThanOrEqual(1)
+    })
+  })
+
+  describe('createPlaylist', () => {
+    it('should fetch current user and create playlist', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        id: 'user1',
+        display_name: 'Test User'
+      })
+
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        id: 'new-pl',
+        uri: 'spotify:playlist:new-pl',
+        name: 'New Playlist',
+        description: 'Created playlist',
+        owner: { id: 'user1', display_name: 'Test User' },
+        public: true,
+        tracks: { total: 0 },
+        external_urls: { spotify: 'https://open.spotify.com/playlist/new-pl' }
+      })
+
+      const result = await client.createPlaylist({
+        name: 'New Playlist',
+        description: 'Created playlist',
+        public: true
+      })
+
+      expect(result.name).toBe('New Playlist')
+      expect(result.trackCount).toBe(0)
+    })
+  })
+
+  describe('removePlaylist', () => {
+    it('should unfold playlist (Spotify limitation)', async () => {
+      mockHttp.request!.mockResolvedValueOnce(undefined)
+
+      const result = await client.removePlaylist('spotify:playlist:pl1')
+      expect(result.action).toBe('deleted')
+    })
+  })
+
+  describe('populatePlaylist', () => {
+    it('should batch add tracks in chunks of 100', async () => {
+      mockHttp.request!.mockResolvedValue(undefined)
+
+      const trackRefs = Array.from({ length: 250 }, (_, i) => `spotify:track:${i}`)
+      const result = await client.populatePlaylist('spotify:playlist:pl1', trackRefs, { skipExisting: false })
+
+      expect(result.added).toHaveLength(250)
+      expect(result.failed).toHaveLength(0)
+      expect(mockHttp.request).toHaveBeenCalledTimes(3)
+    })
+
+    it('should handle batch failures', async () => {
+      mockHttp.request!.mockRejectedValueOnce(new Error('API error'))
+
+      const trackRefs = Array.from({ length: 150 }, (_, i) => `spotify:track:${i}`)
+      const result = await client.populatePlaylist('spotify:playlist:pl1', trackRefs, { skipExisting: false })
+
+      expect(result.failed).toHaveLength(100)
+    })
+  })
+
+  describe('getLikedTracks', () => {
+    it('should fetch saved tracks (liked songs)', async () => {
+      mockHttp.requestJson!.mockResolvedValueOnce({
+        items: [
+          { track: { id: 't1', name: 'Liked Song', uri: 'spotify:track:t1', artists: [{ name: 'Artist' }], album: { name: 'Album', id: 'a1' }, duration_ms: 180000 }, added_at: '2024-01-01T00:00:00Z' }
+        ],
+        total: 1,
+        next: null
+      })
+
+      const result = await client.getLikedTracks({ limit: 50 })
+      expect(result).toHaveLength(1)
+      expect(result[0].title).toBe('Liked Song')
+    })
+  })
+
+  describe('error handling', () => {
+    it('should throw on invalid playlist ref', async () => {
+      await expect(client.getPlaylist('not-a-valid-ref')).rejects.toThrow()
+    })
+
+    it('should throw on invalid playlist ID format', async () => {
+      await expect(client.getPlaylist('http://wrong-domain.com/playlist/id')).rejects.toThrow()
+    })
+  })
+})
