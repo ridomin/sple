@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { OAuthConfig } from './auth.js'
+import type { LoginInteraction, LoginMode } from '../provider/provider.js'
 
 /**
  * Generate a PKCE code verifier and challenge (RFC 7636).
@@ -41,20 +42,35 @@ export interface LoopbackRedirect {
   state: string
 }
 
+/** Host the loopback server binds to. Spotify rejects `localhost`. */
+export const LOOPBACK_HOST = '127.0.0.1'
+
+/** Only path the loopback server accepts. */
+export const CALLBACK_PATH = '/callback'
+
 /**
- * Loopback server for capturing OAuth redirects.
- * Binds to localhost:0 (random port) and waits for authorization code redirect.
+ * Redirect URI for manual mode: no port and no listener. The browser fails to
+ * load it and the user pastes the address-bar URL back into the CLI.
+ */
+export const MANUAL_REDIRECT_URI = `http://${LOOPBACK_HOST}${CALLBACK_PATH}`
+
+/**
+ * Loopback server for capturing OAuth redirects (FR-AUTH-1).
+ * Binds to 127.0.0.1 on a random port and accepts only
+ * `GET http://127.0.0.1:<port>/callback` with a matching Host header.
  */
 export class LoopbackServer {
   private server: Server | null = null
   private redirectHandler: ((result: RedirectParams) => void) | null = null
   private expectedState: string | null = null
   private timeoutId: NodeJS.Timeout | null = null
-  baseUrl: string = ''
+  private port = 0
+  /** `http://127.0.0.1:<port>/callback` once started. */
+  redirectUri: string = ''
 
   /**
-   * Start listening on localhost with a random port.
-   * Returns a promise that resolves with the base URL (e.g., "http://localhost:3000/").
+   * Start listening on 127.0.0.1 with a random port.
+   * Resolves with the redirect URI (e.g. "http://127.0.0.1:53123/callback").
    */
   start(): Promise<string> {
     return new Promise<string>((resolve, reject) => {
@@ -62,14 +78,15 @@ export class LoopbackServer {
         this.handleRequest(req, res)
       })
 
-      this.server.listen(0, 'localhost', () => {
+      this.server.listen(0, LOOPBACK_HOST, () => {
         const addr = this.server!.address()
         if (typeof addr !== 'object' || !addr) {
           reject(new Error('Failed to determine server address'))
           return
         }
-        this.baseUrl = `http://localhost:${addr.port}/`
-        resolve(this.baseUrl)
+        this.port = addr.port
+        this.redirectUri = `http://${LOOPBACK_HOST}:${addr.port}${CALLBACK_PATH}`
+        resolve(this.redirectUri)
       })
 
       this.server.on('error', reject)
@@ -147,32 +164,31 @@ export class LoopbackServer {
   }
 
   private handleRequest(req: IncomingMessage, res: ServerResponse): void {
-    // Validate Host header to prevent DNS rebinding attacks
-    const hostHeader = req.headers.host
-    if (!hostHeader) {
-      res.writeHead(400, { 'Content-Type': 'text/plain' })
-      res.end('Missing Host header')
-      return
-    }
-
-    // Extract port from baseUrl for comparison
-    const baseUrlPort = this.baseUrl.match(/:(\d+)\/$/)?.[1]
-    const expectedHosts = [
-      `localhost:${baseUrlPort}`,
-      `127.0.0.1:${baseUrlPort}`
-    ]
-
-    if (!expectedHosts.includes(hostHeader)) {
+    // Validate Host header to prevent DNS rebinding attacks. Only the exact
+    // loopback address is accepted; `localhost` is rejected (FR-AUTH-1).
+    if (req.headers.host !== `${LOOPBACK_HOST}:${this.port}`) {
       res.writeHead(400, { 'Content-Type': 'text/plain' })
       res.end('Invalid host')
       return
     }
 
-    // Parse the request URL using WHATWG URL API
-    const urlPath = req.url || ''
-    const url = new URL(urlPath, this.baseUrl)
-    const params = url.searchParams
+    let url: URL
+    try {
+      url = new URL(req.url || '', this.redirectUri)
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'text/plain' })
+      res.end('Bad request')
+      return
+    }
 
+    // Only the callback path is accepted (e.g. /favicon.ico gets a 400 and is ignored)
+    if (req.method !== 'GET' || url.pathname !== CALLBACK_PATH) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' })
+      res.end('Invalid path')
+      return
+    }
+
+    const params = url.searchParams
     const code = params.get('code') || undefined
     const state = params.get('state') || undefined
     const error = params.get('error') || undefined
@@ -224,11 +240,11 @@ export class LoopbackServer {
   }
 }
 
-export type AuthMode = 'loopback' | 'no-browser' | 'manual'
+export type AuthMode = LoginMode
 
 export interface LoginRequest {
   authorizationUrl: string
-  redirectUri?: string
+  redirectUri: string
   state: string
   codeVerifier: string
 }
@@ -258,9 +274,10 @@ export class OAuthHandler {
   ) {}
 
   /**
-   * Begin a login flow. In loopback mode this starts the loopback server
-   * (async because binding a port is async); call cleanup() or completeLogin()
-   * to release it.
+   * Begin a login flow. In `loopback` and `no-browser` modes this starts the
+   * loopback server (async because binding a port is async); call cleanup()
+   * or completeLogin() to release it. `manual` mode starts no listener and
+   * uses `http://127.0.0.1/callback` as the redirect URI.
    */
   async initiateLogin(mode: AuthMode): Promise<LoginRequest> {
     // Release any server left over from a previous initiation
@@ -269,8 +286,10 @@ export class OAuthHandler {
     const { codeVerifier, codeChallenge } = generatePKCEPair()
     const state = randomBytes(32).toString('hex')
 
-    let redirectUri: string | undefined = this.config.redirectUri
-    if (mode === 'loopback') {
+    let redirectUri: string
+    if (mode === 'manual') {
+      redirectUri = this.config.redirectUri ?? MANUAL_REDIRECT_URI
+    } else {
       const server = new LoopbackServer()
       redirectUri = await server.start()
       this.loopbackServer = server
@@ -313,6 +332,29 @@ export class OAuthHandler {
     }
   }
 
+  /**
+   * Full interactive flow: initiate, hand the URL to the interaction (print /
+   * open browser), then wait for the loopback redirect or, in manual mode,
+   * prompt for the pasted URL. The returned redirectUri must be sent
+   * byte-identical to the token endpoint.
+   */
+  async runLogin(
+    mode: AuthMode,
+    interaction: LoginInteraction
+  ): Promise<CompleteLoginResult & { redirectUri: string }> {
+    const login = await this.initiateLogin(mode)
+    try {
+      await interaction.showAuthorizationUrl(login.authorizationUrl, mode)
+    } catch (error) {
+      this.cleanup()
+      throw error
+    }
+    const result = await this.completeLogin(login, {
+      userInput: mode === 'manual' ? (p) => interaction.promptForRedirectUrl(p) : undefined,
+    })
+    return { ...result, redirectUri: login.redirectUri }
+  }
+
   /** Stop the loopback server if running. */
   cleanup(): void {
     if (this.loopbackServer) {
@@ -321,7 +363,7 @@ export class OAuthHandler {
     }
   }
 
-  private buildAuthorizationUrl(codeChallenge: string, state: string, redirectUri?: string): string {
+  private buildAuthorizationUrl(codeChallenge: string, state: string, redirectUri: string): string {
     const url = new URL(this.authorizationEndpoint)
     url.searchParams.set('client_id', this.config.clientId)
     url.searchParams.set('response_type', 'code')
@@ -329,9 +371,7 @@ export class OAuthHandler {
     url.searchParams.set('code_challenge_method', 'S256')
     url.searchParams.set('state', state)
     url.searchParams.set('scope', this.config.scopes.join(' '))
-    if (redirectUri) {
-      url.searchParams.set('redirect_uri', redirectUri)
-    }
+    url.searchParams.set('redirect_uri', redirectUri)
     return url.toString()
   }
 

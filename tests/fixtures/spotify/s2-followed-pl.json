@@ -1,0 +1,60 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.spotify.com/v1/playlists/76IBoRDyYzi2Svw7oRRfki"
+  },
+  "status": 200,
+  "headers": {
+    "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000, h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+    "cache-control": "public, max-age=0",
+    "content-encoding": "zstd",
+    "content-length": "460",
+    "content-type": "application/json; charset=utf-8",
+    "date": "Fri, 02 Oct 2026 09:43:21 GMT",
+    "etag": "\"MC-IjRmYmU0ODkyMDhiZGU1YjIxMjliNTY1N2RmODQ0Njg5Ig==\"",
+    "mc-cache-policy": "public",
+    "mc-etag": "\"4fbe489208bde5b2129b5657df844689\"",
+    "server": "envoy",
+    "server-timing": "edge;dur=172",
+    "strict-transport-security": "max-age=31536000",
+    "via": "HTTP/2 edgeproxy, 1.1 google",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow"
+  },
+  "body": {
+    "collaborative": false,
+    "description": "The greatest anthems from The Hives!",
+    "external_urls": {
+      "spotify": "https://open.spotify.com/playlist/76IBoRDyYzi2Svw7oRRfki"
+    },
+    "followers": {
+      "href": null,
+      "total": 6017
+    },
+    "href": "https://api.spotify.com/v1/playlists/76IBoRDyYzi2Svw7oRRfki?locale=*",
+    "id": "76IBoRDyYzi2Svw7oRRfki",
+    "images": [
+      {
+        "url": "https://example.com/image.jpg",
+        "height": null,
+        "width": null
+      }
+    ],
+    "name": "THE HIVES: COMPLETE",
+    "owner": {
+      "display_name": "Test User",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/user/testuser0000000000000!"
+      },
+      "href": "https://api.spotify.com/v1/users/testuser0000000000000!",
+      "id": "testuser0000000000000",
+      "type": "user",
+      "uri": "spotify:user:testuser0000000000000%21"
+    },
+    "primary_color": null,
+    "public": true,
+    "snapshot_id": "AAABV57Bfka/SDVAZpFbmJavOAi8RmWt",
+    "type": "playlist",
+    "uri": "spotify:playlist:76IBoRDyYzi2Svw7oRRfki"
+  }
+}

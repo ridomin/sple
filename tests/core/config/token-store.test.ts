@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import * as assert from 'node:assert'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { loadTokens, saveTokens, deleteTokens, StoredToken } from '../../../src/core/config/token-store.js'
@@ -84,6 +84,23 @@ test('token store', async (t) => {
     const loaded = loadTokens('youtube-music', tempDir)
 
     assert.strictEqual(loaded?.expiresAt, undefined)
+  })
+
+  await t.test('round-trips optional displayName (schemaVersion stays 1)', () => {
+    const token: StoredToken = { ...mockToken, displayName: 'Test User' }
+    saveTokens('spotify', token, tempDir)
+    assert.strictEqual(loadTokens('spotify', tempDir)?.displayName, 'Test User')
+    const file = JSON.parse(readFileSync(join(tempDir, 'tokens.json'), 'utf-8'))
+    assert.strictEqual(file.schemaVersion, 1)
+
+    // Tokens without displayName still load (backward compatible)
+    saveTokens('spotify', mockToken, tempDir)
+    assert.strictEqual(loadTokens('spotify', tempDir)?.displayName, undefined)
+  })
+
+  await t.test('rejects non-string displayName', () => {
+    const bad = { ...mockToken, displayName: 42 } as unknown as StoredToken
+    assert.throws(() => saveTokens('spotify', bad, tempDir), /displayName must be a string/)
   })
 
   await t.test('supports multiple providers', () => {

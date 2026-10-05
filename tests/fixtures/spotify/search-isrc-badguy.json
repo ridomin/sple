@@ -1,0 +1,787 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.spotify.com/v1/search?q=isrc:USUM71900764&type=track&limit=10"
+  },
+  "status": 200,
+  "headers": {
+    "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000, h3=\":443\"; ma=2592000",
+    "cache-control": "public, max-age=0",
+    "content-encoding": "zstd",
+    "content-length": "1779",
+    "content-type": "application/json; charset=utf-8",
+    "date": "Fri, 02 Oct 2026 09:35:04 GMT",
+    "etag": "\"MC-ImEyNWIxMWVmNGNmZDc1Nzk5NzY0YmRjNmVmNDU3YWUzIg==\"",
+    "mc-cache-policy": "public",
+    "mc-cache-ttl": "7200",
+    "mc-etag": "\"a25b11ef4cfd75799764bdc6ef457ae3\"",
+    "server": "envoy",
+    "server-timing": "edge;dur=288",
+    "strict-transport-security": "max-age=31536000",
+    "via": "HTTP/2 edgeproxy, 1.1 google",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow"
+  },
+  "body": {
+    "tracks": {
+      "href": "https://api.spotify.com/v1/search?offset=0&limit=10&query=isrc%3AUSUM71900764&type=track&locale=*",
+      "limit": 10,
+      "next": null,
+      "offset": 0,
+      "previous": null,
+      "total": 0,
+      "items": [
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/5Rga1oZ0OIXnTaJ5CZCqIV"
+            },
+            "href": "https://api.spotify.com/v1/albums/5Rga1oZ0OIXnTaJ5CZCqIV",
+            "id": "5Rga1oZ0OIXnTaJ5CZCqIV",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Game Music",
+            "release_date": "2021-08-13",
+            "release_date_precision": "day",
+            "total_tracks": 35,
+            "type": "album",
+            "uri": "spotify:album:5Rga1oZ0OIXnTaJ5CZCqIV"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/1hewNsVmijBqjKvFRQfk4m"
+          },
+          "href": "https://api.spotify.com/v1/tracks/1hewNsVmijBqjKvFRQfk4m",
+          "id": "1hewNsVmijBqjKvFRQfk4m",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 28,
+          "type": "track",
+          "uri": "spotify:track:1hewNsVmijBqjKvFRQfk4m"
+        },
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+                },
+                "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+                "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+                "name": "Billie Eilish",
+                "type": "artist",
+                "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/0S0KGZnfBGSIssfF54WSJh"
+            },
+            "href": "https://api.spotify.com/v1/albums/0S0KGZnfBGSIssfF54WSJh",
+            "id": "0S0KGZnfBGSIssfF54WSJh",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?",
+            "release_date": "2019-03-29",
+            "release_date_precision": "day",
+            "total_tracks": 14,
+            "type": "album",
+            "uri": "spotify:album:0S0KGZnfBGSIssfF54WSJh"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/2Fxmhks0bxGSBdJ92vM42m"
+          },
+          "href": "https://api.spotify.com/v1/tracks/2Fxmhks0bxGSBdJ92vM42m",
+          "id": "2Fxmhks0bxGSBdJ92vM42m",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 2,
+          "type": "track",
+          "uri": "spotify:track:2Fxmhks0bxGSBdJ92vM42m"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/4sGruYiNikYzRI2Jq4EzE6"
+            },
+            "href": "https://api.spotify.com/v1/albums/4sGruYiNikYzRI2Jq4EzE6",
+            "id": "4sGruYiNikYzRI2Jq4EzE6",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Model Walk Songs",
+            "release_date": "2021-08-20",
+            "release_date_precision": "day",
+            "total_tracks": 31,
+            "type": "album",
+            "uri": "spotify:album:4sGruYiNikYzRI2Jq4EzE6"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/50bW4weYuDjRmuvXKoQjKQ"
+          },
+          "href": "https://api.spotify.com/v1/tracks/50bW4weYuDjRmuvXKoQjKQ",
+          "id": "50bW4weYuDjRmuvXKoQjKQ",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 3,
+          "type": "track",
+          "uri": "spotify:track:50bW4weYuDjRmuvXKoQjKQ"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/5iReWWwhkiJE587XwFu6gu"
+            },
+            "href": "https://api.spotify.com/v1/albums/5iReWWwhkiJE587XwFu6gu",
+            "id": "5iReWWwhkiJE587XwFu6gu",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Gaming Chill Music",
+            "release_date": "2021-08-18",
+            "release_date_precision": "day",
+            "total_tracks": 27,
+            "type": "album",
+            "uri": "spotify:album:5iReWWwhkiJE587XwFu6gu"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/582fDywJU07XmoqzziYwHp"
+          },
+          "href": "https://api.spotify.com/v1/tracks/582fDywJU07XmoqzziYwHp",
+          "id": "582fDywJU07XmoqzziYwHp",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 23,
+          "type": "track",
+          "uri": "spotify:track:582fDywJU07XmoqzziYwHp"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/2QwmYLJHs7j5PJPWYpbV9k"
+            },
+            "href": "https://api.spotify.com/v1/albums/2QwmYLJHs7j5PJPWYpbV9k",
+            "id": "2QwmYLJHs7j5PJPWYpbV9k",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "All The Hits!",
+            "release_date": "2021-07-23",
+            "release_date_precision": "day",
+            "total_tracks": 28,
+            "type": "album",
+            "uri": "spotify:album:2QwmYLJHs7j5PJPWYpbV9k"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/2CSz2KFoXOXkQjZ9gAiHCV"
+          },
+          "href": "https://api.spotify.com/v1/tracks/2CSz2KFoXOXkQjZ9gAiHCV",
+          "id": "2CSz2KFoXOXkQjZ9gAiHCV",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 15,
+          "type": "track",
+          "uri": "spotify:track:2CSz2KFoXOXkQjZ9gAiHCV"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/30cPllXpkARBH6pN3ebmiJ"
+            },
+            "href": "https://api.spotify.com/v1/albums/30cPllXpkARBH6pN3ebmiJ",
+            "id": "30cPllXpkARBH6pN3ebmiJ",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "End of School Kids songs",
+            "release_date": "2023-05-22",
+            "release_date_precision": "day",
+            "total_tracks": 49,
+            "type": "album",
+            "uri": "spotify:album:30cPllXpkARBH6pN3ebmiJ"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/2Cp3p7XpvsdCqYuQbmvaIT"
+          },
+          "href": "https://api.spotify.com/v1/tracks/2Cp3p7XpvsdCqYuQbmvaIT",
+          "id": "2Cp3p7XpvsdCqYuQbmvaIT",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 12,
+          "type": "track",
+          "uri": "spotify:track:2Cp3p7XpvsdCqYuQbmvaIT"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/3vbarGTVJSFOyZSWyI6sag"
+            },
+            "href": "https://api.spotify.com/v1/albums/3vbarGTVJSFOyZSWyI6sag",
+            "id": "3vbarGTVJSFOyZSWyI6sag",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Gaming Bangers",
+            "release_date": "2021-10-18",
+            "release_date_precision": "day",
+            "total_tracks": 32,
+            "type": "album",
+            "uri": "spotify:album:3vbarGTVJSFOyZSWyI6sag"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/3uTrRIyCfqCWe9L3X9NCBR"
+          },
+          "href": "https://api.spotify.com/v1/tracks/3uTrRIyCfqCWe9L3X9NCBR",
+          "id": "3uTrRIyCfqCWe9L3X9NCBR",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 1,
+          "type": "track",
+          "uri": "spotify:track:3uTrRIyCfqCWe9L3X9NCBR"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/1KSjTZ8dnH8bV1xeIt89Wh"
+            },
+            "href": "https://api.spotify.com/v1/albums/1KSjTZ8dnH8bV1xeIt89Wh",
+            "id": "1KSjTZ8dnH8bV1xeIt89Wh",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "(10's) Tens Collected Volume 2",
+            "release_date": "2022-11-24",
+            "release_date_precision": "day",
+            "total_tracks": 19,
+            "type": "album",
+            "uri": "spotify:album:1KSjTZ8dnH8bV1xeIt89Wh"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/5BhWJeD1bJGpnUYoejrN4J"
+          },
+          "href": "https://api.spotify.com/v1/tracks/5BhWJeD1bJGpnUYoejrN4J",
+          "id": "5BhWJeD1bJGpnUYoejrN4J",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 1,
+          "type": "track",
+          "uri": "spotify:track:5BhWJeD1bJGpnUYoejrN4J"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/6ARD1iMmH8IGCp4WLtrJJk"
+            },
+            "href": "https://api.spotify.com/v1/albums/6ARD1iMmH8IGCp4WLtrJJk",
+            "id": "6ARD1iMmH8IGCp4WLtrJJk",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Tween Party",
+            "release_date": "2021-07-30",
+            "release_date_precision": "day",
+            "total_tracks": 30,
+            "type": "album",
+            "uri": "spotify:album:6ARD1iMmH8IGCp4WLtrJJk"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/70dymnpjRWdTlvErY8q9S8"
+          },
+          "href": "https://api.spotify.com/v1/tracks/70dymnpjRWdTlvErY8q9S8",
+          "id": "70dymnpjRWdTlvErY8q9S8",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 9,
+          "type": "track",
+          "uri": "spotify:track:70dymnpjRWdTlvErY8q9S8"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                },
+                "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                "id": "0LyfQWJT6nXafLPZqxe9Of",
+                "name": "Various Artists",
+                "type": "artist",
+                "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/4HWeV5pAGWXP1EGJBdQvK0"
+            },
+            "href": "https://api.spotify.com/v1/albums/4HWeV5pAGWXP1EGJBdQvK0",
+            "id": "4HWeV5pAGWXP1EGJBdQvK0",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Gold Standard",
+            "release_date": "2021-07-20",
+            "release_date_precision": "day",
+            "total_tracks": 22,
+            "type": "album",
+            "uri": "spotify:album:4HWeV5pAGWXP1EGJBdQvK0"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/6qqNVTkY8uBg9cP3Jd7DAH"
+              },
+              "href": "https://api.spotify.com/v1/artists/6qqNVTkY8uBg9cP3Jd7DAH",
+              "id": "6qqNVTkY8uBg9cP3Jd7DAH",
+              "name": "Billie Eilish",
+              "type": "artist",
+              "uri": "spotify:artist:6qqNVTkY8uBg9cP3Jd7DAH"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 194087,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUM71900764"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/6oZBtRZGURZPrZ9mT8EdUk"
+          },
+          "href": "https://api.spotify.com/v1/tracks/6oZBtRZGURZPrZ9mT8EdUk",
+          "id": "6oZBtRZGURZPrZ9mT8EdUk",
+          "is_local": false,
+          "is_playable": true,
+          "name": "bad guy",
+          "track_number": 19,
+          "type": "track",
+          "uri": "spotify:track:6oZBtRZGURZPrZ9mT8EdUk"
+        }
+      ]
+    }
+  }
+}

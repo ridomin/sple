@@ -1,0 +1,787 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.spotify.com/v1/search?q=isrc:USUG11904206&type=track&limit=10"
+  },
+  "status": 200,
+  "headers": {
+    "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000, h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+    "cache-control": "public, max-age=0",
+    "content-encoding": "zstd",
+    "content-length": "1570",
+    "content-type": "application/json; charset=utf-8",
+    "date": "Fri, 02 Oct 2026 09:35:01 GMT",
+    "etag": "\"MC-IjNhMWYyYzVmMTY4OGE2ZWFlMTQwNDg3NzBlYzQzMWRlIg==\"",
+    "mc-cache-policy": "public",
+    "mc-cache-ttl": "7200",
+    "mc-etag": "\"3a1f2c5f1688a6eae14048770ec431de\"",
+    "server": "envoy",
+    "server-timing": "edge;dur=324",
+    "strict-transport-security": "max-age=31536000",
+    "via": "HTTP/2 edgeproxy, 1.1 google",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow"
+  },
+  "body": {
+    "tracks": {
+      "href": "https://api.spotify.com/v1/search?offset=0&limit=10&query=isrc%3AUSUG11904206&type=track&locale=*",
+      "limit": 10,
+      "next": "https://api.spotify.com/v1/search?offset=10&limit=10&query=isrc%3AUSUG11904206&type=track&locale=*",
+      "offset": 0,
+      "previous": null,
+      "total": 11,
+      "items": [
+        {
+          "album": {
+            "album_type": "single",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/3sL9Myf7JF1k9TbrXE46ou"
+            },
+            "href": "https://api.spotify.com/v1/albums/3sL9Myf7JF1k9TbrXE46ou",
+            "id": "3sL9Myf7JF1k9TbrXE46ou",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "Blinding Lights",
+            "release_date": "2020-09-11",
+            "release_date_precision": "day",
+            "total_tracks": 4,
+            "type": "album",
+            "uri": "spotify:album:3sL9Myf7JF1k9TbrXE46ou"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200045,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/6qYkmqFsXbj8CQjAdbYz07"
+          },
+          "href": "https://api.spotify.com/v1/tracks/6qYkmqFsXbj8CQjAdbYz07",
+          "id": "6qYkmqFsXbj8CQjAdbYz07",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 1,
+          "type": "track",
+          "uri": "spotify:track:6qYkmqFsXbj8CQjAdbYz07"
+        },
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj"
+            },
+            "href": "https://api.spotify.com/v1/albums/4yP0hdKOZPNshxUOjY0cZj",
+            "id": "4yP0hdKOZPNshxUOjY0cZj",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "After Hours",
+            "release_date": "2020-03-20",
+            "release_date_precision": "day",
+            "total_tracks": 14,
+            "type": "album",
+            "uri": "spotify:album:4yP0hdKOZPNshxUOjY0cZj"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200040,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b"
+          },
+          "href": "https://api.spotify.com/v1/tracks/0VjIjW4GlUZAMYd2vXMi3b",
+          "id": "0VjIjW4GlUZAMYd2vXMi3b",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 9,
+          "type": "track",
+          "uri": "spotify:track:0VjIjW4GlUZAMYd2vXMi3b"
+        },
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/6YlDIxqEjvY63ffH6AwCjd"
+            },
+            "href": "https://api.spotify.com/v1/albums/6YlDIxqEjvY63ffH6AwCjd",
+            "id": "6YlDIxqEjvY63ffH6AwCjd",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "After Hours (Deluxe)",
+            "release_date": "2020-04-03",
+            "release_date_precision": "day",
+            "total_tracks": 17,
+            "type": "album",
+            "uri": "spotify:album:6YlDIxqEjvY63ffH6AwCjd"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200045,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/5Sg09MvHqNWPWsYeuY2toY"
+          },
+          "href": "https://api.spotify.com/v1/tracks/5Sg09MvHqNWPWsYeuY2toY",
+          "id": "5Sg09MvHqNWPWsYeuY2toY",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 9,
+          "type": "track",
+          "uri": "spotify:track:5Sg09MvHqNWPWsYeuY2toY"
+        },
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/742eAldb4AJKLoPgJhGRE7"
+            },
+            "href": "https://api.spotify.com/v1/albums/742eAldb4AJKLoPgJhGRE7",
+            "id": "742eAldb4AJKLoPgJhGRE7",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "After Hours (Deluxe)",
+            "release_date": "2020-03-20",
+            "release_date_precision": "day",
+            "total_tracks": 18,
+            "type": "album",
+            "uri": "spotify:album:742eAldb4AJKLoPgJhGRE7"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200045,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/4eQO9RHTjYT1O9DTuZLj9v"
+          },
+          "href": "https://api.spotify.com/v1/tracks/4eQO9RHTjYT1O9DTuZLj9v",
+          "id": "4eQO9RHTjYT1O9DTuZLj9v",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 9,
+          "type": "track",
+          "uri": "spotify:track:4eQO9RHTjYT1O9DTuZLj9v"
+        },
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/03NCvBIGqzLPhLoi4pDb3L"
+            },
+            "href": "https://api.spotify.com/v1/albums/03NCvBIGqzLPhLoi4pDb3L",
+            "id": "03NCvBIGqzLPhLoi4pDb3L",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "After Hours",
+            "release_date": "2020-03-20",
+            "release_date_precision": "day",
+            "total_tracks": 14,
+            "type": "album",
+            "uri": "spotify:album:03NCvBIGqzLPhLoi4pDb3L"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200040,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/0kPmcPPkjoyfLhUwHLWrk0"
+          },
+          "href": "https://api.spotify.com/v1/tracks/0kPmcPPkjoyfLhUwHLWrk0",
+          "id": "0kPmcPPkjoyfLhUwHLWrk0",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 9,
+          "type": "track",
+          "uri": "spotify:track:0kPmcPPkjoyfLhUwHLWrk0"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/5L5evi5tJPh8WaEFAQp7Tp"
+            },
+            "href": "https://api.spotify.com/v1/albums/5L5evi5tJPh8WaEFAQp7Tp",
+            "id": "5L5evi5tJPh8WaEFAQp7Tp",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "The Highlights",
+            "release_date": "2021-02-05",
+            "release_date_precision": "day",
+            "total_tracks": 18,
+            "type": "album",
+            "uri": "spotify:album:5L5evi5tJPh8WaEFAQp7Tp"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200045,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/0djfvA3c8AxxlQolu6zn6K"
+          },
+          "href": "https://api.spotify.com/v1/tracks/0djfvA3c8AxxlQolu6zn6K",
+          "id": "0djfvA3c8AxxlQolu6zn6K",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 2,
+          "type": "track",
+          "uri": "spotify:track:0djfvA3c8AxxlQolu6zn6K"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/18sR8zHx4zsVJUI4bHWuPC"
+            },
+            "href": "https://api.spotify.com/v1/albums/18sR8zHx4zsVJUI4bHWuPC",
+            "id": "18sR8zHx4zsVJUI4bHWuPC",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "The Highlights (Deluxe)",
+            "release_date": "2024-02-09",
+            "release_date_precision": "day",
+            "total_tracks": 36,
+            "type": "album",
+            "uri": "spotify:album:18sR8zHx4zsVJUI4bHWuPC"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200045,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/04948IGlqY1vSh7AHbueiQ"
+          },
+          "href": "https://api.spotify.com/v1/tracks/04948IGlqY1vSh7AHbueiQ",
+          "id": "04948IGlqY1vSh7AHbueiQ",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 4,
+          "type": "track",
+          "uri": "spotify:track:04948IGlqY1vSh7AHbueiQ"
+        },
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/5OrhhWHH015Al0f85fzFIC"
+            },
+            "href": "https://api.spotify.com/v1/albums/5OrhhWHH015Al0f85fzFIC",
+            "id": "5OrhhWHH015Al0f85fzFIC",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "After Hours (Deluxe)",
+            "release_date": "2020-04-03",
+            "release_date_precision": "day",
+            "total_tracks": 17,
+            "type": "album",
+            "uri": "spotify:album:5OrhhWHH015Al0f85fzFIC"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200045,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/00uqj8HXl0hWr3tnxC0NZ5"
+          },
+          "href": "https://api.spotify.com/v1/tracks/00uqj8HXl0hWr3tnxC0NZ5",
+          "id": "00uqj8HXl0hWr3tnxC0NZ5",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 9,
+          "type": "track",
+          "uri": "spotify:track:00uqj8HXl0hWr3tnxC0NZ5"
+        },
+        {
+          "album": {
+            "album_type": "album",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/4ZyeHIgdujClXSjC2cSqSb"
+            },
+            "href": "https://api.spotify.com/v1/albums/4ZyeHIgdujClXSjC2cSqSb",
+            "id": "4ZyeHIgdujClXSjC2cSqSb",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "After Hours (Deluxe)",
+            "release_date": "2020-03-20",
+            "release_date_precision": "day",
+            "total_tracks": 18,
+            "type": "album",
+            "uri": "spotify:album:4ZyeHIgdujClXSjC2cSqSb"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200045,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/3iRwigDWGH0z3R3wFmYmBW"
+          },
+          "href": "https://api.spotify.com/v1/tracks/3iRwigDWGH0z3R3wFmYmBW",
+          "id": "3iRwigDWGH0z3R3wFmYmBW",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 9,
+          "type": "track",
+          "uri": "spotify:track:3iRwigDWGH0z3R3wFmYmBW"
+        },
+        {
+          "album": {
+            "album_type": "compilation",
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+                },
+                "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+                "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+                "name": "The Weeknd",
+                "type": "artist",
+                "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+              }
+            ],
+            "external_urls": {
+              "spotify": "https://open.spotify.com/album/7pEjIA5ibscPhsvfwX1ZPT"
+            },
+            "href": "https://api.spotify.com/v1/albums/7pEjIA5ibscPhsvfwX1ZPT",
+            "id": "7pEjIA5ibscPhsvfwX1ZPT",
+            "images": [
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              },
+              {
+                "url": "https://example.com/image.jpg",
+                "height": null,
+                "width": null
+              }
+            ],
+            "is_playable": true,
+            "name": "The Highlights",
+            "release_date": "2021-02-05",
+            "release_date_precision": "day",
+            "total_tracks": 18,
+            "type": "album",
+            "uri": "spotify:album:7pEjIA5ibscPhsvfwX1ZPT"
+          },
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1Xyo4u8uXC1ZmMpatF05PJ"
+              },
+              "href": "https://api.spotify.com/v1/artists/1Xyo4u8uXC1ZmMpatF05PJ",
+              "id": "1Xyo4u8uXC1ZmMpatF05PJ",
+              "name": "The Weeknd",
+              "type": "artist",
+              "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"
+            }
+          ],
+          "disc_number": 1,
+          "duration_ms": 200045,
+          "explicit": false,
+          "external_ids": {
+            "isrc": "USUG11904206"
+          },
+          "external_urls": {
+            "spotify": "https://open.spotify.com/track/1osaeyoush18TPCnoCf0ZK"
+          },
+          "href": "https://api.spotify.com/v1/tracks/1osaeyoush18TPCnoCf0ZK",
+          "id": "1osaeyoush18TPCnoCf0ZK",
+          "is_local": false,
+          "is_playable": true,
+          "name": "Blinding Lights",
+          "track_number": 2,
+          "type": "track",
+          "uri": "spotify:track:1osaeyoush18TPCnoCf0ZK"
+        }
+      ]
+    }
+  }
+}

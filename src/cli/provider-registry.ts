@@ -5,6 +5,7 @@ import { FakeProvider } from '../providers/fake/index.js'
 import { createSpotifyProvider } from '../providers/spotify/index.js'
 import { createYouTubeMusicProvider } from '../providers/youtube-music/index.js'
 import type { Config } from './config.js'
+import type { HttpLogEntry } from '../core/http/client.js'
 
 export type ProviderFactory = (config: Config) => Provider
 
@@ -42,11 +43,18 @@ function requireClientId(value: string | undefined, envVar: string, name: string
   return value
 }
 
-export function createDefaultRegistry(): ProviderRegistry {
+export interface DefaultRegistryOptions {
+  /** HTTP attempt sink for `--debug` (ADR 0007 §6). */
+  onHttp?: (entry: HttpLogEntry) => void
+}
+
+export function createDefaultRegistry(options: DefaultRegistryOptions = {}): ProviderRegistry {
   return new ProviderRegistry()
     .register('spotify', (config) =>
       createSpotifyProvider(
-        requireClientId(config.spotifyClientId, 'SPLE_SPOTIFY_CLIENT_ID', 'Spotify')
+        requireClientId(config.spotifyClientId, 'SPLE_SPOTIFY_CLIENT_ID', 'Spotify'),
+        undefined,
+        { onHttp: options.onHttp }
       )
     )
     .register('youtube-music', (config) =>

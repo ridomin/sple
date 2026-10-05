@@ -56,7 +56,7 @@ Priority: **M** = must have (MVP), **S** = should have (MVP if time allows), **L
 | ID | P | Requirement |
 |---|---|---|
 | FR-PL-1 | M | `sple playlist list [--owned \| --followed] [--filter <substring\|regex>]` lists the current user's playlists: name, ID, track count, owner, an `owned` column, and public/collaborative flags. `--filter` matches by playlist name. |
-| FR-PL-2 | M | `sple playlist show <playlist>` lists the tracks in a playlist. `<playlist>` can be an ID, a URI, a URL, or a name. If the name matches multiple playlists, the command fails with exit 2 and lists the ambiguous matches. On providers where `playlistItemsAccess` is `owned-only` (Spotify), a playlist the user doesn't own fails early (exit 1) with a message explaining the restriction and the workaround: copy its tracks into a playlist you own in the provider's app, then use that. |
+| FR-PL-2 | M | `sple playlist show <playlist>` lists the tracks in a playlist. `<playlist>` can be an ID, a URI, a URL, or a name. If the name matches multiple playlists, the command fails with exit 2 and lists the ambiguous matches. On Spotify (`playlistItemsAccess` is `owned-or-collaborator`), a playlist whose tracks are not readable (owned by someone else and not collaborative; detected by probing `/items`, 403/404) fails early (exit 1) with a message explaining the restriction and the workaround: copy its tracks into a playlist you own in the provider's app, then use that. |
 | FR-PL-3 | M | `sple playlist create <name> [--description] [--public\|--private] [--collaborative]` |
 | FR-PL-4 | M | `sple playlist remove <playlist>` removes a playlist from the user's library. `<playlist>` can be an ID, a URI, a URL, or a name; name matching follows FR-PL-2 (exit 2 on ambiguity). On Spotify this is an *unfollow*, because the API cannot delete playlists; Amazon Music and YouTube truly delete. The CLI and docs must say what `remove` does on each provider (`canDeletePlaylist`). |
 | FR-PL-5 | S | `sple playlist edit <playlist>` changes the name, description, or visibility. `<playlist>` can be an ID, a URI, a URL, or a name; name matching follows FR-PL-2 (exit 2 on ambiguity). |
@@ -100,6 +100,8 @@ Priority: **M** = must have (MVP), **S** = should have (MVP if time allows), **L
 
 ## 6. CLI behavior (CLI)
 
+Command grammar, output modes, `--json` shapes, error output, stdin input, partial-failure exit codes, logging and progress are specified in [ADR-0007](adr/0007-cli-conventions.md).
+
 | ID | Requirement |
 |---|---|
 | CLI-1 | Consistent `sple <noun> <verb>` command structure, `--help` on every command, and `--version`. |
@@ -129,9 +131,11 @@ Priority: **M** = must have (MVP), **S** = should have (MVP if time allows), **L
 
 - **Spotify** (checked 2026-10-01 against the [February 2026 migration guide](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide) and [changelog](https://developer.spotify.com/documentation/web-api/references/changes/february-2026))
   - **Development Mode (since 2026-02-11 for new apps, 2026-03-09 for all):** the app owner needs an active Premium subscription; 1 Client ID per developer; 5 users per app. Extended Quota is restricted to organisations. This is why users bring their own Client ID (FR-AUTH-2) and why Premium is a prerequisite (§2).
-  - **Owned playlists only:** `GET /playlists/{id}/items` returns tracks only for the user's own playlists; other playlists (followed, other users', editorial) return metadata only. Handled by FR-PL-1/2 and FR-EXP-1/5. Whether collaborator access counts is unverified (spike S2).
-  - **No ISRC:** tracks and albums no longer include `external_ids`. Whether the `isrc:` search filter still works is unverified (spike S1).
-  - **Search:** `limit` is at most 10 per page (default 5).
+  - **Owned and collaborative playlists only:** `GET /playlists/{id}/items` returns tracks only for the user's own and collaborative playlists; other playlists (followed, other users', editorial) return metadata only or an error. Handled by FR-PL-1/2 and FR-EXP-1/5. Spike S2 (2026-10-02) showed that collaborative playlists the user does not own are also readable (200 with items), while followed non-collaborative playlists return 403 on `/items` and editorial playlists 404. Detection: `owner.id !== me.id` plus a probe of `/items` (do not rely on the `collaborative` flag). See [spike report](spikes/M1-spotify-spikes.md).
+  - **ISRC:** spike S1 (2026-10-02) showed the `isrc:` search filter works and `external_ids.isrc` is present on search results (5 of 5 test ISRCs), so `isrcSearchMode` is `'filter'`. ISRC remains an optional match field (FR-MIG-2).
+  - **Search:** `limit` is at most 10 per page (default 5), and `limit + offset <= 1000` (spike S3).
+  - **Page sizes (spike S3):** `/me/playlists` 50, `/me/tracks` 50, `/playlists/{id}/items` 100. Reading 1,000 tracks takes about 2-4 s sequentially, so NFR-5 is feasible.
+  - **Premium detection (spike S4, unverified):** the exact error for an app owner without Premium was not observed. Fallback: a 403 whose `error.message` matches `/premium/i` is treated as Premium required (FR-AUTH-2).
   - **Endpoint changes:** `/playlists/{id}/tracks` → `/playlists/{id}/items` (response field `track` → `item`, request parameter `tracks` → `items`); create playlist uses `POST /me/playlists` (`POST /users/{id}/playlists` was removed); unfollowing a playlist uses `DELETE /me/library` with the playlist URI; batch `GET /tracks`, `GET /users/{id}`, and `GET /users/{id}/playlists` were removed. `GET /me` no longer returns `email`, `country`, or `product`. `GET /me/tracks` (Liked Songs) still works.
   - Recommendations, audio features, and similar endpoints have been unavailable to new apps since late 2024.
   - Playlists cannot be deleted, only unfollowed.
@@ -218,10 +222,10 @@ Priority: **M** = must have (MVP), **S** = should have (MVP if time allows), **L
 
 | ID | Before | Question | Resolution rule |
 |---|---|---|---|
-| S1 | M1 | Does Spotify `q=isrc:<ISRC>` still return results for a Development Mode app? Sets `isrcSearchMode` (`filter` or `none`). | Contradicting result → update requirements + ADR-0003 before M1 coding. |
-| S2 | M1 | Can a Development Mode app read the tracks of a playlist where the user is a collaborator but not the owner? Refines `playlistItemsAccess`. | Contradicting result → update requirements + ADR-0003 before M1 coding. |
-| S3 | M1 | Current maximum `limit` on `GET /playlists/{id}/items` and `GET /me/tracks` (NFR-5 assumes 50). | Contradicting result → update requirements + ADR-0003 before M1 coding. |
-| S4 | M1 | What error does a Spotify login or first call produce when the app owner has no Premium? Needed for the FR-AUTH-2 message. | Contradicting result → update requirements + ADR-0003 before M1 coding. |
+| S1 | M1 | Does Spotify `q=isrc:<ISRC>` still return results for a Development Mode app? Sets `isrcSearchMode` (`filter` or `none`). | **Resolved 2026-10-02:** works; `isrcSearchMode: 'filter'`. [Report](spikes/M1-spotify-spikes.md#s1-isrc-search-filter). |
+| S2 | M1 | Can a Development Mode app read the tracks of a playlist where the user is a collaborator but not the owner? Refines `playlistItemsAccess`. | **Resolved 2026-10-02:** yes; `'owned-or-collaborator'` (ADR-0003 Amendment 1). [Report](spikes/M1-spotify-spikes.md#s2-collaborator-access-to-playlist-items). |
+| S3 | M1 | Current maximum `limit` on `GET /playlists/{id}/items` and `GET /me/tracks` (NFR-5 assumes 50). | **Resolved 2026-10-02:** 50 / 50 / 100; NFR-5 feasible. [Report](spikes/M1-spotify-spikes.md#s3-page-size-limits). |
+| S4 | M1 | What error does a Spotify login or first call produce when the app owner has no Premium? Needed for the FR-AUTH-2 message. | **Unverified 2026-10-02** (no non-Premium app); fallback: 403 with message matching `/premium/i`. [Report](spikes/M1-spotify-spikes.md#s4-premium-detection-unverified). |
 | S5–S7 | M4a | YouTube spikes from ADR-0002 §6: `LM` playlist access, Desktop-client token exchange with PKCE and without the secret, daily playlist-creation cap. | Contradicting result → update requirements + ADR-0003 before coding. |
 
 ## 11. Milestones

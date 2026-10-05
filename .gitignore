@@ -40,3 +40,8 @@ tmp/
 temp/
 *.tmp
 .claude/settings.local.json
+
+# Spotify spike harness (raw dumps contain PII; tokens are secrets)
+scripts/spikes/spotify/out/
+scripts/spikes/spotify/*.token.json
+scripts/spikes/spotify/spike-token*.json

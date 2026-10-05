@@ -106,3 +106,185 @@ test('exit code mapping', () => {
   assert.strictEqual(getExitCode(new ProviderError('x')), 1)
   assert.strictEqual(getExitCode('str'), 1)
 })
+
+test('root help includes all command summaries', async () => {
+  const r = await exec(['--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple v/)
+  assert.match(r.out, /auth\s+Authentication/)
+  assert.match(r.out, /search\s+Search/)
+  assert.match(r.out, /playlist\s+Playlist/)
+  assert.match(r.out, /export\s+Export/)
+  assert.match(r.out, /import\s+Import/)
+  assert.match(r.out, /Global Options:/)
+  assert.match(r.out, /--provider/)
+  assert.match(r.out, /--json/)
+  assert.match(r.out, /--quiet/)
+  assert.match(r.out, /--verbose/)
+  assert.match(r.out, /--debug/)
+})
+
+test('search command help text', async () => {
+  const r = await exec(['search', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple search/)
+  assert.match(r.out, /query.*Search/i)
+})
+
+test('search command requires query argument', async () => {
+  const r = await exec(['search'])
+  assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
+  assert.match(r.err, /No search query provided/)
+})
+
+test('playlist command help text', async () => {
+  const r = await exec(['playlist', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /Commands:/)
+  assert.match(r.out, /list.*List your playlists/)
+  assert.match(r.out, /show.*Show the tracks of a playlist/)
+  assert.match(r.out, /create.*Create a new playlist/)
+  assert.match(r.out, /remove.*Delete a playlist/)
+})
+
+test('playlist list help text', async () => {
+  const r = await exec(['playlist', 'list', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple playlist list/)
+})
+
+test('playlist show help text', async () => {
+  const r = await exec(['playlist', 'show', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple playlist show/)
+})
+
+test('playlist create help text', async () => {
+  const r = await exec(['playlist', 'create', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple playlist create/)
+})
+
+test('playlist remove help text', async () => {
+  const r = await exec(['playlist', 'remove', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple playlist remove/)
+})
+
+test('export command help text', async () => {
+  const r = await exec(['export', '--help'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.out, /sple export/)
+})
+
+test('unknown playlist subcommand is a usage error', async () => {
+  const r = await exec(['playlist', 'invalid-cmd'])
+  assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
+  assert.match(r.err, /Unknown playlist subcommand/)
+  assert.match(r.err, /sple playlist --help/)
+})
+
+test('legacy commands exit with helpful message', async () => {
+  for (const cmd of ['import', 'migrate']) {
+    const r = await exec([cmd])
+    assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
+    assert.match(r.err, /later release/)
+  }
+})
+
+test('--provider flag works end-to-end for commands', async () => {
+  const r = await exec(['--provider', 'fake', 'search', 'test'])
+  assert.strictEqual(r.code, 0)
+  // The fake catalog has no match for "test": the empty-result notice names the provider.
+  assert.match(r.err, /Fake Provider/)
+})
+
+test('--provider fake playlist list works end-to-end', async () => {
+  const r = await exec(['--provider', 'fake', 'playlist', 'list'])
+  assert.strictEqual(r.code, 0)
+  // The default fake provider has an empty library.
+  assert.strictEqual(r.out, '')
+  assert.match(r.err, /No playlists\./)
+})
+
+// ---- ADR 0007 §1: global flags before or after positionals (M1-14 regression) ----
+
+test('extractGlobalFlags: globals are taken from anywhere before --', async () => {
+  const { extractGlobalFlags } = await import('../../src/cli/cli.js')
+  const r = extractGlobalFlags(['playlist', 'remove', 'x', '--provider', 'fake', '--yes', '--json', '--', '--quiet'])
+  assert.deepStrictEqual(r.values, { provider: 'fake', yes: true, json: true })
+  assert.deepStrictEqual(r.rest, ['playlist', 'remove', 'x', '--', '--quiet'])
+
+  const eq = extractGlobalFlags(['search', 'q', '--provider=fake', '--debug'])
+  assert.deepStrictEqual(eq.values, { provider: 'fake', debug: true })
+  assert.deepStrictEqual(eq.rest, ['search', 'q'])
+
+  // --help before the command is the root help; after it, the command's own.
+  assert.deepStrictEqual(extractGlobalFlags(['--help']).values, { help: true })
+  assert.deepStrictEqual(extractGlobalFlags(['search', '--help']).rest, ['search', '--help'])
+
+  assert.throws(() => extractGlobalFlags(['search', 'q', '--provider']), UsageError)
+  assert.throws(() => extractGlobalFlags(['search', 'q', '--provider', '--json']), UsageError)
+})
+
+test('--provider after the command selects that provider', async () => {
+  const r = await exec(['search', 'test', '--provider', 'fake'])
+  assert.strictEqual(r.code, 0)
+  assert.match(r.err, /Fake Provider/)
+
+  const list = await exec(['playlist', 'list', '--provider', 'fake', '--quiet'])
+  assert.strictEqual(list.code, 0)
+  assert.strictEqual(list.out, '')
+})
+
+test('-v after -- is a positional, not --version', async () => {
+  const r = await exec(['--provider', 'fake', 'search', '--', '-v'])
+  assert.strictEqual(r.code, 0)
+  assert.doesNotMatch(r.out, /^sple v/)
+})
+
+test('--json failure: last stderr line is a compact ErrorOutput (ADR 0007 §4)', async () => {
+  const r = await exec(['playlist', 'show', 'No such playlist', '--provider', 'fake', '--json'])
+  assert.strictEqual(r.code, EXIT_CODES.NOT_FOUND)
+  assert.strictEqual(r.out, '')
+  const lines = r.err.split('\n')
+  assert.match(lines[0], /^sple: /)
+  const last = JSON.parse(lines[lines.length - 1])
+  assert.deepStrictEqual(Object.keys(last.error).sort(), ['exitCode', 'message', 'type'])
+  assert.strictEqual(last.error.type, 'NotFoundError')
+  assert.strictEqual(last.error.exitCode, EXIT_CODES.NOT_FOUND)
+})
+
+test('--debug after the command prints one redacted sple:http line per request (Spotify, mocked)', async () => {
+  if (process.platform !== 'linux') return // getConfigDir honours XDG_CONFIG_HOME on Linux only
+  const { saveTokens } = await import('../../src/core/config/token-store.js')
+  const xdg = mkdtempSync(join(tmpdir(), 'sple-cli-debug-'))
+  const prevXdg = process.env.XDG_CONFIG_HOME
+  const realFetch = globalThis.fetch
+  process.env.XDG_CONFIG_HOME = xdg
+  try {
+    saveTokens(
+      'spotify',
+      {
+        accessToken: 'secret-access-token',
+        refreshToken: 'secret-refresh',
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        scopes: ['playlist-read-private', 'playlist-read-collaborative'],
+        userId: 'me',
+        grantedAt: '2026-10-01T00:00:00.000Z',
+      },
+      join(xdg, 'sple')
+    )
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 })) as typeof fetch
+    const r = await exec(['playlist', 'list', '--debug', '--quiet'], { SPLE_SPOTIFY_CLIENT_ID: 'cid' })
+    assert.strictEqual(r.code, 0, r.err)
+    assert.match(r.err, /^sple:http GET \/v1\/me\/playlists\?limit=50&offset=0 200 \d+ms$/m)
+    assert.ok(!r.err.includes('secret-access-token'))
+  } finally {
+    globalThis.fetch = realFetch
+    if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME
+    else process.env.XDG_CONFIG_HOME = prevXdg
+    rmSync(xdg, { recursive: true, force: true })
+  }
+})

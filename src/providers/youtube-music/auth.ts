@@ -59,7 +59,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
 
     return {
       loggedIn: true,
-      user: { id: token.userId, displayName: token.userId },
+      user: { id: token.userId, displayName: token.displayName ?? token.userId },
       scopes: token.scopes,
       expiresAt: token.expiresAt,
     }

@@ -1,0 +1,352 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.spotify.com/v1/playlists/5AJC5nedvehBP0eVDy6zXb"
+  },
+  "status": 200,
+  "headers": {
+    "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000, h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+    "cache-control": "public, max-age=0",
+    "content-encoding": "zstd",
+    "content-length": "1420",
+    "content-type": "application/json; charset=utf-8",
+    "date": "Fri, 02 Oct 2026 10:41:34 GMT",
+    "etag": "\"MC-Ijg4ZDBkYjA0MTAyYTgwMjUyNmMxMGE3YjNjYzQ2MDExIg==\"",
+    "mc-cache-policy": "public",
+    "mc-etag": "\"88d0db04102a802526c10a7b3cc46011\"",
+    "server": "envoy",
+    "server-timing": "edge;dur=93",
+    "strict-transport-security": "max-age=31536000",
+    "via": "HTTP/2 edgeproxy, 1.1 google",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow"
+  },
+  "body": {
+    "collaborative": false,
+    "description": "",
+    "external_urls": {
+      "spotify": "https://open.spotify.com/playlist/5AJC5nedvehBP0eVDy6zXb"
+    },
+    "followers": {
+      "href": null,
+      "total": 1
+    },
+    "href": "https://api.spotify.com/v1/playlists/5AJC5nedvehBP0eVDy6zXb?locale=*",
+    "id": "5AJC5nedvehBP0eVDy6zXb",
+    "images": [
+      {
+        "url": "https://example.com/image.jpg",
+        "height": null,
+        "width": null
+      }
+    ],
+    "name": "MySamplePL",
+    "owner": {
+      "display_name": "Test User",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/user/testuser0000000000000"
+      },
+      "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+      "id": "testuser0000000000000",
+      "type": "user",
+      "uri": "spotify:user:testuser0000000000000"
+    },
+    "primary_color": null,
+    "public": false,
+    "snapshot_id": "AAAABYO57a81dRJTaXrR7xCU0MF47q+S",
+    "items": {
+      "href": "https://api.spotify.com/v1/playlists/5AJC5nedvehBP0eVDy6zXb/items?offset=0&limit=100&locale=*",
+      "items": [
+        {
+          "added_at": "2026-10-02T09:40:17Z",
+          "added_by": {
+            "external_urls": {
+              "spotify": "https://open.spotify.com/user/testuser0000000000000"
+            },
+            "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+            "id": "testuser0000000000000",
+            "type": "user",
+            "uri": "spotify:user:testuser0000000000000"
+          },
+          "is_local": false,
+          "primary_color": null,
+          "item": {
+            "is_playable": true,
+            "explicit": false,
+            "type": "track",
+            "episode": false,
+            "track": true,
+            "album": {
+              "is_playable": true,
+              "type": "album",
+              "album_type": "album",
+              "href": "https://api.spotify.com/v1/albums/5oE1VEtOYkkJJiRkZ7KbgB",
+              "id": "5oE1VEtOYkkJJiRkZ7KbgB",
+              "images": [
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                }
+              ],
+              "name": "Mujeres",
+              "release_date": "2006-05-29",
+              "release_date_precision": "day",
+              "uri": "spotify:album:5oE1VEtOYkkJJiRkZ7KbgB",
+              "artists": [
+                {
+                  "external_urls": {
+                    "spotify": "https://open.spotify.com/artist/5gKJbL392PiokTPUoL7N6D"
+                  },
+                  "href": "https://api.spotify.com/v1/artists/5gKJbL392PiokTPUoL7N6D",
+                  "id": "5gKJbL392PiokTPUoL7N6D",
+                  "name": "Estrella Morente",
+                  "type": "artist",
+                  "uri": "spotify:artist:5gKJbL392PiokTPUoL7N6D"
+                }
+              ],
+              "external_urls": {
+                "spotify": "https://open.spotify.com/album/5oE1VEtOYkkJJiRkZ7KbgB"
+              },
+              "total_tracks": 13
+            },
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/5gKJbL392PiokTPUoL7N6D"
+                },
+                "href": "https://api.spotify.com/v1/artists/5gKJbL392PiokTPUoL7N6D",
+                "id": "5gKJbL392PiokTPUoL7N6D",
+                "name": "Estrella Morente",
+                "type": "artist",
+                "uri": "spotify:artist:5gKJbL392PiokTPUoL7N6D"
+              }
+            ],
+            "disc_number": 1,
+            "track_number": 8,
+            "duration_ms": 217853,
+            "external_ids": {
+              "isrc": "ES5080600270"
+            },
+            "external_urls": {
+              "spotify": "https://open.spotify.com/track/1uhQ3H3TSDX9Bq9Oz6uHWV"
+            },
+            "href": "https://api.spotify.com/v1/tracks/1uhQ3H3TSDX9Bq9Oz6uHWV",
+            "id": "1uhQ3H3TSDX9Bq9Oz6uHWV",
+            "name": "Volver",
+            "uri": "spotify:track:1uhQ3H3TSDX9Bq9Oz6uHWV",
+            "is_local": false
+          },
+          "video_thumbnail": {
+            "url": null
+          }
+        },
+        {
+          "added_at": "2026-10-02T09:40:20Z",
+          "added_by": {
+            "external_urls": {
+              "spotify": "https://open.spotify.com/user/testuser0000000000000"
+            },
+            "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+            "id": "testuser0000000000000",
+            "type": "user",
+            "uri": "spotify:user:testuser0000000000000"
+          },
+          "is_local": false,
+          "primary_color": null,
+          "item": {
+            "is_playable": true,
+            "explicit": false,
+            "type": "track",
+            "episode": false,
+            "track": true,
+            "album": {
+              "is_playable": true,
+              "type": "album",
+              "album_type": "album",
+              "href": "https://api.spotify.com/v1/albums/3W7Mv4fPfeeu5NAKsqGh6X",
+              "id": "3W7Mv4fPfeeu5NAKsqGh6X",
+              "images": [
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                }
+              ],
+              "name": "Vamos que nos vamos",
+              "release_date": "2005-01-04",
+              "release_date_precision": "day",
+              "uri": "spotify:album:3W7Mv4fPfeeu5NAKsqGh6X",
+              "artists": [
+                {
+                  "external_urls": {
+                    "spotify": "https://open.spotify.com/artist/6529KpSlnP8S0kXhx7ayBb"
+                  },
+                  "href": "https://api.spotify.com/v1/artists/6529KpSlnP8S0kXhx7ayBb",
+                  "id": "6529KpSlnP8S0kXhx7ayBb",
+                  "name": "Muchachito Bombo Infierno",
+                  "type": "artist",
+                  "uri": "spotify:artist:6529KpSlnP8S0kXhx7ayBb"
+                }
+              ],
+              "external_urls": {
+                "spotify": "https://open.spotify.com/album/3W7Mv4fPfeeu5NAKsqGh6X"
+              },
+              "total_tracks": 13
+            },
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/6529KpSlnP8S0kXhx7ayBb"
+                },
+                "href": "https://api.spotify.com/v1/artists/6529KpSlnP8S0kXhx7ayBb",
+                "id": "6529KpSlnP8S0kXhx7ayBb",
+                "name": "Muchachito Bombo Infierno",
+                "type": "artist",
+                "uri": "spotify:artist:6529KpSlnP8S0kXhx7ayBb"
+              }
+            ],
+            "disc_number": 1,
+            "track_number": 3,
+            "duration_ms": 196702,
+            "external_ids": {
+              "isrc": "ES6100534003"
+            },
+            "external_urls": {
+              "spotify": "https://open.spotify.com/track/4YSwDBVqYtXSWSPvBua77p"
+            },
+            "href": "https://api.spotify.com/v1/tracks/4YSwDBVqYtXSWSPvBua77p",
+            "id": "4YSwDBVqYtXSWSPvBua77p",
+            "name": "Será mejor",
+            "uri": "spotify:track:4YSwDBVqYtXSWSPvBua77p",
+            "is_local": false
+          },
+          "video_thumbnail": {
+            "url": null
+          }
+        },
+        {
+          "added_at": "2026-10-02T09:40:26Z",
+          "added_by": {
+            "external_urls": {
+              "spotify": "https://open.spotify.com/user/testuser0000000000000"
+            },
+            "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+            "id": "testuser0000000000000",
+            "type": "user",
+            "uri": "spotify:user:testuser0000000000000"
+          },
+          "is_local": false,
+          "primary_color": null,
+          "item": {
+            "is_playable": true,
+            "explicit": false,
+            "type": "track",
+            "episode": false,
+            "track": true,
+            "album": {
+              "is_playable": true,
+              "type": "album",
+              "album_type": "album",
+              "href": "https://api.spotify.com/v1/albums/5qUlPoDmNxCSzqVx81RDLJ",
+              "id": "5qUlPoDmNxCSzqVx81RDLJ",
+              "images": [
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                }
+              ],
+              "name": "Songs In A Minor",
+              "release_date": "2001-06-05",
+              "release_date_precision": "day",
+              "uri": "spotify:album:5qUlPoDmNxCSzqVx81RDLJ",
+              "artists": [
+                {
+                  "external_urls": {
+                    "spotify": "https://open.spotify.com/artist/3DiDSECUqqY1AuBP8qtaIa"
+                  },
+                  "href": "https://api.spotify.com/v1/artists/3DiDSECUqqY1AuBP8qtaIa",
+                  "id": "3DiDSECUqqY1AuBP8qtaIa",
+                  "name": "Alicia Keys",
+                  "type": "artist",
+                  "uri": "spotify:artist:3DiDSECUqqY1AuBP8qtaIa"
+                }
+              ],
+              "external_urls": {
+                "spotify": "https://open.spotify.com/album/5qUlPoDmNxCSzqVx81RDLJ"
+              },
+              "total_tracks": 16
+            },
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/3DiDSECUqqY1AuBP8qtaIa"
+                },
+                "href": "https://api.spotify.com/v1/artists/3DiDSECUqqY1AuBP8qtaIa",
+                "id": "3DiDSECUqqY1AuBP8qtaIa",
+                "name": "Alicia Keys",
+                "type": "artist",
+                "uri": "spotify:artist:3DiDSECUqqY1AuBP8qtaIa"
+              }
+            ],
+            "disc_number": 1,
+            "track_number": 6,
+            "duration_ms": 336666,
+            "external_ids": {
+              "isrc": "USJAY0100059"
+            },
+            "external_urls": {
+              "spotify": "https://open.spotify.com/track/3G1mHhhfk7nGKzpKinIVfk"
+            },
+            "href": "https://api.spotify.com/v1/tracks/3G1mHhhfk7nGKzpKinIVfk",
+            "id": "3G1mHhhfk7nGKzpKinIVfk",
+            "name": "Rock wit U",
+            "uri": "spotify:track:3G1mHhhfk7nGKzpKinIVfk",
+            "is_local": false
+          },
+          "video_thumbnail": {
+            "url": null
+          }
+        }
+      ],
+      "limit": 100,
+      "next": null,
+      "offset": 0,
+      "previous": null,
+      "total": 3
+    },
+    "type": "playlist",
+    "uri": "spotify:playlist:5AJC5nedvehBP0eVDy6zXb"
+  }
+}

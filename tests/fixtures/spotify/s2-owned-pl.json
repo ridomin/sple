@@ -1,0 +1,560 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.spotify.com/v1/playlists/0FRr10mglUR3E0Pq8TqlxL"
+  },
+  "status": 200,
+  "headers": {
+    "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000, h3=\":443\"; ma=2592000",
+    "cache-control": "public, max-age=0",
+    "content-encoding": "zstd",
+    "content-length": "2031",
+    "content-type": "application/json; charset=utf-8",
+    "date": "Fri, 02 Oct 2026 09:43:17 GMT",
+    "etag": "\"MC-IjQxMjJlZWQzYjk2N2MyMGI5MGExNmVjZWEwMmIxOGQyIg==\"",
+    "mc-cache-policy": "public",
+    "mc-etag": "\"4122eed3b967c20b90a16ecea02b18d2\"",
+    "server": "envoy",
+    "server-timing": "edge;dur=90",
+    "strict-transport-security": "max-age=31536000",
+    "via": "HTTP/2 edgeproxy, 1.1 google",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow"
+  },
+  "body": {
+    "collaborative": false,
+    "description": "",
+    "external_urls": {
+      "spotify": "https://open.spotify.com/playlist/0FRr10mglUR3E0Pq8TqlxL"
+    },
+    "followers": {
+      "href": null,
+      "total": 0
+    },
+    "href": "https://api.spotify.com/v1/playlists/0FRr10mglUR3E0Pq8TqlxL?locale=*",
+    "id": "0FRr10mglUR3E0Pq8TqlxL",
+    "images": [
+      {
+        "url": "https://example.com/image.jpg",
+        "height": null,
+        "width": null
+      },
+      {
+        "url": "https://example.com/image.jpg",
+        "height": null,
+        "width": null
+      },
+      {
+        "url": "https://example.com/image.jpg",
+        "height": null,
+        "width": null
+      }
+    ],
+    "name": "FlamenRock",
+    "owner": {
+      "display_name": "Test User",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/user/testuser0000000000000"
+      },
+      "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+      "id": "testuser0000000000000",
+      "type": "user",
+      "uri": "spotify:user:testuser0000000000000"
+    },
+    "primary_color": null,
+    "public": true,
+    "snapshot_id": "AAAAB7LjlmHx6wu2MQRduRypjSQUqzMK",
+    "items": {
+      "href": "https://api.spotify.com/v1/playlists/0FRr10mglUR3E0Pq8TqlxL/items?offset=0&limit=100&locale=*",
+      "items": [
+        {
+          "added_at": "2026-04-15T12:28:26Z",
+          "added_by": {
+            "external_urls": {
+              "spotify": "https://open.spotify.com/user/testuser0000000000000"
+            },
+            "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+            "id": "testuser0000000000000",
+            "type": "user",
+            "uri": "spotify:user:testuser0000000000000"
+          },
+          "is_local": false,
+          "primary_color": null,
+          "item": {
+            "is_playable": true,
+            "explicit": false,
+            "type": "track",
+            "episode": false,
+            "track": true,
+            "album": {
+              "is_playable": true,
+              "type": "album",
+              "album_type": "album",
+              "href": "https://api.spotify.com/v1/albums/6OBFmLIhFDyB47qYfUfeE6",
+              "id": "6OBFmLIhFDyB47qYfUfeE6",
+              "images": [
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                }
+              ],
+              "name": "Las Leyes De La Frontera (Banda Sonora Original)",
+              "release_date": "2021-10-12",
+              "release_date_precision": "day",
+              "uri": "spotify:album:6OBFmLIhFDyB47qYfUfeE6",
+              "artists": [
+                {
+                  "external_urls": {
+                    "spotify": "https://open.spotify.com/artist/1nRVWZrJJCFAfkRWtFFPj4"
+                  },
+                  "href": "https://api.spotify.com/v1/artists/1nRVWZrJJCFAfkRWtFFPj4",
+                  "id": "1nRVWZrJJCFAfkRWtFFPj4",
+                  "name": "Derby Motoreta’s Burrito Kachimba",
+                  "type": "artist",
+                  "uri": "spotify:artist:1nRVWZrJJCFAfkRWtFFPj4"
+                }
+              ],
+              "external_urls": {
+                "spotify": "https://open.spotify.com/album/6OBFmLIhFDyB47qYfUfeE6"
+              },
+              "total_tracks": 11
+            },
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1nRVWZrJJCFAfkRWtFFPj4"
+                },
+                "href": "https://api.spotify.com/v1/artists/1nRVWZrJJCFAfkRWtFFPj4",
+                "id": "1nRVWZrJJCFAfkRWtFFPj4",
+                "name": "Derby Motoreta’s Burrito Kachimba",
+                "type": "artist",
+                "uri": "spotify:artist:1nRVWZrJJCFAfkRWtFFPj4"
+              }
+            ],
+            "disc_number": 1,
+            "track_number": 1,
+            "duration_ms": 215852,
+            "external_ids": {
+              "isrc": "ES5702101763"
+            },
+            "external_urls": {
+              "spotify": "https://open.spotify.com/track/54rmOG56q3iMXK8dSbTwoH"
+            },
+            "href": "https://api.spotify.com/v1/tracks/54rmOG56q3iMXK8dSbTwoH",
+            "id": "54rmOG56q3iMXK8dSbTwoH",
+            "name": "Las Leyes De La Frontera",
+            "uri": "spotify:track:54rmOG56q3iMXK8dSbTwoH",
+            "is_local": false
+          },
+          "video_thumbnail": {
+            "url": null
+          }
+        },
+        {
+          "added_at": "2026-04-15T12:28:39Z",
+          "added_by": {
+            "external_urls": {
+              "spotify": "https://open.spotify.com/user/testuser0000000000000"
+            },
+            "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+            "id": "testuser0000000000000",
+            "type": "user",
+            "uri": "spotify:user:testuser0000000000000"
+          },
+          "is_local": false,
+          "primary_color": null,
+          "item": {
+            "is_playable": true,
+            "explicit": false,
+            "type": "track",
+            "episode": false,
+            "track": true,
+            "album": {
+              "is_playable": true,
+              "type": "album",
+              "album_type": "compilation",
+              "href": "https://api.spotify.com/v1/albums/02uQKkRJivhjayDvupTTvB",
+              "id": "02uQKkRJivhjayDvupTTvB",
+              "images": [
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                }
+              ],
+              "name": "Spain of Sounds",
+              "release_date": "2013-10-12",
+              "release_date_precision": "day",
+              "uri": "spotify:album:02uQKkRJivhjayDvupTTvB",
+              "artists": [
+                {
+                  "external_urls": {
+                    "spotify": "https://open.spotify.com/artist/0LyfQWJT6nXafLPZqxe9Of"
+                  },
+                  "href": "https://api.spotify.com/v1/artists/0LyfQWJT6nXafLPZqxe9Of",
+                  "id": "0LyfQWJT6nXafLPZqxe9Of",
+                  "name": "Various Artists",
+                  "type": "artist",
+                  "uri": "spotify:artist:0LyfQWJT6nXafLPZqxe9Of"
+                }
+              ],
+              "external_urls": {
+                "spotify": "https://open.spotify.com/album/02uQKkRJivhjayDvupTTvB"
+              },
+              "total_tracks": 30
+            },
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/2fXq7CZ0mq4YlwB2XZ7715"
+                },
+                "href": "https://api.spotify.com/v1/artists/2fXq7CZ0mq4YlwB2XZ7715",
+                "id": "2fXq7CZ0mq4YlwB2XZ7715",
+                "name": "Elbicho",
+                "type": "artist",
+                "uri": "spotify:artist:2fXq7CZ0mq4YlwB2XZ7715"
+              }
+            ],
+            "disc_number": 1,
+            "track_number": 27,
+            "duration_ms": 285519,
+            "external_ids": {
+              "isrc": "ES5010300308"
+            },
+            "external_urls": {
+              "spotify": "https://open.spotify.com/track/5AEd0hyzGr0sFghQv3XWXE"
+            },
+            "href": "https://api.spotify.com/v1/tracks/5AEd0hyzGr0sFghQv3XWXE",
+            "id": "5AEd0hyzGr0sFghQv3XWXE",
+            "name": "De los malos",
+            "uri": "spotify:track:5AEd0hyzGr0sFghQv3XWXE",
+            "is_local": false
+          },
+          "video_thumbnail": {
+            "url": null
+          }
+        },
+        {
+          "added_at": "2026-04-15T12:28:44Z",
+          "added_by": {
+            "external_urls": {
+              "spotify": "https://open.spotify.com/user/testuser0000000000000"
+            },
+            "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+            "id": "testuser0000000000000",
+            "type": "user",
+            "uri": "spotify:user:testuser0000000000000"
+          },
+          "is_local": false,
+          "primary_color": null,
+          "item": {
+            "is_playable": true,
+            "explicit": false,
+            "type": "track",
+            "episode": false,
+            "track": true,
+            "album": {
+              "is_playable": true,
+              "type": "album",
+              "album_type": "album",
+              "href": "https://api.spotify.com/v1/albums/033NTpx1UbzZ0HXxxtvjYn",
+              "id": "033NTpx1UbzZ0HXxxtvjYn",
+              "images": [
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                }
+              ],
+              "name": "EMPAQUETADO AL VACIO",
+              "release_date": "2002-06-12",
+              "release_date_precision": "day",
+              "uri": "spotify:album:033NTpx1UbzZ0HXxxtvjYn",
+              "artists": [
+                {
+                  "external_urls": {
+                    "spotify": "https://open.spotify.com/artist/1icEuLu9tHLH1AtqeIJDcd"
+                  },
+                  "href": "https://api.spotify.com/v1/artists/1icEuLu9tHLH1AtqeIJDcd",
+                  "id": "1icEuLu9tHLH1AtqeIJDcd",
+                  "name": "MARTIRES DEL COMPAS",
+                  "type": "artist",
+                  "uri": "spotify:artist:1icEuLu9tHLH1AtqeIJDcd"
+                }
+              ],
+              "external_urls": {
+                "spotify": "https://open.spotify.com/album/033NTpx1UbzZ0HXxxtvjYn"
+              },
+              "total_tracks": 10
+            },
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1icEuLu9tHLH1AtqeIJDcd"
+                },
+                "href": "https://api.spotify.com/v1/artists/1icEuLu9tHLH1AtqeIJDcd",
+                "id": "1icEuLu9tHLH1AtqeIJDcd",
+                "name": "MARTIRES DEL COMPAS",
+                "type": "artist",
+                "uri": "spotify:artist:1icEuLu9tHLH1AtqeIJDcd"
+              }
+            ],
+            "disc_number": 1,
+            "track_number": 8,
+            "duration_ms": 196653,
+            "external_ids": {
+              "isrc": "ES5150264033"
+            },
+            "external_urls": {
+              "spotify": "https://open.spotify.com/track/3zPKMzhziL4fEBJUpk1VLt"
+            },
+            "href": "https://api.spotify.com/v1/tracks/3zPKMzhziL4fEBJUpk1VLt",
+            "id": "3zPKMzhziL4fEBJUpk1VLt",
+            "name": "Escombros",
+            "uri": "spotify:track:3zPKMzhziL4fEBJUpk1VLt",
+            "is_local": false
+          },
+          "video_thumbnail": {
+            "url": null
+          }
+        },
+        {
+          "added_at": "2026-04-16T22:24:30Z",
+          "added_by": {
+            "external_urls": {
+              "spotify": "https://open.spotify.com/user/testuser0000000000000"
+            },
+            "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+            "id": "testuser0000000000000",
+            "type": "user",
+            "uri": "spotify:user:testuser0000000000000"
+          },
+          "is_local": false,
+          "primary_color": null,
+          "item": {
+            "is_playable": true,
+            "explicit": false,
+            "type": "track",
+            "episode": false,
+            "track": true,
+            "album": {
+              "is_playable": true,
+              "type": "album",
+              "album_type": "album",
+              "href": "https://api.spotify.com/v1/albums/3ASW0wki9GC0PB5CTyOaLA",
+              "id": "3ASW0wki9GC0PB5CTyOaLA",
+              "images": [
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                }
+              ],
+              "name": "Vestidos De Domingo",
+              "release_date": "2001-06-15",
+              "release_date_precision": "day",
+              "uri": "spotify:album:3ASW0wki9GC0PB5CTyOaLA",
+              "artists": [
+                {
+                  "external_urls": {
+                    "spotify": "https://open.spotify.com/artist/1g2kmC27Pg8fcsT3O9ecje"
+                  },
+                  "href": "https://api.spotify.com/v1/artists/1g2kmC27Pg8fcsT3O9ecje",
+                  "id": "1g2kmC27Pg8fcsT3O9ecje",
+                  "name": "La Cabra Mecanica",
+                  "type": "artist",
+                  "uri": "spotify:artist:1g2kmC27Pg8fcsT3O9ecje"
+                }
+              ],
+              "external_urls": {
+                "spotify": "https://open.spotify.com/album/3ASW0wki9GC0PB5CTyOaLA"
+              },
+              "total_tracks": 10
+            },
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1g2kmC27Pg8fcsT3O9ecje"
+                },
+                "href": "https://api.spotify.com/v1/artists/1g2kmC27Pg8fcsT3O9ecje",
+                "id": "1g2kmC27Pg8fcsT3O9ecje",
+                "name": "La Cabra Mecanica",
+                "type": "artist",
+                "uri": "spotify:artist:1g2kmC27Pg8fcsT3O9ecje"
+              },
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/3xg8yTZPuoRF0uFGl1O0FS"
+                },
+                "href": "https://api.spotify.com/v1/artists/3xg8yTZPuoRF0uFGl1O0FS",
+                "id": "3xg8yTZPuoRF0uFGl1O0FS",
+                "name": "María Jiménez",
+                "type": "artist",
+                "uri": "spotify:artist:3xg8yTZPuoRF0uFGl1O0FS"
+              }
+            ],
+            "disc_number": 1,
+            "track_number": 2,
+            "duration_ms": 221373,
+            "external_ids": {
+              "isrc": "ES5010100200"
+            },
+            "external_urls": {
+              "spotify": "https://open.spotify.com/track/6htAV9HKCmoDdyyvDNX9DQ"
+            },
+            "href": "https://api.spotify.com/v1/tracks/6htAV9HKCmoDdyyvDNX9DQ",
+            "id": "6htAV9HKCmoDdyyvDNX9DQ",
+            "name": "La lista de la compra (feat. María Jiménez)",
+            "uri": "spotify:track:6htAV9HKCmoDdyyvDNX9DQ",
+            "is_local": false
+          },
+          "video_thumbnail": {
+            "url": null
+          }
+        },
+        {
+          "added_at": "2026-04-17T00:42:27Z",
+          "added_by": {
+            "external_urls": {
+              "spotify": "https://open.spotify.com/user/testuser0000000000000"
+            },
+            "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+            "id": "testuser0000000000000",
+            "type": "user",
+            "uri": "spotify:user:testuser0000000000000"
+          },
+          "is_local": false,
+          "primary_color": null,
+          "item": {
+            "is_playable": true,
+            "explicit": false,
+            "type": "track",
+            "episode": false,
+            "track": true,
+            "album": {
+              "is_playable": true,
+              "type": "album",
+              "album_type": "compilation",
+              "href": "https://api.spotify.com/v1/albums/1HrPSGnKK1RocU0hJQl9Mp",
+              "id": "1HrPSGnKK1RocU0hJQl9Mp",
+              "images": [
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                },
+                {
+                  "url": "https://example.com/image.jpg",
+                  "height": null,
+                  "width": null
+                }
+              ],
+              "name": "Lo Mejor De Los Chichos",
+              "release_date": "2013-01-01",
+              "release_date_precision": "day",
+              "uri": "spotify:album:1HrPSGnKK1RocU0hJQl9Mp",
+              "artists": [
+                {
+                  "external_urls": {
+                    "spotify": "https://open.spotify.com/artist/1xivtET7hPQUzwgnLRQfEP"
+                  },
+                  "href": "https://api.spotify.com/v1/artists/1xivtET7hPQUzwgnLRQfEP",
+                  "id": "1xivtET7hPQUzwgnLRQfEP",
+                  "name": "Los Chichos",
+                  "type": "artist",
+                  "uri": "spotify:artist:1xivtET7hPQUzwgnLRQfEP"
+                }
+              ],
+              "external_urls": {
+                "spotify": "https://open.spotify.com/album/1HrPSGnKK1RocU0hJQl9Mp"
+              },
+              "total_tracks": 14
+            },
+            "artists": [
+              {
+                "external_urls": {
+                  "spotify": "https://open.spotify.com/artist/1xivtET7hPQUzwgnLRQfEP"
+                },
+                "href": "https://api.spotify.com/v1/artists/1xivtET7hPQUzwgnLRQfEP",
+                "id": "1xivtET7hPQUzwgnLRQfEP",
+                "name": "Los Chichos",
+                "type": "artist",
+                "uri": "spotify:artist:1xivtET7hPQUzwgnLRQfEP"
+              }
+            ],
+            "disc_number": 1,
+            "track_number": 2,
+            "duration_ms": 206066,
+            "external_ids": {
+              "isrc": "ES5700400385"
+            },
+            "external_urls": {
+              "spotify": "https://open.spotify.com/track/3JCBTgyo1K38hBzLK2Dqun"
+            },
+            "href": "https://api.spotify.com/v1/tracks/3JCBTgyo1K38hBzLK2Dqun",
+            "id": "3JCBTgyo1K38hBzLK2Dqun",
+            "name": "Quiero Ser Libre - Single Version",
+            "uri": "spotify:track:3JCBTgyo1K38hBzLK2Dqun",
+            "is_local": false
+          },
+          "video_thumbnail": {
+            "url": null
+          }
+        }
+      ],
+      "limit": 100,
+      "next": null,
+      "offset": 0,
+      "previous": null,
+      "total": 5
+    },
+    "type": "playlist",
+    "uri": "spotify:playlist:0FRr10mglUR3E0Pq8TqlxL"
+  }
+}
