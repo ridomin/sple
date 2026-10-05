@@ -185,7 +185,7 @@ test('unknown playlist subcommand is a usage error', async () => {
 })
 
 test('legacy commands exit with helpful message', async () => {
-  for (const cmd of ['import', 'migrate']) {
+  for (const cmd of ['migrate']) {
     const r = await exec([cmd])
     assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
     assert.match(r.err, /later release/)

@@ -43,7 +43,7 @@ export interface CommandGroupModule {
 }
 
 const MAIN_COMMANDS = ['auth', 'search', 'playlist', 'export', 'import', 'migrate'] as const
-const LEGACY_COMMANDS = ['import', 'migrate'] as const
+const LEGACY_COMMANDS = ['migrate'] as const
 
 function rootHelpText(version: string): string {
   return `sple v${version}
@@ -55,7 +55,7 @@ Commands:
   search     Search the provider catalog
   playlist   Playlist management
   export     Export playlists to files
-  import     Import playlists from files (available in a later release)
+  import     Import playlists from files
   migrate    Migrate playlists between providers (available in a later release)
 
 Global Options:
@@ -208,6 +208,11 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
 
     if (command === 'export') {
       const mod = await import('./commands/export.js')
+      return await mod.run(ctx, commandArgs)
+    }
+
+    if (command === 'import') {
+      const mod = await import('./commands/import.js')
       return await mod.run(ctx, commandArgs)
     }
 

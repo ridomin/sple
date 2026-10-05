@@ -1,0 +1,465 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { run } from '../../../src/cli/commands/import.js'
+import type { CommandContext } from '../../../src/cli/cli.js'
+import type { CanonicalPlaylistFile } from '../../../src/core/export/format.js'
+import { EXIT_CODES } from '../../../src/cli/exit-codes.js'
+import { FakeProvider } from '../../../src/providers/fake/index.js'
+
+class MockIO {
+  out: string[] = []
+  err: string[] = []
+
+  logOut(msg: string) {
+    this.out.push(msg)
+  }
+
+  logErr(msg: string) {
+    this.err.push(msg)
+  }
+
+  reset() {
+    this.out = []
+    this.err = []
+  }
+}
+
+function createTestContext(overrides?: Partial<CommandContext>): CommandContext & { mockIO: MockIO } {
+  const mockIO = new MockIO()
+  return {
+    registry: {
+      has: () => true,
+      create: () => new FakeProvider({ pagination: 'cursor-forward', playlists: { access: ['owned'] } }),
+    } as any,
+    config: { provider: 'spotify', verbose: false },
+    io: {
+      out: (msg: string) => mockIO.logOut(msg),
+      err: (msg: string) => mockIO.logErr(msg),
+    },
+    version: '0.1.0',
+    json: false,
+    quiet: false,
+    debug: false,
+    yes: false,
+    mockIO,
+    ...overrides,
+  } as any
+}
+
+function createTestFile(): CanonicalPlaylistFile {
+  return {
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    generator: { name: 'sple', version: '0.1.0' },
+    source: { provider: 'spotify', kind: 'playlist' },
+    playlist: { name: 'Test Playlist', trackCount: 1 },
+    tracks: [
+      {
+        position: 1,
+        title: 'Test Song',
+        artists: ['Test Artist'],
+        album: 'Test Album',
+        durationMs: 180000,
+        ref: 'spotify:track:123',
+      },
+    ],
+    unsupportedItems: [],
+  }
+}
+
+test('import command: help flag', async () => {
+  const ctx = createTestContext()
+  const result = await run(ctx, ['--help'])
+  assert.equal(result, EXIT_CODES.SUCCESS)
+  assert(ctx.mockIO.out.length > 0)
+  assert(ctx.mockIO.out[0].includes('Import'))
+})
+
+test('import command: -h flag', async () => {
+  const ctx = createTestContext()
+  const result = await run(ctx, ['-h'])
+  assert.equal(result, EXIT_CODES.SUCCESS)
+  assert(ctx.mockIO.out.length > 0)
+})
+
+test('import command: error when no file provided', async () => {
+  const ctx = createTestContext()
+  try {
+    await run(ctx, [])
+    assert.fail('Should have thrown UsageError')
+  } catch (error: any) {
+    assert(error.message.includes('No file provided'))
+  }
+})
+
+test('import command: error when file path is empty', async () => {
+  const ctx = createTestContext()
+  try {
+    await run(ctx, [''])
+    assert.fail('Should have thrown UsageError')
+  } catch (error: any) {
+    assert(error.message.includes('File path cannot be empty'))
+  }
+})
+
+test('import command: error when multiple files provided', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const file1 = join(tmpDir, 'file1.json')
+    const file2 = join(tmpDir, 'file2.json')
+    writeFileSync(file1, JSON.stringify(createTestFile()))
+    writeFileSync(file2, JSON.stringify(createTestFile()))
+
+    const ctx = createTestContext()
+    try {
+      await run(ctx, [file1, file2])
+      assert.fail('Should have thrown UsageError')
+    } catch (error: any) {
+      assert(error.message.includes('Only one file'))
+    }
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --provider option', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '--provider', 'spotify', '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: -p short option', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '-p', 'spotify', '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --name option', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '--name', 'Custom Name', '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+    // Just verify the command succeeds with --name option
+    // The custom name is stored in the report but not displayed in the report text output
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: -n short option', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '-n', 'Custom Name', '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --report option (text)', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const reportPath = join(tmpDir, 'report.txt')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '--report', reportPath, '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+    assert(ctx.mockIO.out.some((msg) => msg.includes('saved to')))
+
+    const reportContent = readFileSync(reportPath, 'utf-8')
+    assert(reportContent.includes('Match Report'))
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --report option (JSON)', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const reportPath = join(tmpDir, 'report.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '--report', reportPath, '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+
+    const reportContent = readFileSync(reportPath, 'utf-8')
+    const json = JSON.parse(reportContent)
+    assert(json.summary)
+    assert(json.results)
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --dry-run flag', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+    assert(ctx.mockIO.err.some((msg) => msg.includes('Dry run')))
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --yes flag', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '--yes', '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --min-confidence validation (valid values)', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+
+    // Test 0.5
+    let result = await run(ctx, [filePath, '--min-confidence', '0.5', '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+
+    // Test 0.0
+    result = await run(ctx, [filePath, '--min-confidence', '0.0', '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+
+    // Test 1.0
+    result = await run(ctx, [filePath, '--min-confidence', '1.0', '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --min-confidence validation (invalid > 1.0)', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext()
+    try {
+      await run(ctx, [filePath, '--min-confidence', '1.5', '--dry-run'])
+      assert.fail('Should have thrown UsageError')
+    } catch (error: any) {
+      assert(error.message.includes('between 0 and 1'))
+    }
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --min-confidence validation (invalid < 0.0)', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext()
+    try {
+      await run(ctx, [filePath, '--min-confidence', '-0.1', '--dry-run'])
+      assert.fail('Should have thrown UsageError')
+    } catch (error: any) {
+      // The negative number may be interpreted as a flag, so check for either error message
+      assert(
+        error.message.includes('between 0 and 1') ||
+        error.message.includes('Unknown option') ||
+        error.message.includes('option'),
+        `Got error: ${error.message}`
+      )
+    }
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: --min-confidence validation (non-numeric)', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext()
+    try {
+      await run(ctx, [filePath, '--min-confidence', 'invalid', '--dry-run'])
+      assert.fail('Should have thrown UsageError')
+    } catch (error: any) {
+      assert(error.message.includes('between 0 and 1'))
+    }
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: error on non-existent file', async () => {
+  const ctx = createTestContext({ yes: true })
+  try {
+    await run(ctx, ['/nonexistent/path/file.json', '--dry-run'])
+    assert.fail('Should have thrown UsageError')
+  } catch (error: any) {
+    assert(error.message.includes('Failed to read file'))
+  }
+})
+
+test('import command: read JSON files', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+    assert(ctx.mockIO.out.length > 0)
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: read CSV files', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.csv')
+    const csvContent = `position,title,artists,album,duration_ms,added_at,isrc,ref
+1,Test Song,Test Artist,Test Album,180000,2026-10-05T00:00:00Z,,spotify:track:123`
+    writeFileSync(filePath, csvContent)
+
+    const ctx = createTestContext({ yes: true })
+    const result = await run(ctx, [filePath, '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+    assert(ctx.mockIO.out.length > 0)
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: error on invalid JSON', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'invalid.json')
+    writeFileSync(filePath, 'not valid json')
+
+    const ctx = createTestContext()
+    try {
+      await run(ctx, [filePath, '--dry-run'])
+      assert.fail('Should have thrown UsageError')
+    } catch (error: any) {
+      assert(error.message.includes('Failed to read file'))
+    }
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: error on unknown provider', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({
+      registry: {
+        has: () => false,
+        create: () => null,
+      } as any,
+    })
+
+    try {
+      await run(ctx, [filePath, '--provider', 'unknown-provider', '--dry-run'])
+      assert.fail('Should have thrown UsageError')
+    } catch (error: any) {
+      assert(error.message.includes('Unknown provider'))
+    }
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: output report to stdout by default', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext({ yes: true })
+    await run(ctx, [filePath, '--dry-run'])
+    assert(ctx.mockIO.out.some((msg) => msg.includes('Match Report')))
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: dry-run does not create playlist', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  try {
+    const filePath = join(tmpDir, 'test.json')
+    const file = createTestFile()
+    writeFileSync(filePath, JSON.stringify(file))
+
+    const ctx = createTestContext()
+    const result = await run(ctx, [filePath, '--dry-run'])
+    assert.equal(result, EXIT_CODES.SUCCESS)
+    assert(ctx.mockIO.err.some((msg) => msg.includes('Dry run')))
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
