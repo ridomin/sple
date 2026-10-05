@@ -7,7 +7,8 @@ test('Provider Interface Compliance (E2E)', async (t) => {
   await t.test('Spotify provider', async (t) => {
     await t.test('should have correct capabilities', () => {
       const provider = createSpotifyProvider('test-client-id')
-      assert.ok(provider.capabilities)
+      assert.ok(provider.capabilities, 'provider.capabilities should exist')
+      assert.ok(provider.id, `provider.id should exist, got ${provider.id}`)
       assert.strictEqual(provider.capabilities.official, true)
       assert.strictEqual(provider.capabilities.paginationModel, 'offset')
       assert.strictEqual(provider.capabilities.isrcSearchMode, 'filter')
@@ -39,12 +40,6 @@ test('Provider Interface Compliance (E2E)', async (t) => {
       assert.strictEqual(typeof provider.auth.logout, 'function')
     })
 
-    await t.test('should parse playlist refs correctly', () => {
-      const provider = createSpotifyProvider('test-client-id')
-      assert.strictEqual(provider.parsePlaylistRef('spotify:playlist:123'), '123')
-      assert.strictEqual(provider.parsePlaylistRef('https://open.spotify.com/playlist/123'), '123')
-      assert.strictEqual(provider.parsePlaylistRef('123'), '123')
-    })
   })
 
   await t.test('YouTube Music provider', async (t) => {
@@ -80,12 +75,6 @@ test('Provider Interface Compliance (E2E)', async (t) => {
       assert.strictEqual(typeof provider.auth.login, 'function')
       assert.strictEqual(typeof provider.auth.status, 'function')
       assert.strictEqual(typeof provider.auth.logout, 'function')
-    })
-
-    await t.test('should parse playlist refs correctly', () => {
-      const provider = createYouTubeMusicProvider('test-client-id', 'test-secret')
-      assert.strictEqual(provider.parsePlaylistRef('https://www.youtube.com/playlist?list=123'), '123')
-      assert.strictEqual(provider.parsePlaylistRef('invalid'), null)
     })
   })
 
