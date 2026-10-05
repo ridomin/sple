@@ -87,6 +87,26 @@ sple auth logout --provider youtube-music
 sple auth logout --all
 ```
 
+### Import
+
+```bash
+sple import <file> [--provider spotify|youtube-music] [--name "Name"]
+```
+
+Create a new playlist by matching tracks from an exported canonical file. Uses a three-strategy matching chain: known refs → ISRC → metadata. See [import guide](docs/user/import.md).
+
+Example:
+
+```bash
+# Import Spotify playlist to YouTube Music
+sple import my-songs.json --provider youtube-music
+
+# With a match report
+sple import my-songs.json --report report.txt
+```
+
+Note: playlist creation on the target provider is not implemented yet; `sple import` currently matches tracks and prints or saves the match report.
+
 ### Configuration
 
 Create a `.env` file in the config directory:
