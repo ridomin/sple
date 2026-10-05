@@ -1,4 +1,4 @@
-import type { CanonicalTrack } from '../provider/provider.js'
+import type { CanonicalTrack, Provider } from '../provider/provider.js'
 import type { ProviderCapabilities } from '../provider/capabilities.js'
 
 // Result of a single match attempt
@@ -21,8 +21,7 @@ export interface MatchCandidate {
     artists?: string[]
     album?: string
     duration?: number
-    [key: string]: any
-  }
+  } & Record<string, unknown>
 }
 
 // Collection of all match results for a playlist
@@ -60,5 +59,5 @@ export interface MatchingStrategy {
   readonly name: string // e.g., 'known-ref', 'isrc', 'metadata'
   readonly priority: number // 1 = highest (tried first)
   isApplicable(request: MatchRequest): boolean // Can this strategy be used?
-  execute(request: MatchRequest, provider: any): Promise<MatchCandidate | null> // Returns null if no match found
+  execute(request: MatchRequest, provider: Provider): Promise<MatchCandidate | null> // Returns null if no match found
 }
