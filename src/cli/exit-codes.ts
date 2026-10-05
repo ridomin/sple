@@ -7,6 +7,8 @@ import {
   UsageError,
   ProviderError,
 } from '../core/provider/errors.js'
+import type { ErrorOutput } from './output/types.js'
+import { redact } from './log.js'
 
 export const EXIT_CODES = {
   SUCCESS: 0,
@@ -87,4 +89,17 @@ export function formatErrorMessage(error: unknown): string {
   }
 
   return String(error)
+}
+
+/**
+ * ADR 0007 §4: with --json, the last stderr line is one compact ErrorOutput.
+ * `type` is the error class name (`Error` for unexpected errors) unless given,
+ * e.g. `PartialFailure` (§5).
+ */
+export function formatErrorOutput(error: unknown, exitCode: number, type?: string): string {
+  const name = type ?? (error instanceof Error ? error.constructor.name : 'Error')
+  const output: ErrorOutput = {
+    error: { type: name, message: redact(formatErrorMessage(error)), exitCode },
+  }
+  return JSON.stringify(output)
 }

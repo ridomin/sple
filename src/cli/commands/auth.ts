@@ -8,7 +8,7 @@ import { handleLogout } from './auth/logout.js'
 import { resolveAllTargets, resolveTarget } from './auth/targets.js'
 import { UsageError } from '../../core/provider/errors.js'
 
-const USAGE =
+export const USAGE =
   'Usage: sple auth login [--provider <name>] [--no-browser | --manual]\n' +
   '       sple auth status [--provider <name>] [--json]\n' +
   '       sple auth logout [--provider <name> | --all]'

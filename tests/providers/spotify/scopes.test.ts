@@ -84,7 +84,7 @@ const OPERATIONS: Array<{ name: string; call: (p: Provider) => Promise<unknown>;
   },
   {
     name: 'playlist remove',
-    call: (p) => p.removePlaylist('x'),
+    call: (p) => p.removePlaylist('0000000000000000000000'),
     scopes: ['playlist-modify-public', 'playlist-modify-private'],
   },
 ]

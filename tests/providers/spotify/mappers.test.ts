@@ -185,6 +185,17 @@ test('mapSpotifyPlaylistItems', async (t) => {
     assert.strictEqual(mapped[0].unsupported, undefined)
   })
 
+  await t.test('copies added_at onto the track as addedAt', () => {
+    const item = (added_at?: string) => ({
+      ...(added_at ? { added_at } : {}),
+      is_local: false,
+      item: { id: 't1', name: 'Song', artists: [{ name: 'A' }], uri: 'spotify:track:t1', type: 'track' },
+    })
+    const [withDate, withoutDate] = mapSpotifyPlaylistItems([item('2026-04-15T12:28:26Z'), item()])
+    assert.strictEqual(withDate.track?.addedAt, '2026-04-15T12:28:26Z')
+    assert.strictEqual(withoutDate.track?.addedAt, undefined)
+  })
+
   await t.test('tracks position numbering starting from 1', () => {
     const items = [
       {

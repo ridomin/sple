@@ -11,8 +11,8 @@ const SUBCOMMANDS = ['list', 'show', 'create', 'remove'] as const
 const USAGE = `Usage: sple playlist <command> [options]
 
 Commands:
-  list              List all playlists
-  show <id>         Show playlist details
+  list              List your playlists [--owned | --followed]
+  show <playlist|-> Show the tracks of a playlist
   create <name>     Create a new playlist
   remove <id>       Delete a playlist
 

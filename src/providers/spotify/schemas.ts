@@ -50,6 +50,9 @@ export interface SpotifyEpisode {
  * Throws ProviderError if validation fails.
  */
 export function validateSpotifyTrack(value: unknown): SpotifyTrack {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ProviderError(`Invalid Spotify track: must be an object (received: ${typeof value})`)
+  }
   const obj = value as Record<string, unknown>
 
   // Required fields
@@ -121,6 +124,9 @@ export function validateSpotifyUser(value: unknown): SpotifyUser {
  * Throws ProviderError if validation fails.
  */
 export function validateSpotifyPlaylist(value: unknown): SpotifyPlaylist {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ProviderError(`Invalid Spotify playlist: must be an object (received: ${typeof value})`)
+  }
   const obj = value as Record<string, unknown>
 
   if (typeof obj.id !== 'string' || !obj.id) {
@@ -298,4 +304,50 @@ export function validateSpotifySearchResponse(value: unknown): SpotifySearchResp
   }
 
   return obj as unknown as SpotifySearchResponse
+}
+
+/** A Spotify paging object (`GET /me/playlists`, `/playlists/{id}/items`, `/me/tracks`). */
+export interface SpotifyPage {
+  items: unknown[]
+  total: number
+  next?: string | null
+}
+
+/**
+ * Validate the container of a paged Spotify response. Item contents are
+ * validated by the mappers. `what` names the endpoint in error messages.
+ * Throws ProviderError (never a TypeError) on malformed input.
+ */
+export function validateSpotifyPage(value: unknown, what: string): SpotifyPage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ProviderError(`Invalid Spotify ${what} response: must be an object (received: ${typeof value})`)
+  }
+  const obj = value as Record<string, unknown>
+  if (!Array.isArray(obj.items)) {
+    throw new ProviderError(`Invalid Spotify ${what} response: 'items' must be an array`)
+  }
+  if (typeof obj.total !== 'number' || !Number.isInteger(obj.total) || obj.total < 0) {
+    throw new ProviderError(`Invalid Spotify ${what} response: 'total' must be a non-negative integer`)
+  }
+  if (obj.next !== undefined && obj.next !== null && typeof obj.next !== 'string') {
+    throw new ProviderError(`Invalid Spotify ${what} response: 'next' must be a string or null`)
+  }
+  return { items: obj.items, total: obj.total, next: obj.next as string | null | undefined }
+}
+
+/** One entry of `GET /me/tracks` (saved tracks). */
+export interface SpotifySavedTrack {
+  added_at?: string
+  track: unknown
+}
+
+export function validateSpotifySavedTrack(value: unknown, index: number): SpotifySavedTrack {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ProviderError(`Invalid Spotify saved track at index ${index}: must be an object`)
+  }
+  const obj = value as Record<string, unknown>
+  return {
+    added_at: typeof obj.added_at === 'string' ? obj.added_at : undefined,
+    track: obj.track,
+  }
 }

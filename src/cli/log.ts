@@ -1,4 +1,5 @@
 import type { CommandContext } from './cli.js'
+import type { HttpLogEntry } from '../core/http/client.js'
 
 /**
  * Redaction function per ADR-0007 §6.
@@ -79,6 +80,15 @@ export function logHttpCall(
     const retryPart = retryCount && retryCount > 0 ? ` ${retryCount} retries` : ''
     ctx.io.err(`sple:http ${method} ${path} ${status} ${durationMs}ms${retryPart}`)
   }
+}
+
+/**
+ * Format one `--debug` HTTP line (ADR 0007 §6), redacted:
+ * `sple:http GET /v1/playlists/…/items?limit=100&offset=0 200 143ms`.
+ */
+export function formatHttpLine(entry: HttpLogEntry): string {
+  const retryPart = entry.retries > 0 ? ` ${entry.retries} retries` : ''
+  return redact(`sple:http ${entry.method} ${entry.path} ${entry.status} ${entry.durationMs}ms${retryPart}`)
 }
 
 /**

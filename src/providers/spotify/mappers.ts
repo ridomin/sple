@@ -156,6 +156,10 @@ export function mapSpotifyPlaylistItems(
     if (isSpotifyTrackType(item)) {
       try {
         const canonical = mapSpotifyTrackToCanonical(item.item)
+        // Playlist items carry when the track was added (ADR-0005 addedAt).
+        if (typeof item.added_at === 'string') {
+          canonical.addedAt = item.added_at
+        }
         results.push({ position, track: canonical })
       } catch (error) {
         // Re-throw with context

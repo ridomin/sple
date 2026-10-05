@@ -230,11 +230,11 @@ test('Spotify write operations (M1-21)', async (t) => {
     saveTokens('spotify', token, tempDir)
 
     mockFetch({
-      'https://api.spotify.com/v1/me/library?uris=spotify%3Aplaylist%3Apl123': () => json(200, {}),
+      'https://api.spotify.com/v1/me/library?uris=spotify%3Aplaylist%3A00000000000000000pl123': () => json(200, {}),
     })
 
     const provider = createSpotifyProvider('test-client', tempDir)
-    const result = await provider.removePlaylist('pl123')
+    const result = await provider.removePlaylist('00000000000000000pl123')
 
     assert.strictEqual(result.action, 'unfollowed')
 
@@ -260,14 +260,14 @@ test('Spotify write operations (M1-21)', async (t) => {
     saveTokens('spotify', token, tempDir)
 
     mockFetch({
-      'https://api.spotify.com/v1/me/library?uris=spotify%3Aplaylist%3Apl999': () =>
+      'https://api.spotify.com/v1/me/library?uris=spotify%3Aplaylist%3A00000000000000000pl999': () =>
         json(403, { error: { message: 'Forbidden' } }),
     })
 
     const provider = createSpotifyProvider('test-client', tempDir)
 
     try {
-      await provider.removePlaylist('pl999')
+      await provider.removePlaylist('00000000000000000pl999')
       assert.fail('Should have thrown AccessRestrictedError')
     } catch (error) {
       assert.ok(error instanceof AccessRestrictedError)

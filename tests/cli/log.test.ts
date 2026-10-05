@@ -262,3 +262,15 @@ test('redact handles complex JSON structures', () => {
   assert.ok(!result.includes('auth_code'))
   assert.ok(result.includes('[REDACTED]'))
 })
+
+test('formatHttpLine: ADR 0007 §6 --debug line, redacted, retries only when > 0', async () => {
+  const { formatHttpLine } = await import('../../src/cli/log.js')
+  assert.equal(
+    formatHttpLine({ method: 'GET', path: '/v1/playlists/x/items?limit=100&offset=0', status: 200, durationMs: 143, retries: 0 }),
+    'sple:http GET /v1/playlists/x/items?limit=100&offset=0 200 143ms'
+  )
+  assert.equal(
+    formatHttpLine({ method: 'POST', path: '/api/token?code=SECRET', status: 'ERR ECONNRESET', durationMs: 5, retries: 2 }),
+    'sple:http POST /api/token?code=[REDACTED] ERR ECONNRESET 5ms 2 retries'
+  )
+})

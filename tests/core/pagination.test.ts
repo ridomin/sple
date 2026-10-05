@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { paginate, collectAll } from '../../src/core/pagination.js'
+import { paginate, collectAll, collectPages, type PageProgress } from '../../src/core/pagination.js'
 import { UsageError } from '../../src/core/provider/errors.js'
 import type { Page, PageRequest } from '../../src/core/provider/provider.js'
 
@@ -325,5 +325,76 @@ test('collectAll', async (t) => {
 
     await collectAll(fetchPage, { pageSize: 10, concurrency: 2 })
     assert.ok(maxConcurrent <= 3) // Allow small variance
+  })
+})
+
+test('collectPages', async (t) => {
+  const source = (n: number, opts: { total?: boolean; drop?: (i: number) => boolean } = {}) => {
+    const all = Array.from({ length: n }, (_, i) => i)
+    const requests: PageRequest[] = []
+    let inFlight = 0
+    let maxInFlight = 0
+    const fetchPage = async (req: PageRequest): Promise<Page<number>> => {
+      requests.push(req)
+      inFlight++
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      await new Promise((r) => setTimeout(r, Math.random() * 5))
+      inFlight--
+      const offset = req.offset ?? Number(req.cursor ?? 0)
+      const slice = all.slice(offset, offset + req.limit)
+      const end = offset + req.limit
+      return {
+        items: opts.drop ? slice.filter((i) => !opts.drop!(i)) : slice,
+        total: opts.total === false ? undefined : n,
+        next: end < n ? (req.cursor !== undefined || req.offset === undefined ? { cursor: String(end) } : { offset: end }) : undefined,
+      }
+    }
+    return { all, requests, fetchPage, maxInFlight: () => maxInFlight }
+  }
+
+  await t.test('with a total, fetches remaining offsets concurrently and preserves order', async () => {
+    const s = source(95)
+    const progress: PageProgress[] = []
+    const { items, total } = await collectPages(s.fetchPage, { pageSize: 10, concurrency: 3, onPage: (p) => progress.push(p) })
+    assert.deepEqual(items, s.all)
+    assert.equal(total, 95)
+    assert.equal(s.requests.length, 10)
+    assert.ok(s.maxInFlight() <= 3)
+    assert.ok(s.maxInFlight() > 1)
+    assert.deepEqual(progress.at(-1), { pages: 10, totalPages: 10, items: 95, total: 95 })
+  })
+
+  await t.test('without a total, follows next sequentially', async () => {
+    const s = source(25, { total: false })
+    const { items, total } = await collectPages(s.fetchPage, { pageSize: 10 })
+    assert.deepEqual(items, s.all)
+    assert.equal(total, undefined)
+    assert.deepEqual(s.requests.map((r) => r.offset), [0, 10, 20])
+    assert.equal(s.maxInFlight(), 1)
+  })
+
+  await t.test('offsets advance by pageSize even when a page drops items', async () => {
+    const s = source(30, { drop: (i) => i % 7 === 0 })
+    const { items } = await collectPages(s.fetchPage, { pageSize: 10 })
+    assert.deepEqual(items, s.all.filter((i) => i % 7 !== 0))
+    assert.deepEqual(s.requests.map((r) => r.offset).sort((a, b) => a! - b!), [0, 10, 20])
+  })
+
+  await t.test('cursor-forward model follows cursors', async () => {
+    const s = source(25, { total: false })
+    const { items } = await collectPages(s.fetchPage, { pageSize: 10, model: 'cursor-forward' })
+    assert.deepEqual(items, s.all)
+    assert.deepEqual(s.requests, [{ limit: 10 }, { limit: 10, cursor: '10' }, { limit: 10, cursor: '20' }])
+  })
+
+  await t.test('empty result is one request', async () => {
+    const s = source(0)
+    const { items } = await collectPages(s.fetchPage, { pageSize: 10 })
+    assert.deepEqual(items, [])
+    assert.equal(s.requests.length, 1)
+  })
+
+  await t.test('rejects a non-positive pageSize', async () => {
+    await assert.rejects(collectPages(source(1).fetchPage, { pageSize: 0 }), UsageError)
   })
 })

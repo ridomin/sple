@@ -194,6 +194,11 @@ export class SpotifyAuth implements ProviderAuth {
     }
   }
 
+  /** The stored token, or null when not logged in. Used by the HttpClient. */
+  async getToken(): Promise<StoredToken | null> {
+    return loadTokens('spotify', this.configDir)
+  }
+
   /**
    * Check, before an API call, that a token is stored and that it was granted
    * every scope in `required` (FR-AUTH-5). Returns the stored token.
@@ -265,121 +270,5 @@ export class SpotifyAuth implements ProviderAuth {
       id: me.id,
       display_name: typeof me.display_name === 'string' ? me.display_name : null,
     }
-  }
-
-  /**
-   * Create a playlist via POST /v1/me/playlists.
-   * Caller ensures token has required scopes (M1-11).
-   */
-  async createPlaylist(
-    input: { name: string; description?: string; public: boolean; collaborative?: boolean },
-    accessToken: string
-  ): Promise<unknown> {
-    const start = Date.now()
-    let res: Response
-    const body = JSON.stringify({
-      name: input.name,
-      description: input.description,
-      public: input.public,
-      collaborative: input.collaborative ?? false,
-    })
-
-    try {
-      res = await fetch('https://api.spotify.com/v1/me/playlists', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body,
-      })
-    } catch {
-      log('POST /v1/me/playlists → network error')
-      throw new ProviderError('Could not reach the Spotify API')
-    }
-
-    log(`POST /v1/me/playlists → ${res.status} (${Date.now() - start}ms)`)
-
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => '')
-      throw mapApiError(res.status, res.headers.get('retry-after'), errBody)
-    }
-
-    let parsed: unknown
-    try {
-      parsed = await res.json()
-    } catch {
-      throw new ProviderError('Spotify create playlist response was invalid JSON')
-    }
-    return parsed
-  }
-
-  /**
-   * Remove (unfollow) a playlist via DELETE /v1/me/library?uris=spotify:playlist:<id>.
-   * Caller ensures token has required scopes (M1-11).
-   */
-  async removePlaylist(playlistId: string, accessToken: string): Promise<unknown> {
-    const start = Date.now()
-    let res: Response
-    const uri = `spotify:playlist:${playlistId}`
-
-    try {
-      res = await fetch(`https://api.spotify.com/v1/me/library?uris=${encodeURIComponent(uri)}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    } catch {
-      log('DELETE /v1/me/library → network error')
-      throw new ProviderError('Could not reach the Spotify API')
-    }
-
-    log(`DELETE /v1/me/library → ${res.status} (${Date.now() - start}ms)`)
-
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => '')
-      throw mapApiError(res.status, res.headers.get('retry-after'), errBody)
-    }
-
-    // DELETE /me/library returns 200 with empty body on success
-    return { action: 'unfollowed' }
-  }
-
-  /**
-   * Generic GET request to Spotify API.
-   * Caller ensures token has required scopes (M1-11).
-   */
-  async getApi<T = unknown>(path: string, accessToken: string): Promise<T> {
-    const start = Date.now()
-    const url = `https://api.spotify.com/v1${path}`
-    let res: Response
-
-    try {
-      res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    } catch {
-      log(`GET ${path} → network error`)
-      throw new ProviderError('Could not reach the Spotify API')
-    }
-
-    log(`GET ${path} → ${res.status} (${Date.now() - start}ms)`)
-
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => '')
-      throw mapApiError(res.status, res.headers.get('retry-after'), errBody)
-    }
-
-    let parsed: unknown
-    try {
-      parsed = await res.json()
-    } catch {
-      throw new ProviderError(`Spotify API response was invalid JSON for ${path}`)
-    }
-
-    return parsed as T
   }
 }

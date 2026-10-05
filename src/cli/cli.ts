@@ -4,11 +4,13 @@ import { parseArgs } from 'node:util'
 import { pathToFileURL } from 'node:url'
 import { realpathSync } from 'node:fs'
 import { loadConfig, loadEnvFile, PROVIDER_IDS } from './config.js'
-import { EXIT_CODES, getExitCode, formatErrorMessage } from './exit-codes.js'
+import { EXIT_CODES, getExitCode, formatErrorMessage, formatErrorOutput } from './exit-codes.js'
 import { createDefaultRegistry, type ProviderRegistry } from './provider-registry.js'
 import { readPackageVersion } from './version.js'
 import { UsageError } from '../core/provider/errors.js'
 import type { Config } from './config.js'
+import { redact, formatHttpLine } from './log.js'
+import type { HttpLogEntry } from '../core/http/client.js'
 
 export interface CliIO {
   out: (msg: string) => void
@@ -88,63 +90,28 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
   }
   const version = opts.version ?? readPackageVersion()
 
+  let jsonErrors = false
   try {
-    // Handle --version and --help at the root level
-    if (argv.includes('--version') || argv.includes('-v')) {
+    const { values, rest } = extractGlobalFlags(argv)
+    jsonErrors = values.json === true
+
+    if (values.version) {
       io.out(`sple v${version}`)
       return EXIT_CODES.SUCCESS
     }
 
-    // Manually extract global flags to avoid consuming command-specific flags
-    let parsed
-    const globalFlagIndices: number[] = []
-    for (let i = 0; i < argv.length; i++) {
-      const arg = argv[i]
-      if (arg === '--provider' && i + 1 < argv.length) {
-        globalFlagIndices.push(i, i + 1)
-        i++ // Skip the next value
-      } else if (arg === '--json' || arg === '--quiet' || arg === '--verbose' || arg === '--debug' || arg === '--yes' || arg === '--help' || arg === '-h') {
-        globalFlagIndices.push(i)
-      } else if (arg.startsWith('-')) {
-        // Unknown global flag, let parseArgs handle it for error
-        break
-      } else {
-        // Found the command, stop looking for global flags
-        break
-      }
-    }
-
-    const globalArgs = globalFlagIndices.map((i) => argv[i])
-    const commandAndArgs = argv.filter((_, i) => !globalFlagIndices.includes(i))
-
-    try {
-      parsed = parseArgs({
-        args: globalArgs,
-        allowPositionals: false,
-        options: {
-          provider: { type: 'string' },
-          json: { type: 'boolean' },
-          quiet: { type: 'boolean' },
-          verbose: { type: 'boolean' },
-          debug: { type: 'boolean' },
-          yes: { type: 'boolean' },
-          help: { type: 'boolean', short: 'h' },
-        },
-      })
-    } catch (e) {
-      throw new UsageError(e instanceof Error ? e.message : String(e))
-    }
-    const { values } = parsed
-    const [command, ...commandArgs] = commandAndArgs
+    const [command, ...commandArgs] = rest
 
     const config = loadConfig(
       {
         provider: values.provider,
-        verbose: values.verbose,
+        verbose: values.verbose === true || values.debug === true,
       },
       opts.env
     )
-    const registry = opts.registry ?? createDefaultRegistry()
+    // --debug: one redacted line per HTTP attempt on stderr (ADR 0007 §6).
+    const onHttp = values.debug === true ? (entry: HttpLogEntry) => io.err(formatHttpLine(entry)) : undefined
+    const registry = opts.registry ?? createDefaultRegistry({ onHttp })
     if (!registry.has(config.provider)) {
       throw new UsageError(`Unknown provider '${config.provider}'`)
     }
@@ -170,7 +137,7 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
       )
     }
 
-    if (config.verbose) io.err(`[sple] provider=${config.provider} command=${command}`)
+    if (config.verbose) io.err(redact(`sple:cli provider=${config.provider} command=${command}`))
 
     // Validate mutually exclusive flags
     if (values.json && values.quiet) {
@@ -191,25 +158,28 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
 
     // Route to command handler
     if (command === 'auth') {
-      const { handleAuthCommand } = await import('./commands/auth.js')
-      // Parse auth-specific flags from commandArgs
+      const { handleAuthCommand, USAGE: AUTH_USAGE } = await import('./commands/auth.js')
+      // Global flags (incl. --provider and --json) were already extracted from
+      // anywhere in argv; only auth-specific flags remain (ADR 0007 §1).
       let authParsed
       try {
         authParsed = parseArgs({
           args: commandArgs,
           allowPositionals: true,
+          strict: true,
           options: {
-            provider: { type: 'string' },
             'no-browser': { type: 'boolean' },
             manual: { type: 'boolean' },
-            json: { type: 'boolean' },
             all: { type: 'boolean' },
             help: { type: 'boolean', short: 'h' },
           },
-          strict: false,
         })
       } catch (e) {
         throw new UsageError(e instanceof Error ? e.message : String(e))
+      }
+      if (authParsed.values.help) {
+        io.out(AUTH_USAGE)
+        return EXIT_CODES.SUCCESS
       }
       return await handleAuthCommand(
         authParsed.positionals,
@@ -217,10 +187,10 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
           registry,
           config,
           providerExplicit: values.provider !== undefined,
-          noBrowser: typeof authParsed.values['no-browser'] === 'boolean' ? authParsed.values['no-browser'] : undefined,
-          manual: typeof authParsed.values.manual === 'boolean' ? authParsed.values.manual : undefined,
-          json: typeof authParsed.values.json === 'boolean' ? authParsed.values.json : undefined,
-          all: typeof authParsed.values.all === 'boolean' ? authParsed.values.all : undefined,
+          noBrowser: authParsed.values['no-browser'],
+          manual: authParsed.values.manual,
+          json: values.json,
+          all: authParsed.values.all,
         },
         io
       )
@@ -243,9 +213,88 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
 
     throw new UsageError(`Command '${command}' is not implemented`)
   } catch (error) {
-    io.err(formatErrorMessage(error))
-    return getExitCode(error)
+    const exitCode = getExitCode(error)
+    io.err(redact(`sple: ${formatErrorMessage(error)}`))
+    if (jsonErrors) io.err(formatErrorOutput(error, exitCode))
+    return exitCode
   }
+}
+
+const GLOBAL_BOOLEAN_FLAGS = {
+  '--json': 'json',
+  '--quiet': 'quiet',
+  '--verbose': 'verbose',
+  '--debug': 'debug',
+  '--yes': 'yes',
+} as const
+
+export interface GlobalFlagValues {
+  provider?: string
+  json?: boolean
+  quiet?: boolean
+  verbose?: boolean
+  debug?: boolean
+  yes?: boolean
+  help?: boolean
+  version?: boolean
+}
+
+/**
+ * Pull the global flags (ADR 0007 §1) out of argv, wherever they appear
+ * before `--`: `sple --provider fake auth logout` and
+ * `sple auth logout --provider fake` mean the same thing. Everything else,
+ * in order, is returned in `rest` for the command's own strict parse.
+ *
+ * `--help`/`-h` is global only before the command; after it, it stays in
+ * `rest` so the command prints its own help.
+ */
+export function extractGlobalFlags(argv: string[]): { values: GlobalFlagValues; rest: string[] } {
+  const values: GlobalFlagValues = {}
+  const rest: string[] = []
+  let commandSeen = false
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (arg === '--') {
+      rest.push(...argv.slice(i))
+      break
+    }
+    if (arg === '--provider') {
+      const value = argv[i + 1]
+      if (value === undefined || value === '--' || value.startsWith('-')) {
+        throw new UsageError("Option '--provider <name>' argument missing")
+      }
+      values.provider = value
+      i++
+      continue
+    }
+    if (arg.startsWith('--provider=')) {
+      const value = arg.slice('--provider='.length)
+      if (!value) throw new UsageError("Option '--provider <name>' argument missing")
+      values.provider = value
+      continue
+    }
+    if (arg in GLOBAL_BOOLEAN_FLAGS) {
+      values[GLOBAL_BOOLEAN_FLAGS[arg as keyof typeof GLOBAL_BOOLEAN_FLAGS]] = true
+      continue
+    }
+    if (arg === '--version' || arg === '-v') {
+      values.version = true
+      continue
+    }
+    if (!commandSeen) {
+      if (arg === '--help' || arg === '-h') {
+        values.help = true
+        continue
+      }
+      if (arg.startsWith('-')) {
+        throw new UsageError(`Unknown option '${arg}'. Run "sple --help" for usage information`)
+      }
+      commandSeen = true
+    }
+    rest.push(arg)
+  }
+  return { values, rest }
 }
 
 function isMain(): boolean {

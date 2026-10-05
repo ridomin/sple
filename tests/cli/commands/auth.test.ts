@@ -388,3 +388,27 @@ test('status/logout work from the token store when a provider has no client ID',
     else process.env.XDG_CONFIG_HOME = prev
   }
 })
+
+test('--provider works before and after the auth subcommand (ADR 0007 §1)', async () => {
+  for (const argv of [
+    ['--provider', 'fake', 'auth', 'logout'],
+    ['auth', '--provider', 'fake', 'logout'],
+    ['auth', 'logout', '--provider=fake'],
+  ]) {
+    const dir = freshDir()
+    storeToken(dir, 'spotify', ['playlist-read-private'])
+    storeToken(dir, 'fake', ['all'])
+    const r = await execMulti(dir, argv)
+    assert.equal(r.code, 0, argv.join(' '))
+    assert.equal(loadTokens('fake', dir), null, argv.join(' '))
+    assert.equal(loadTokens('spotify', dir)?.accessToken, 'spotify-access', argv.join(' '))
+  }
+})
+
+test('auth: unknown flags are usage errors; --help prints usage', async () => {
+  const r = await execMulti(freshDir(), ['auth', 'logout', '--bogus'])
+  assert.equal(r.code, EXIT_CODES.USAGE_ERROR)
+  const help = await execMulti(freshDir(), ['auth', 'login', '--help'])
+  assert.equal(help.code, 0)
+  assert.match(help.out, /Usage: sple auth login/)
+})

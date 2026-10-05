@@ -5,6 +5,7 @@ import {
   ProviderError,
   RateLimitError,
 } from '../../core/provider/errors.js'
+import type { HttpResponse } from '../../core/http/client.js'
 
 /** Which token-endpoint grant failed; decides how `invalid_grant` is reported. */
 export type TokenGrant = 'authorization_code' | 'refresh_token'
@@ -134,4 +135,13 @@ export function mapApiError(
     return new RateLimitError('Spotify API rate limited', parseRetryAfterMs(retryAfter))
   }
   return new ProviderError(`Spotify API request failed (HTTP ${status})`)
+}
+
+/**
+ * `mapError` hook for the shared HttpClient (M1-12). The client handles
+ * refresh (401) and retries (429, 5xx) first and calls this for every other
+ * non-2xx response and for the final response once those are exhausted.
+ */
+export function mapSpotifyHttpError(res: HttpResponse): ProviderError {
+  return mapApiError(res.status, res.headers.get('retry-after') ?? null, res.body)
 }

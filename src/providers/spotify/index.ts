@@ -1,12 +1,20 @@
 import type { Provider, PageRequest, PlaylistFilter, PlaylistSummary, CanonicalTrack, SearchItem } from '../../core/provider/provider.js'
 import type { ProviderCapabilities } from '../../core/provider/capabilities.js'
-import { UsageError, AccessRestrictedError, NotFoundError } from '../../core/provider/errors.js'
+import { UsageError, AccessRestrictedError, NotFoundError, ProviderError } from '../../core/provider/errors.js'
+import { HttpClient, type HttpLogEntry } from '../../core/http/client.js'
 import { SpotifyAuth } from './auth.js'
 import { parseSpotifyPlaylistRef } from './playlist-ref.js'
 import { requiredScopes, type PlaylistVisibility, type SpotifyM1Operation } from './scopes.js'
 import { mapSpotifyPlaylistToSummary, determineItemsReadable, mapSpotifyPlaylistItems, mapSpotifyTrackToCanonical, mapSpotifySearchResults } from './mappers.js'
-import { loadTokens } from '../../core/config/token-store.js'
-import { validateSpotifySearchResponse } from './schemas.js'
+import { mapSpotifyHttpError } from './errors.js'
+import {
+  validateSpotifySearchResponse,
+  validateSpotifyPage,
+  validateSpotifySavedTrack,
+  type SpotifyPage,
+} from './schemas.js'
+
+export const SPOTIFY_API_BASE = 'https://api.spotify.com/v1'
 
 const SPOTIFY_CAPABILITIES: ProviderCapabilities = {
   // isrcSearchMode and playlistItemsAccess from spikes S1/S2 (ADR-0003 Amendment 1)
@@ -70,15 +78,68 @@ function itemsReadableFor(playlist: Record<string, unknown>, userId: string): bo
   return determineItemsReadable(SPOTIFY_CAPABILITIES.playlistItemsAccess, isOwned, hasCollaboratorAccess)
 }
 
-export function createSpotifyProvider(clientId: string, configDir?: string): Provider {
+/** Object-shaped JSON body (a single Spotify object such as a playlist). */
+function validateObject(what: string): (x: unknown) => Record<string, unknown> {
+  return (x) => {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) {
+      throw new ProviderError(`Invalid Spotify ${what} response: must be an object`)
+    }
+    return x as Record<string, unknown>
+  }
+}
+
+/** `next` for an offset page, from the reported `total`. */
+function nextOffset(page: SpotifyPage, offset: number, limit: number): { offset: number } | undefined {
+  return offset + limit < page.total ? { offset: offset + limit } : undefined
+}
+
+export interface SpotifyProviderOptions {
+  /** Receives one entry per HTTP attempt, for `--debug` logging (ADR 0007 §6). */
+  onHttp?: (entry: HttpLogEntry) => void
+}
+
+export function createSpotifyProvider(
+  clientId: string,
+  configDir?: string,
+  options: SpotifyProviderOptions = {}
+): Provider {
   const auth = new SpotifyAuth(clientId, configDir)
 
-  /** Scope check (M1-11) that runs before every M1 operation's API call. */
-  const guard = async (op: SpotifyM1Operation, visibility?: PlaylistVisibility): Promise<void> => {
-    await auth.requireScopes(requiredScopes(op, visibility))
+  // One HTTP client per provider instance: bearer injection, proactive and
+  // reactive (401) refresh with single-flight, Retry-After-aware 429/5xx
+  // retries, and Spotify error mapping (M1-12, PRV-4). SpotifyAuth.refresh
+  // persists the refreshed token itself, so no configDir is passed here.
+  const http = new HttpClient({
+    providerId: 'spotify',
+    getToken: () => auth.getToken(),
+    refresh: (token) => auth.refresh(token),
+    mapError: mapSpotifyHttpError,
+    onResponse: options.onHttp,
+  })
+
+  const getJson = <T>(path: string, validate: (x: unknown) => T): Promise<T> =>
+    http.requestJson({ method: 'GET', url: `${SPOTIFY_API_BASE}${path}` }, validate)
+
+  /**
+   * Scope check (M1-11) that runs before every M1 operation's API call.
+   * Returns the stored token (for the current user's ID); no token → exit 3.
+   */
+  const guard = (op: SpotifyM1Operation, visibility?: PlaylistVisibility) =>
+    auth.requireScopes(requiredScopes(op, visibility))
+
+  /**
+   * Item readability per playlist ID, so paging through a playlist checks
+   * access once instead of re-fetching the playlist for every page.
+   */
+  const readable = new Map<string, boolean>()
+
+  const fetchPlaylist = async (id: string, userId: string) => {
+    const raw = await getJson(`/playlists/${id}`, validateObject('playlist'))
+    const itemsReadable = itemsReadableFor(raw, userId)
+    readable.set(id, itemsReadable)
+    return mapSpotifyPlaylistToSummary(raw, userId, itemsReadable)
   }
 
-  // API calls arrive in M1-19..M1-21; until then each operation checks scopes, then rejects.
   return {
     id: 'spotify',
     displayName: 'Spotify',
@@ -87,7 +148,7 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
     parsePlaylistRef: parseSpotifyPlaylistRef,
     async search(q, page) {
       // Scope check (M1-11): search needs a logged-in user (AuthRequiredError, exit 3) but no scope.
-      const token = await auth.requireScopes(requiredScopes('search'))
+      await guard('search')
 
       // One request per call; callers split larger limits with paginate() (src/core/search.ts).
       const limit = Math.min(page.limit, SPOTIFY_CAPABILITIES.maxSearchPageSize)
@@ -99,8 +160,7 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
         limit: String(limit),
         offset: String(offset),
       })
-      const raw = await auth.getApi<unknown>(`/search?${params.toString()}`, token.accessToken)
-      const response = validateSpotifySearchResponse(raw)
+      const response = await getJson(`/search?${params.toString()}`, validateSpotifySearchResponse)
 
       const items: SearchItem[] = mapSpotifySearchResults(response)
 
@@ -122,26 +182,20 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
     },
 
     async listPlaylists(page: PageRequest, filter?: PlaylistFilter) {
-      await guard('listPlaylists')
-      const token = loadTokens('spotify', configDir)
-      if (!token) throw new Error('No token found')
+      const token = await guard('listPlaylists')
 
       const limit = Math.min(page.limit, 50)
       const offset = page.offset || 0
       // Spotify has no server-side owner filter on GET /me/playlists, so the
       // filter is applied to each page after mapping (owner.id === me.id).
-      const path = `/me/playlists?limit=${limit}&offset=${offset}`
-
-      interface PlaylistsResponse {
-        items: Array<Record<string, unknown>>
-        total: number
-      }
-
-      const response = await auth.getApi<PlaylistsResponse>(path, token.accessToken)
-
-      const all: PlaylistSummary[] = response.items.map((item) =>
-        mapSpotifyPlaylistToSummary(item, token.userId, itemsReadableFor(item, token.userId))
+      const response = await getJson(`/me/playlists?limit=${limit}&offset=${offset}`, (x) =>
+        validateSpotifyPage(x, 'playlists')
       )
+
+      const all: PlaylistSummary[] = response.items.map((item) => {
+        const obj = validateObject('playlist')(item)
+        return mapSpotifyPlaylistToSummary(obj, token.userId, itemsReadableFor(obj, token.userId))
+      })
       const items =
         filter === 'owned'
           ? all.filter((p) => p.owned)
@@ -149,57 +203,38 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
             ? all.filter((p) => !p.owned)
             : all
 
-      const next =
-        offset + limit < response.total ? { offset: offset + limit } : undefined
+      const next = nextOffset(response, offset, limit)
 
       // The Spotify total counts unfiltered playlists, so omit it when filtering.
       return filter ? { items, next } : { items, total: response.total, next }
     },
 
     async getPlaylist(ref: string) {
-      await guard('getPlaylistItems')
-      const token = loadTokens('spotify', configDir)
-      if (!token) throw new Error('No token found')
-
-      const id = playlistId(ref)
-      const response = await auth.getApi<Record<string, unknown>>(
-        `/playlists/${id}`,
-        token.accessToken
-      )
-
-      return mapSpotifyPlaylistToSummary(response, token.userId, itemsReadableFor(response, token.userId))
+      const token = await guard('getPlaylistItems')
+      return fetchPlaylist(playlistId(ref), token.userId)
     },
 
     async getPlaylistTracks(ref: string, page: PageRequest) {
-      await guard('getPlaylistItems')
-      const token = loadTokens('spotify', configDir)
-      if (!token) throw new Error('No token found')
-
+      const token = await guard('getPlaylistItems')
       const id = playlistId(ref)
 
-      // First, fetch the playlist to check access (S2)
-      const playlist = await auth.getApi<Record<string, unknown>>(
-        `/playlists/${id}`,
-        token.accessToken
-      )
-
-      // Access control: fail fast, before any /items request
-      if (!itemsReadableFor(playlist, token.userId)) {
+      // Access check (S2), once per playlist: fail fast, before any /items request.
+      let itemsReadable = readable.get(id)
+      if (itemsReadable === undefined) {
+        itemsReadable = (await fetchPlaylist(id, token.userId)).itemsReadable
+      }
+      if (!itemsReadable) {
         throw new AccessRestrictedError(NOT_READABLE_MESSAGE, 'not-owned')
       }
 
       const limit = Math.min(page.limit, SPOTIFY_CAPABILITIES.maxTracksPerRequest)
       const offset = page.offset || 0
-      const path = `/playlists/${id}/items?limit=${limit}&offset=${offset}`
 
-      interface ItemsResponse {
-        items: Array<Record<string, unknown>>
-        total: number
-      }
-
-      let response: ItemsResponse
+      let response: SpotifyPage
       try {
-        response = await auth.getApi<ItemsResponse>(path, token.accessToken)
+        response = await getJson(`/playlists/${id}/items?limit=${limit}&offset=${offset}`, (x) =>
+          validateSpotifyPage(x, 'playlist items')
+        )
       } catch (error) {
         // The playlist looked readable, but /items returned the S2 "not readable"
         // signal (403 or 404): access changed since the playlist was fetched.
@@ -209,6 +244,7 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
           error instanceof NotFoundError ||
           (error instanceof AccessRestrictedError && error.reason === 'other')
         ) {
+          readable.set(id, false)
           throw new AccessRestrictedError(ACCESS_CHANGED_MESSAGE, 'not-owned')
         }
         throw error
@@ -218,47 +254,30 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
         .filter((item) => item.track)
         .map((item) => item.track!)
 
-      const next =
-        offset + limit < response.total ? { offset: offset + limit } : undefined
-
-      return { items, total: response.total, next }
+      return { items, total: response.total, next: nextOffset(response, offset, limit) }
     },
 
     async getLikedTracks(page: PageRequest) {
       await guard('readLiked')
-      const token = loadTokens('spotify', configDir)
-      if (!token) throw new Error('No token found')
 
       // S3: GET /me/tracks accepts at most 50 per page
       const limit = Math.min(page.limit, LIKED_TRACKS_MAX_LIMIT)
       const offset = page.offset || 0
-      const path = `/me/tracks?limit=${limit}&offset=${offset}`
+      const response = await getJson(`/me/tracks?limit=${limit}&offset=${offset}`, (x) =>
+        validateSpotifyPage(x, 'saved tracks')
+      )
 
-      interface LikedTracksResponse {
-        items: Array<Record<string, unknown>>
-        total: number
-      }
+      const items: CanonicalTrack[] = []
+      response.items.forEach((raw, i) => {
+        const saved = validateSpotifySavedTrack(raw, i)
+        if (saved.track === null || saved.track === undefined) return
+        const canonical = mapSpotifyTrackToCanonical(saved.track)
+        // Preserve added_at from the liked tracks response
+        if (saved.added_at !== undefined) canonical.addedAt = saved.added_at
+        items.push(canonical)
+      })
 
-      const response = await auth.getApi<LikedTracksResponse>(path, token.accessToken)
-
-      const items: CanonicalTrack[] = response.items
-        .map((item) => {
-          const track = item.track
-          if (!track) return null
-
-          const canonical = mapSpotifyTrackToCanonical(track)
-          // Preserve added_at from the liked tracks response
-          if (typeof item.added_at === 'string') {
-            canonical.addedAt = item.added_at
-          }
-          return canonical
-        })
-        .filter((item): item is CanonicalTrack => item !== null)
-
-      const next =
-        offset + limit < response.total ? { offset: offset + limit } : undefined
-
-      return { items, total: response.total, next }
+      return { items, total: response.total, next: nextOffset(response, offset, limit) }
     },
     async createPlaylist(input) {
       // Validation: collaborative + public is rejected by Spotify before API call (FR-PL-3)
@@ -269,15 +288,22 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
       }
 
       // Scope check (M1-11)
-      await guard('createPlaylist', { public: input.public, collaborative: input.collaborative })
+      const token = await guard('createPlaylist', { public: input.public, collaborative: input.collaborative })
 
-      // Get token for API call
-      const token = await auth.requireScopes(
-        requiredScopes('createPlaylist', { public: input.public, collaborative: input.collaborative })
+      const response = await http.requestJson(
+        {
+          method: 'POST',
+          url: `${SPOTIFY_API_BASE}/me/playlists`,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: input.name,
+            description: input.description,
+            public: input.public,
+            collaborative: input.collaborative ?? false,
+          }),
+        },
+        validateObject('create playlist')
       )
-
-      // Make API call
-      const response = await auth.createPlaylist(input, token.accessToken)
 
       // Map response to PlaylistSummary
       const itemsReadable = determineItemsReadable(
@@ -290,12 +316,14 @@ export function createSpotifyProvider(clientId: string, configDir?: string): Pro
     async removePlaylist(ref) {
       // Scope check (M1-11)
       await guard('removePlaylist')
+      const id = playlistId(ref)
 
-      // Get token for API call
-      const token = await auth.requireScopes(requiredScopes('removePlaylist'))
-
-      // Make API call
-      await auth.removePlaylist(ref, token.accessToken)
+      // DELETE /me/library returns 200 with an empty body on success.
+      const uri = `spotify:playlist:${id}`
+      await http.request({
+        method: 'DELETE',
+        url: `${SPOTIFY_API_BASE}/me/library?uris=${encodeURIComponent(uri)}`,
+      })
 
       return { action: 'unfollowed' }
     },
