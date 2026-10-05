@@ -44,7 +44,7 @@ describe('KnownRefStrategy', () => {
       durationMs: 180000,
       refs: {
         spotify: 'spotify:track:123',
-        'youtube-music': 'AAAABBBBCCCC',
+        'youtube-music': 'dQw4w9WgXcQ',
       },
     }
 
@@ -58,7 +58,7 @@ describe('KnownRefStrategy', () => {
     const result = await strategy.execute(request, mockProvider)
     assert.notStrictEqual(result, null)
     assert.strictEqual(result!.confidence, 1.0)
-    assert.strictEqual(result!.trackRef, 'AAAABBBBCCCC')
+    assert.strictEqual(result!.trackRef, 'dQw4w9WgXcQ')
   })
 
   test('should return null when no known ref exists', async () => {
@@ -135,7 +135,7 @@ describe('KnownRefStrategy', () => {
       artists: ['Artist'],
       refs: {
         spotify: 'spotify:track:111',
-        'youtube-music': 'YYYYZZZZxxxx',
+        'youtube-music': 'jNQXAC9IVRw',
         'amazon-music': 'amzn:track:222',
       },
     }
@@ -158,7 +158,7 @@ describe('KnownRefStrategy', () => {
       capabilities: { paginationModel: 'page-offset', maxTracksPerRequest: 50 },
     }
     const youtubeResult = await strategy.execute(youtubeRequest, mockProvider)
-    assert.strictEqual(youtubeResult!.trackRef, 'YYYYZZZZxxxx')
+    assert.strictEqual(youtubeResult!.trackRef, 'jNQXAC9IVRw')
 
     // Test Amazon Music lookup
     const amazonRequest = {
