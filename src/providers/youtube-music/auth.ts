@@ -6,6 +6,8 @@ import { AuthRequiredError, ProviderError } from '../../core/provider/errors.js'
 
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+// Google only returns a refresh_token for offline access, and on repeat consent only with prompt=consent
+const GOOGLE_AUTH_PARAMS = { access_type: 'offline', prompt: 'consent' }
 
 export class YouTubeMusicAuth implements ProviderAuth {
   private config: OAuthConfig
@@ -37,6 +39,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
       clientId: this.config.clientId,
       clientSecret: this.config.clientSecret,
       scopes,
+      extraAuthParams: GOOGLE_AUTH_PARAMS,
     }
 
     const handler = new OAuthHandler(config, GOOGLE_AUTHORIZE_URL)

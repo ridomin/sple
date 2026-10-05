@@ -13,6 +13,7 @@ export interface OAuthConfig {
   clientSecret?: string // Required for some providers (e.g., Google)
   scopes: string[]
   redirectUri?: string // Defaults to loopback handler's URI
+  extraAuthParams?: Record<string, string> // Provider-specific authorization params (e.g., Google's access_type)
 }
 
 /**

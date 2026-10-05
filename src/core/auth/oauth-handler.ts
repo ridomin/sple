@@ -365,6 +365,10 @@ export class OAuthHandler {
 
   private buildAuthorizationUrl(codeChallenge: string, state: string, redirectUri: string): string {
     const url = new URL(this.authorizationEndpoint)
+    // Extras first, so the standard params below always win
+    for (const [key, value] of Object.entries(this.config.extraAuthParams ?? {})) {
+      url.searchParams.set(key, value)
+    }
     url.searchParams.set('client_id', this.config.clientId)
     url.searchParams.set('response_type', 'code')
     url.searchParams.set('code_challenge', codeChallenge)

@@ -233,6 +233,30 @@ test('OAuthHandler', async (t) => {
     await assert.rejects(handler.completeLogin(login), /requires/)
   })
 
+  await t.test('adds extraAuthParams to the authorization URL', async () => {
+    const handler = new OAuthHandler(
+      { ...config, extraAuthParams: { access_type: 'offline', prompt: 'consent' } },
+      endpoint
+    )
+    const login = await handler.initiateLogin('manual')
+    const u = new URL(login.authorizationUrl)
+    assert.equal(u.searchParams.get('access_type'), 'offline')
+    assert.equal(u.searchParams.get('prompt'), 'consent')
+    assert.equal(u.searchParams.get('client_id'), 'test-client-id')
+  })
+
+  await t.test('extraAuthParams cannot override PKCE, state or redirect parameters', async () => {
+    const handler = new OAuthHandler(
+      { ...config, extraAuthParams: { state: 'forged', redirect_uri: 'https://evil.example/cb', code_challenge_method: 'plain' } },
+      endpoint
+    )
+    const login = await handler.initiateLogin('manual')
+    const u = new URL(login.authorizationUrl)
+    assert.equal(u.searchParams.get('state'), login.state)
+    assert.equal(u.searchParams.get('redirect_uri'), login.redirectUri)
+    assert.equal(u.searchParams.get('code_challenge_method'), 'S256')
+  })
+
   await t.test('state is random per login', async () => {
     const handler = new OAuthHandler(config, endpoint)
     const a = await handler.initiateLogin('manual')
