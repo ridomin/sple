@@ -1,0 +1,19 @@
+{
+  "id": "test-playlist",
+  "snippet": {
+    "title": "Test Playlist",
+    "description": "A test playlist",
+    "channelTitle": "Test Channel",
+    "thumbnails": {
+      "high": {
+        "url": "https://example.com/image.jpg"
+      }
+    }
+  },
+  "contentDetails": {
+    "itemCount": 5
+  },
+  "status": {
+    "privacyStatus": "private"
+  }
+}
