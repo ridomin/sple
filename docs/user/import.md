@@ -1,8 +1,6 @@
 # Importing Playlists
 
-`sple import` matches tracks from an exported canonical file against your target provider and produces a match report.
-
-> **Status:** matching and reporting are implemented. Creating the playlist on the target provider is not implemented yet; after confirmation `sple import` currently prints a placeholder message.
+`sple import` matches tracks from an exported canonical file against your target provider, produces a match report, and (after confirmation) creates a new private playlist with the matched tracks.
 
 ## Basic Usage
 
@@ -53,7 +51,7 @@ Name for the new playlist. Default: original playlist name from the file.
 Save a match report to the given file. Can be `.json` (machine-readable) or `.txt` (human-readable).
 
 ### `--min-confidence`
-Minimum confidence score to automatically match a track (0–1). Below this threshold, matches are marked as "low-confidence" and listed in the report for review.
+Minimum confidence score to automatically match a track (0–1). Below this threshold, matches are marked as "low-confidence", listed in the report for review, and **not added** to the playlist.
 
 Default: `0.5` (50%)
 
@@ -95,11 +93,11 @@ Low-Confidence Matches
 42: Song Name (remix) → Song Name (78%)
 ```
 
-You can review these manually:
+Low-confidence matches are left out of the created playlist. To include them:
 
 1. Check the match report for each low-confidence track.
-2. If the suggested match is correct, you can proceed with import.
-3. If it's wrong, edit the canonical file (JSON only) to add the correct track ref, then re-run import.
+2. If the suggested matches are correct, re-run with a lower `--min-confidence`.
+3. Otherwise, edit the canonical file (JSON only) to add the correct track ref, then re-run import.
 
 ### Unmatched Tracks
 
@@ -116,6 +114,14 @@ Options:
 - **Add the track manually** to the created playlist after import.
 - **Edit the file** (JSON) to add known refs for these tracks, then re-run.
 - **Accept the import** without these tracks.
+
+## Creating the Playlist
+
+After you confirm (or with `--yes`), `sple` creates a private playlist and adds the matched tracks in their original order.
+
+- If the provider rejects some tracks, each one is listed with its error, followed by a summary such as `sple: added 98 of 100 tracks; 2 failed (see above)`. The command exits with code 1 (with `--json`, the last stderr line is a `PartialFailure` error).
+- If adding tracks stops entirely (for example, the quota runs out), `sple` prints the created playlist's link or ID and exits with that error's code (5 for quota, 3 for authentication). The playlist may already contain some of the tracks.
+- If the provider requires a permission you haven't granted, run `sple auth login` again.
 
 ## Known Limitations
 
