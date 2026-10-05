@@ -24,24 +24,28 @@ export class YouTubeMusicAuth implements ProviderAuth {
     }
   }
 
-  async login(opts: { mode: LoginMode; scopes: string[] }): Promise<AuthStatus> {
+  async login(opts: { mode: LoginMode; scopes: string[]; interaction?: any }): Promise<AuthStatus> {
+    if (!opts.interaction) {
+      throw new ProviderError('YouTube Music login requires an interactive session')
+    }
+
+    const scopes = (opts.scopes?.length ?? 0) > 0 ? opts.scopes : this.config.scopes
     const config: OAuthConfig = {
       clientId: this.config.clientId,
       clientSecret: this.config.clientSecret,
-      scopes: (opts.scopes?.length ?? 0) > 0 ? opts.scopes : this.config.scopes,
+      scopes,
     }
 
     const handler = new OAuthHandler(config, GOOGLE_AUTHORIZE_URL)
     this.oauthHandler = handler
 
     try {
-      const login = await handler.initiateLogin(opts.mode as 'loopback' | 'no-browser' | 'manual')
-      const redirect = await handler.completeLogin(login)
+      const redirect = await handler.runLogin(opts.mode as 'loopback' | 'no-browser' | 'manual', opts.interaction)
 
       const tokenResult = await this.exchangeCodeForToken(
         redirect.code,
         redirect.codeVerifier,
-        login.redirectUri
+        redirect.redirectUri
       )
 
       const storedToken: StoredToken = {
