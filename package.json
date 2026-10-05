@@ -9,7 +9,8 @@
   },
   "exports": {
     ".": "./dist/index.js",
-    "./providers/fake": "./dist/providers/fake/index.js"
+    "./providers/fake": "./dist/providers/fake/index.js",
+    "./schemas/canonical-playlist.v1.schema.json": "./schemas/canonical-playlist.v1.schema.json"
   },
   "scripts": {
     "build": "tsc",
@@ -40,6 +41,8 @@
   "devDependencies": {
     "@types/debug": "^4.1.13",
     "@types/node": "^22.0.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "tsx": "^4.7.0",
     "typescript": "^7.0.2"
   }

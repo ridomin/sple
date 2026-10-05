@@ -209,3 +209,88 @@ export async function collectAll<T>(
   // Return results, respecting maxResults if set
   return maxResults ? results.slice(0, maxResults) : results
 }
+
+export interface PageProgress {
+  /** Pages fetched so far */
+  pages: number
+  /** Total pages, when the provider reported a total on the first page */
+  totalPages?: number
+  /** Items collected so far */
+  items: number
+  /** Total items reported by the provider on the first page */
+  total?: number
+}
+
+export interface CollectPagesOptions {
+  /** Size of each page request (must not exceed the provider's per-request cap) */
+  pageSize: number
+  /** Maximum concurrent page requests once the total is known (default 4) */
+  concurrency?: number
+  /** Pagination model of the provider (default 'offset') */
+  model?: 'offset' | 'cursor-forward'
+  /** Called after every fetched page */
+  onPage?: (progress: PageProgress) => void
+}
+
+/**
+ * Read every page of a paginated provider endpoint, preserving order.
+ *
+ * - The first page is fetched alone. If the provider is offset-paginated and
+ *   reports `total`, the remaining offsets (`pageSize`, `2 * pageSize`, …) are
+ *   fetched with bounded concurrency.
+ * - Otherwise (no `total`, or cursor pagination) pages are read one after the
+ *   other by following `next`.
+ * - Offsets advance by `pageSize`, not by the number of items returned, so a
+ *   provider that drops items from a page (unsupported items, client-side
+ *   filters) does not shift later pages.
+ *
+ * Returns the items plus the `total` the provider reported on the first page.
+ */
+export async function collectPages<T>(
+  fetchPage: (pageRequest: PageRequest) => Promise<Page<T>>,
+  options: CollectPagesOptions
+): Promise<{ items: T[]; total?: number }> {
+  const { pageSize, concurrency = 4, model = 'offset', onPage } = options
+  if (!Number.isInteger(pageSize) || pageSize <= 0) {
+    throw new UsageError('pageSize must be a positive integer')
+  }
+
+  const first = await fetchPage(model === 'offset' ? { limit: pageSize, offset: 0 } : { limit: pageSize })
+  const items: T[] = [...first.items]
+  const total = first.total
+  const totalPages =
+    model === 'offset' && total !== undefined ? Math.max(1, Math.ceil(total / pageSize)) : undefined
+  let pages = 1
+  onPage?.({ pages, totalPages, items: items.length, total })
+
+  let next = first.next
+
+  if (model === 'offset' && total !== undefined && next) {
+    const offsets: number[] = []
+    for (let offset = pageSize; offset < total; offset += pageSize) offsets.push(offset)
+
+    let last: Page<T> | undefined
+    for (let i = 0; i < offsets.length; i += Math.max(1, concurrency)) {
+      const batch = offsets.slice(i, i + Math.max(1, concurrency))
+      const results = await Promise.all(batch.map((offset) => fetchPage({ limit: pageSize, offset })))
+      for (const page of results) {
+        items.push(...page.items)
+        pages++
+        onPage?.({ pages, totalPages, items: items.length, total })
+        last = page
+      }
+    }
+    // If the collection grew while reading, keep following `next` from the last page.
+    next = last ? last.next : undefined
+  }
+
+  while (next && (next.offset !== undefined || next.cursor !== undefined)) {
+    const page = await fetchPage({ limit: pageSize, ...next })
+    items.push(...page.items)
+    pages++
+    onPage?.({ pages, totalPages, items: items.length, total })
+    next = page.next
+  }
+
+  return { items, total }
+}

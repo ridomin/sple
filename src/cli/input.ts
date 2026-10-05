@@ -76,11 +76,12 @@ export async function confirm(question: string, yes: boolean): Promise<boolean> 
   }
 
   const { createInterface: createReadlineInterface } = await import('node:readline/promises')
-  const { stdin: readlineStdin, stdout: readlineStdout } = await import('node:process')
+  const { stdin: readlineStdin, stderr: readlineStderr } = await import('node:process')
 
+  // Prompts go to stderr so stdout carries only the command result (ADR 0007 §7).
   const rl = createReadlineInterface({
     input: readlineStdin,
-    output: readlineStdout,
+    output: readlineStderr,
   })
 
   try {

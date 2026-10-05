@@ -73,6 +73,7 @@ export class FakeProvider implements Provider {
     // Build capabilities with proper types
     const caps: any = {
       canDeletePlaylist: config.capabilities?.canDeletePlaylist ?? true,
+      supportsCollaborative: config.capabilities?.supportsCollaborative ?? true,
       canCreatePlaylist: true,
       isrcSearchMode: config.capabilities?.isrcSearchMode ?? 'none',
       playlistItemsAccess: config.capabilities?.playlistItemsAccess ?? 'all',
