@@ -1,6 +1,8 @@
-import type { Provider } from '../../core/provider/provider.js'
+import type { Provider, PageRequest } from '../../core/provider/provider.js'
 import type { ProviderCapabilities } from '../../core/provider/capabilities.js'
+import { HttpClient } from '../../core/http/client.js'
 import { YouTubeMusicAuth } from './auth.js'
+import { YouTubeMusicHttpClient } from './client.js'
 
 const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
   official: true,
@@ -27,22 +29,93 @@ export function createYouTubeMusicProvider(
   clientSecret: string,
   configDir?: string
 ): Provider {
+  const auth = new YouTubeMusicAuth(clientId, clientSecret, configDir)
+
+  const http = new HttpClient({
+    providerId: 'youtube-music',
+    getToken: () => auth.getToken(),
+    refresh: (token) => auth.refresh(token),
+    onResponse: undefined,
+  })
+
+  const client = new YouTubeMusicHttpClient(http)
+
   return {
     id: 'youtube-music',
     displayName: 'YouTube Music',
     capabilities: YOUTUBE_MUSIC_CAPABILITIES,
-    auth: new YouTubeMusicAuth(clientId, clientSecret, configDir),
-    // Ref parsing lands with the YouTube Music adapter; until then every input
-    // falls back to name lookup.
-    parsePlaylistRef: () => null,
-    search: () => Promise.reject(new Error('Not implemented')),
-    listPlaylists: () => Promise.reject(new Error('Not implemented')),
-    getPlaylist: () => Promise.reject(new Error('Not implemented')),
-    getPlaylistTracks: () => Promise.reject(new Error('Not implemented')),
-    getLikedTracks: () => Promise.reject(new Error('Not implemented')),
-    createPlaylist: () => Promise.reject(new Error('Not implemented')),
-    removePlaylist: () => Promise.reject(new Error('Not implemented')),
-    resolveTrack: () => Promise.reject(new Error('Not implemented')),
-    populatePlaylist: () => Promise.reject(new Error('Not implemented')),
+    auth,
+
+    parsePlaylistRef: (ref: string) => {
+      try {
+        const url = new URL(ref)
+        return url.searchParams.get('list') || null
+      } catch {
+        return null
+      }
+    },
+
+    async search(q, page: PageRequest) {
+      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      const tracks = await client.searchTracks(
+        { text: q.text },
+        { limit: page.limit, cursor: page.cursor as string | undefined }
+      )
+      return { items: tracks }
+    },
+
+    async listPlaylists(page: PageRequest) {
+      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      return await client.listPlaylists({
+        limit: page.limit,
+        cursor: page.cursor as string | undefined
+      })
+    },
+
+    async getPlaylist(ref: string) {
+      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      return await client.getPlaylist(ref)
+    },
+
+    async getPlaylistTracks(ref: string, page: PageRequest) {
+      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      return await client.getPlaylistTracks(
+        ref,
+        { limit: page.limit, cursor: page.cursor as string | undefined }
+      )
+    },
+
+    async getLikedTracks(page?: PageRequest) {
+      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      // YouTube API doesn't expose liked songs directly; return empty for now
+      // TODO: Implement via favorites or watch history (M4a spike S5)
+      return []
+    },
+
+    async createPlaylist(input) {
+      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      return await client.createPlaylist({
+        name: input.name,
+        description: input.description,
+        public: input.public ?? true,
+      })
+    },
+
+    async removePlaylist(ref: string) {
+      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      return await client.removePlaylist(ref)
+    },
+
+    async resolveTrack(track, opts) {
+      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      return await client.resolveTrack(track, {
+        maxCandidates: opts?.maxCandidates ?? 10
+      })
+    },
+
+    async populatePlaylist(ref: string, trackRefs: string[], opts) {
+      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      return await client.populatePlaylist(ref, trackRefs, opts)
+    },
   }
 }
