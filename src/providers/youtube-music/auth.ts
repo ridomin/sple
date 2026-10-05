@@ -20,7 +20,10 @@ export class YouTubeMusicAuth implements ProviderAuth {
     this.config = {
       clientId,
       clientSecret,
-      scopes: ['https://www.googleapis.com/auth/youtube'],
+      scopes: [
+        'https://www.googleapis.com/auth/youtube',
+        'https://www.googleapis.com/auth/userinfo.profile'
+      ],
     }
   }
 
