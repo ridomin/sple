@@ -1,278 +1,304 @@
-import { HttpClient } from '../../core/http/client.js';
-import {
-  AuthRequiredError,
-  AccessRestrictedError,
-  NotFoundError,
-  RateLimitError,
-  QuotaExhaustedError,
-  UsageError
-} from '../../core/provider/errors.js';
-import { PlaylistSummary, CanonicalTrack, MatchCandidate } from '../../core/provider/provider.js';
-import * as YouTubeTypes from './types.js';
+import { HttpClient } from '../../core/http/client.js'
+import { PlaylistSummary, CanonicalTrack, MatchCandidate } from '../../core/provider/provider.js'
+import * as YouTubeTypes from './types.js'
 
 export class YouTubeMusicHttpClient {
-  private readonly baseUrl = 'https://www.googleapis.com/youtube/v3';
+  private readonly baseUrl = 'https://www.googleapis.com/youtube/v3'
 
-  constructor(private httpClient: HttpClient, private apiKey: string = '') {}
+  constructor(private httpClient: HttpClient) {}
 
-  async listPlaylists(options?: { limit?: number; pageToken?: string }): Promise<{
-    playlists: PlaylistSummary[];
-    total: number;
-    nextPageToken?: string;
-  }> {
-    const maxResults = options?.limit ?? 50;
-    const response = await this.request<YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubePlaylist>>(
-      'GET',
-      '/playlists',
-      { part: 'snippet,contentDetails,status', mine: true, maxResults, pageToken: options?.pageToken }
-    );
-
-    return {
-      playlists: response.items.map(p => this.youtubePlaylistToCanonical(p)),
-      total: response.pageInfo.totalResults,
-      nextPageToken: response.nextPageToken
-    };
-  }
-
-  async getPlaylist(playlistId: string): Promise<PlaylistSummary> {
-    const response = await this.request<YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubePlaylist>>(
-      'GET',
-      '/playlists',
-      { part: 'snippet,contentDetails,status', id: playlistId }
-    );
-
-    if (!response.items.length) {
-      throw new NotFoundError(`Playlist ${playlistId} not found`);
+  async listPlaylists(page?: { limit?: number; cursor?: string }): Promise<PlaylistSummary[]> {
+    const maxResults = page?.limit ?? 50
+    const url = new URL(this.baseUrl + '/playlists')
+    url.searchParams.set('part', 'snippet,contentDetails,status')
+    url.searchParams.set('mine', 'true')
+    url.searchParams.set('maxResults', String(maxResults))
+    if (page?.cursor) {
+      url.searchParams.set('pageToken', page.cursor)
     }
-    return this.youtubePlaylistToCanonical(response.items[0]);
+
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubePlaylist>
+    )
+
+    return body.items.map(p => this.youtubePlaylistToCanonical(p))
   }
 
-  async getPlaylistTracks(playlistId: string, options?: { limit?: number; pageToken?: string }): Promise<{
-    tracks: CanonicalTrack[];
-    total: number;
-    nextPageToken?: string;
-  }> {
-    const maxResults = options?.limit ?? 50;
-    const response = await this.request<YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubePlaylistItem>>(
-      'GET',
-      '/playlistItems',
-      { part: 'snippet,contentDetails', playlistId, maxResults, pageToken: options?.pageToken }
-    );
+  async getPlaylist(ref: string): Promise<PlaylistSummary> {
+    const playlistId = this.extractPlaylistId(ref)
+    if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
 
-    const videoIds = response.items
+    const url = new URL(this.baseUrl + '/playlists')
+    url.searchParams.set('part', 'snippet,contentDetails,status')
+    url.searchParams.set('id', playlistId)
+
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubePlaylist>
+    )
+
+    if (!body.items.length) throw new Error(`Playlist not found: ${ref}`)
+    return this.youtubePlaylistToCanonical(body.items[0])
+  }
+
+  async getPlaylistTracks(ref: string, page?: { limit?: number; cursor?: string }): Promise<CanonicalTrack[]> {
+    const playlistId = this.extractPlaylistId(ref)
+    if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
+
+    const maxResults = page?.limit ?? 50
+    const url = new URL(this.baseUrl + '/playlistItems')
+    url.searchParams.set('part', 'snippet,contentDetails')
+    url.searchParams.set('playlistId', playlistId)
+    url.searchParams.set('maxResults', String(maxResults))
+    if (page?.cursor) {
+      url.searchParams.set('pageToken', page.cursor)
+    }
+
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubePlaylistItem>
+    )
+
+    const videoIds = body.items
       .map(item => item.contentDetails?.videoId || item.snippet.resourceId.videoId)
-      .filter(Boolean);
+      .filter(Boolean)
 
-    const videos = videoIds.length > 0 ? await this.getVideos(videoIds) : [];
-    const videoMap = new Map(videos.map(v => [v.id, v]));
+    if (videoIds.length === 0) return []
 
-    return {
-      tracks: response.items
-        .map((item, idx) => {
-          const videoId = item.contentDetails?.videoId || item.snippet.resourceId.videoId;
-          const video = videoMap.get(videoId);
-          return video ? this.youtubeVideoToCanonical(video, item.snippet.publishedAt) : null;
-        })
-        .filter((t): t is CanonicalTrack => t !== null),
-      total: response.pageInfo.totalResults,
-      nextPageToken: response.nextPageToken
-    };
-  }
+    const videos = await this.getVideos(videoIds)
+    const videoMap = new Map(videos.map(v => [v.id, v]))
 
-  async createPlaylist(name: string, description?: string): Promise<PlaylistSummary> {
-    const response = await this.request<YouTubeTypes.YouTubePlaylist>(
-      'POST',
-      '/playlists',
-      { part: 'snippet,status' },
-      {
-        snippet: { title: name, description: description ?? '' },
-        status: { privacyStatus: 'private' }
-      }
-    );
-    return this.youtubePlaylistToCanonical(response);
-  }
-
-  async deletePlaylist(playlistId: string): Promise<void> {
-    await this.request('DELETE', '/playlists', { id: playlistId });
-  }
-
-  async addTracksToPlaylist(playlistId: string, videoIds: string[]): Promise<void> {
-    for (const videoId of videoIds) {
-      await this.request(
-        'POST',
-        '/playlistItems',
-        { part: 'snippet' },
-        {
-          snippet: {
-            playlistId,
-            resourceId: { kind: 'youtube#video', videoId }
-          }
+    return body.items
+      .map(item => {
+        const videoId = item.contentDetails?.videoId || item.snippet.resourceId.videoId
+        const video = videoMap.get(videoId)
+        if (!video) return null
+        const track = this.youtubeVideoToCanonical(video)
+        if (track && item.snippet.publishedAt) {
+          track.addedAt = item.snippet.publishedAt
         }
-      );
+        return track
+      })
+      .filter((t): t is CanonicalTrack => t !== null)
+  }
+
+  async searchTracks(q: { text: string }, page?: { limit?: number; cursor?: string }): Promise<CanonicalTrack[]> {
+    const maxResults = page?.limit ?? 50
+    const url = new URL(this.baseUrl + '/search')
+    url.searchParams.set('part', 'snippet')
+    url.searchParams.set('type', 'video')
+    url.searchParams.set('q', q.text)
+    url.searchParams.set('maxResults', String(maxResults))
+    if (page?.cursor) {
+      url.searchParams.set('pageToken', page.cursor)
     }
-  }
 
-  async removeTracksFromPlaylist(playlistId: string, videoIds: string[]): Promise<void> {
-    // Get all items in playlist
-    const items = await this.request<YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubePlaylistItem>>(
-      'GET',
-      '/playlistItems',
-      { part: 'snippet,contentDetails', playlistId, maxResults: 50 }
-    );
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubeSearchResult>
+    )
 
-    for (const item of items.items) {
-      const videoId = item.contentDetails?.videoId || item.snippet.resourceId.videoId;
-      if (videoIds.includes(videoId)) {
-        await this.request('DELETE', '/playlistItems', { id: item.id });
-      }
-    }
-  }
+    const videoIds = body.items.filter(item => item.id.videoId).map(item => item.id.videoId!)
 
-  async searchTracks(query: string, options?: { limit?: number; pageToken?: string }): Promise<{
-    tracks: CanonicalTrack[];
-    total: number;
-    nextPageToken?: string;
-  }> {
-    const maxResults = options?.limit ?? 50;
-    const response = await this.request<YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubeSearchResult>>(
-      'GET',
-      '/search',
-      { part: 'snippet', type: 'video', q: query, maxResults, pageToken: options?.pageToken }
-    );
+    if (videoIds.length === 0) return []
 
-    const videoIds = response.items
-      .filter(item => item.id.videoId)
-      .map(item => item.id.videoId!);
-
-    const videos = videoIds.length > 0 ? await this.getVideos(videoIds) : [];
-
-    return {
-      tracks: videos.map(v => this.youtubeVideoToCanonical(v)).filter((t): t is CanonicalTrack => t !== null),
-      total: response.pageInfo.totalResults,
-      nextPageToken: response.nextPageToken
-    };
-  }
-
-  async resolveTrack(title: string, artists: string[], album?: string): Promise<MatchCandidate[]> {
-    const query = `${title} ${artists.join(' ')}`;
-    const response = await this.request<YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubeSearchResult>>(
-      'GET',
-      '/search',
-      { part: 'snippet', type: 'video', q: query, maxResults: 10 }
-    );
-
-    const videoIds = response.items
-      .filter(item => item.id.videoId)
-      .map(item => item.id.videoId!);
-
-    const videos = videoIds.length > 0 ? await this.getVideos(videoIds) : [];
-
+    const videos = await this.getVideos(videoIds)
     return videos
-      .map(v => ({
-        trackRef: v.id,
-        confidence: this.calculateConfidence(title, artists, v),
-        metadata: {
-          providerTrackId: v.id,
-          title: v.snippet.title,
-          artists: [v.snippet.channelTitle],
-          duration: this.parseDuration(v.contentDetails?.duration)
+      .map(v => this.youtubeVideoToCanonical(v))
+      .filter((t): t is CanonicalTrack => t !== null)
+  }
+
+  async resolveTrack(track: CanonicalTrack, opts: { maxCandidates: number }): Promise<MatchCandidate[]> {
+    const query = `${track.title} ${track.artists.join(' ')}`
+    const url = new URL(this.baseUrl + '/search')
+    url.searchParams.set('part', 'snippet')
+    url.searchParams.set('type', 'video')
+    url.searchParams.set('q', query)
+    url.searchParams.set('maxResults', String(opts.maxCandidates))
+
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubeSearchResult>
+    )
+
+    const videoIds = body.items.filter(item => item.id.videoId).map(item => item.id.videoId!)
+
+    if (videoIds.length === 0) return []
+
+    const videos = await this.getVideos(videoIds)
+
+    const candidates: MatchCandidate[] = []
+    for (const v of videos) {
+      const canonicalTrack = this.youtubeVideoToCanonical(v)
+      if (canonicalTrack) {
+        candidates.push({
+          ref: `https://www.youtube.com/watch?v=${v.id}`,
+          track: canonicalTrack,
+          confidence: this.calculateConfidence(track, v),
+          strategy: 'metadata'
+        })
+      }
+    }
+    return candidates
+  }
+
+  async createPlaylist(input: {
+    name: string
+    description?: string
+    public: boolean
+    collaborative?: boolean
+  }): Promise<PlaylistSummary> {
+    const url = new URL(this.baseUrl + '/playlists')
+    url.searchParams.set('part', 'snippet,status')
+
+    const body = await this.httpClient.requestJson(
+      {
+        method: 'POST',
+        url: url.toString(),
+        body: JSON.stringify({
+          snippet: { title: input.name, description: input.description ?? '' },
+          status: { privacyStatus: input.public ? 'public' : 'private' }
+        })
+      },
+      (data: unknown) => data as YouTubeTypes.YouTubePlaylist
+    )
+
+    return this.youtubePlaylistToCanonical(body)
+  }
+
+  async removePlaylist(ref: string): Promise<{ action: 'deleted' | 'unfollowed' }> {
+    const playlistId = this.extractPlaylistId(ref)
+    if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
+
+    const url = new URL(this.baseUrl + '/playlists')
+    url.searchParams.set('id', playlistId)
+
+    await this.httpClient.request({ method: 'DELETE', url: url.toString() })
+    return { action: 'deleted' }
+  }
+
+  async populatePlaylist(
+    ref: string,
+    trackRefs: string[],
+    _opts: { skipExisting: boolean }
+  ): Promise<{ added: string[]; failed: Array<{ ref: string; error: string }> }> {
+    const playlistId = this.extractPlaylistId(ref)
+    if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
+
+    const added: string[] = []
+    const failed: Array<{ ref: string; error: string }> = []
+
+    for (const trackRef of trackRefs) {
+      try {
+        const videoId = this.extractVideoId(trackRef)
+        if (!videoId) {
+          failed.push({ ref: trackRef, error: 'Invalid video ID' })
+          continue
         }
-      }))
-      .filter(c => c.confidence > 0);
+
+        const url = new URL(this.baseUrl + '/playlistItems')
+        url.searchParams.set('part', 'snippet')
+
+        await this.httpClient.request({
+          method: 'POST',
+          url: url.toString(),
+          body: JSON.stringify({
+            snippet: {
+              playlistId,
+              resourceId: { kind: 'youtube#video', videoId }
+            }
+          })
+        })
+
+        added.push(trackRef)
+      } catch (err) {
+        failed.push({ ref: trackRef, error: (err as Error).message })
+      }
+    }
+
+    return { added, failed }
   }
 
   private async getVideos(videoIds: string[]): Promise<YouTubeTypes.YouTubeVideo[]> {
-    if (!videoIds.length) return [];
-    const response = await this.request<YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubeVideo>>(
-      'GET',
-      '/videos',
-      { part: 'snippet,contentDetails', id: videoIds.join(',') }
-    );
-    return response.items;
-  }
+    if (!videoIds.length) return []
 
-  private async request<T>(
-    method: string,
-    path: string,
-    query?: Record<string, any>,
-    body?: Record<string, any>
-  ): Promise<T> {
-    const url = new URL(this.baseUrl + path);
-    if (query) {
-      Object.entries(query).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== '') {
-          url.searchParams.set(k, String(v));
-        }
-      });
-    }
-    if (this.apiKey) {
-      url.searchParams.set('key', this.apiKey);
-    }
+    const url = new URL(this.baseUrl + '/videos')
+    url.searchParams.set('part', 'snippet,contentDetails')
+    url.searchParams.set('id', videoIds.join(','))
 
-    const response = await this.httpClient.request(method, url.toString(), {
-      body: body ? JSON.stringify(body) : undefined
-    });
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubeVideo>
+    )
 
-    if (response.status === 401) {
-      throw new AuthRequiredError('YouTube token expired or invalid');
-    }
-    if (response.status === 403) {
-      const error = (response.body as any)?.error?.errors?.[0]?.reason;
-      if (error === 'quotaExceeded') {
-        throw new QuotaExhaustedError('YouTube quota exceeded');
-      }
-      throw new AccessRestrictedError('Access denied by YouTube');
-    }
-    if (response.status === 404) {
-      throw new NotFoundError('Resource not found on YouTube');
-    }
-    if (response.status >= 400) {
-      throw new UsageError(`YouTube API error: ${response.status}`);
-    }
-
-    return response.body as T;
+    return body.items
   }
 
   private youtubePlaylistToCanonical(playlist: YouTubeTypes.YouTubePlaylist): PlaylistSummary {
     return {
+      ref: `https://www.youtube.com/playlist?list=${playlist.id}`,
       id: playlist.id,
       name: playlist.snippet.title,
-      description: playlist.snippet.description,
-      trackCount: playlist.contentDetails?.itemCount ?? 0,
-      ownerName: playlist.snippet.channelTitle,
-      ownerProviderId: '',
-      isPublic: playlist.status?.privacyStatus === 'public',
-      thumbnail: playlist.snippet.thumbnails?.high?.url,
-      ref: `https://www.youtube.com/playlist?list=${playlist.id}`
-    };
+      description: playlist.snippet.description || undefined,
+      owner: { id: playlist.id, displayName: playlist.snippet.channelTitle },
+      owned: true,
+      itemsReadable: true,
+      trackCount: playlist.contentDetails?.itemCount,
+      public: playlist.status?.privacyStatus === 'public',
+      url: `https://www.youtube.com/playlist?list=${playlist.id}`
+    }
   }
 
-  private youtubeVideoToCanonical(video: YouTubeTypes.YouTubeVideo, publishedAt?: string): CanonicalTrack | null {
-    if (!video.id) return null;
+  private youtubeVideoToCanonical(video: YouTubeTypes.YouTubeVideo): CanonicalTrack | null {
+    if (!video.id) return null
     return {
       title: video.snippet.title,
       artists: [video.snippet.channelTitle],
-      album: '',
-      duration: this.parseDuration(video.contentDetails?.duration),
-      ref: `https://www.youtube.com/watch?v=${video.id}`,
-      providerTrackId: video.id,
-      addedAt: publishedAt
-    };
+      album: undefined,
+      durationMs: this.parseDuration(video.contentDetails?.duration),
+      refs: {
+        'youtube-music': `https://www.youtube.com/watch?v=${video.id}`
+      },
+      addedAt: video.snippet.publishedAt
+    }
   }
 
   private parseDuration(iso8601?: string): number {
-    if (!iso8601) return 0;
-    const match = iso8601.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
-    if (!match) return 0;
-    const hours = parseInt(match[1]) || 0;
-    const minutes = parseInt(match[2]) || 0;
-    const seconds = parseInt(match[3]) || 0;
-    return (hours * 3600 + minutes * 60 + seconds) * 1000;
+    if (!iso8601) return 0
+    const match = iso8601.match(/PT(\d+H)?(\d+M)?(\d+S)?/)
+    if (!match) return 0
+    const hours = parseInt(match[1]) || 0
+    const minutes = parseInt(match[2]) || 0
+    const seconds = parseInt(match[3]) || 0
+    return (hours * 3600 + minutes * 60 + seconds) * 1000
   }
 
-  private calculateConfidence(title: string, artists: string[], video: YouTubeTypes.YouTubeVideo): number {
-    const titleMatch = title.toLowerCase().includes(video.snippet.title.toLowerCase()) ? 0.5 : 0;
-    const artistMatch = artists.some(a => video.snippet.channelTitle.toLowerCase().includes(a.toLowerCase())) ? 0.5 : 0;
-    return titleMatch + artistMatch;
+  private calculateConfidence(track: CanonicalTrack, video: YouTubeTypes.YouTubeVideo): number {
+    const titleMatch = track.title.toLowerCase().includes(video.snippet.title.toLowerCase()) ||
+      video.snippet.title.toLowerCase().includes(track.title.toLowerCase()) ? 0.5 : 0
+    const artistMatch = track.artists.some(a =>
+      video.snippet.channelTitle.toLowerCase().includes(a.toLowerCase()) ||
+      a.toLowerCase().includes(video.snippet.channelTitle.toLowerCase())
+    ) ? 0.5 : 0
+    return titleMatch + artistMatch
+  }
+
+  private extractPlaylistId(ref: string): string | null {
+    try {
+      const url = new URL(ref)
+      return url.searchParams.get('list') || null
+    } catch {
+      return null
+    }
+  }
+
+  private extractVideoId(ref: string): string | null {
+    try {
+      const url = new URL(ref)
+      return url.searchParams.get('v') || null
+    } catch {
+      return null
+    }
   }
 }

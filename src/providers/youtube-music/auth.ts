@@ -200,7 +200,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
       code_verifier: codeVerifier,
     })
 
-    const response = await fetch(GOOGLE_TOKEN_URL, {
+    const response = await fetch(new URL(GOOGLE_TOKEN_URL), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
@@ -231,7 +231,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
       client_secret: this.config.clientSecret || '',
     })
 
-    const response = await fetch(GOOGLE_TOKEN_URL, {
+    const response = await fetch(new URL(GOOGLE_TOKEN_URL), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
@@ -253,7 +253,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
   }
 
   private async revokeToken(accessToken: string): Promise<void> {
-    const response = await fetch('https://oauth2.googleapis.com/revoke', {
+    const response = await fetch(new URL('https://oauth2.googleapis.com/revoke'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ token: accessToken }).toString(),
@@ -265,7 +265,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
   }
 
   private async getUserInfo(accessToken: string): Promise<{ id: string; displayName: string }> {
-    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    const response = await fetch(new URL('https://www.googleapis.com/oauth2/v2/userinfo'), {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
 

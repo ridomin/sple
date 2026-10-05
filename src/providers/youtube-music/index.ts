@@ -66,10 +66,11 @@ export function createYouTubeMusicProvider(
 
     async listPlaylists(page: PageRequest) {
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
-      return await client.listPlaylists({
+      const playlists = await client.listPlaylists({
         limit: page.limit,
         cursor: page.cursor as string | undefined
       })
+      return { items: playlists }
     },
 
     async getPlaylist(ref: string) {
@@ -79,17 +80,18 @@ export function createYouTubeMusicProvider(
 
     async getPlaylistTracks(ref: string, page: PageRequest) {
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
-      return await client.getPlaylistTracks(
+      const tracks = await client.getPlaylistTracks(
         ref,
         { limit: page.limit, cursor: page.cursor as string | undefined }
       )
+      return { items: tracks }
     },
 
-    async getLikedTracks(page?: PageRequest) {
+    async getLikedTracks(page: PageRequest) {
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
       // YouTube API doesn't expose liked songs directly; return empty for now
       // TODO: Implement via favorites or watch history (M4a spike S5)
-      return []
+      return { items: [] }
     },
 
     async createPlaylist(input) {
