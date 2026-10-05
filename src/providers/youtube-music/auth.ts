@@ -28,7 +28,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
     const config: OAuthConfig = {
       clientId: this.config.clientId,
       clientSecret: this.config.clientSecret,
-      scopes: opts.scopes || this.config.scopes,
+      scopes: (opts.scopes?.length ?? 0) > 0 ? opts.scopes : this.config.scopes,
     }
 
     const handler = new OAuthHandler(config, GOOGLE_AUTHORIZE_URL)
@@ -77,7 +77,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
     }
 
     // Check if expired
-    if (new Date(token.expiresAt) < new Date()) {
+    if (token.expiresAt && new Date(token.expiresAt).getTime() < Date.now()) {
       if (token.refreshToken) {
         try {
           const newToken = await this.refreshToken(token.refreshToken)
@@ -133,7 +133,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
     }
 
     // Refresh if expired
-    if (new Date(token.expiresAt) < new Date()) {
+    if (token.expiresAt && new Date(token.expiresAt).getTime() < Date.now()) {
       if (token.refreshToken) {
         try {
           const newToken = await this.refreshToken(token.refreshToken)
@@ -158,7 +158,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
 
   async refresh(token: StoredToken): Promise<StoredToken> {
     if (!token.refreshToken) {
-      throw new AuthRequiredError('No refresh token available')
+      throw new AuthRequiredError('No refresh token available', 'no-token')
     }
 
     const newToken = await this.refreshToken(token.refreshToken)
@@ -176,8 +176,10 @@ export class YouTubeMusicAuth implements ProviderAuth {
   async requireScopes(scopes: string[]): Promise<StoredToken> {
     const token = await this.getToken()
     if (!token) {
-      throw new AuthRequiredError('Not logged in')
+      throw new AuthRequiredError('Not logged in', 'no-token')
     }
+    // TODO: Check if token has required scopes
+    void scopes
     // TODO: Check if token has required scopes; if not, ask for re-login
     return token
   }
@@ -191,16 +193,15 @@ export class YouTubeMusicAuth implements ProviderAuth {
     codeVerifier: string,
     redirectUri: string
   ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number }> {
-    const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      client_id: this.config.clientId,
-      client_secret: this.config.clientSecret || '',
-      redirect_uri: redirectUri,
-      code_verifier: codeVerifier,
-    })
+    const body = new URLSearchParams()
+    body.set('grant_type', 'authorization_code')
+    body.set('code', code)
+    body.set('client_id', this.config.clientId)
+    body.set('client_secret', this.config.clientSecret || '')
+    body.set('redirect_uri', redirectUri)
+    body.set('code_verifier', codeVerifier)
 
-    const response = await fetch(new URL(GOOGLE_TOKEN_URL), {
+    const response = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
@@ -224,14 +225,13 @@ export class YouTubeMusicAuth implements ProviderAuth {
   }
 
   private async refreshToken(refreshToken: string): Promise<{ accessToken: string; expiresIn?: number }> {
-    const body = new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: this.config.clientId,
-      client_secret: this.config.clientSecret || '',
-    })
+    const body = new URLSearchParams()
+    body.set('grant_type', 'refresh_token')
+    body.set('refresh_token', refreshToken)
+    body.set('client_id', this.config.clientId)
+    body.set('client_secret', this.config.clientSecret || '')
 
-    const response = await fetch(new URL(GOOGLE_TOKEN_URL), {
+    const response = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
@@ -253,10 +253,12 @@ export class YouTubeMusicAuth implements ProviderAuth {
   }
 
   private async revokeToken(accessToken: string): Promise<void> {
-    const response = await fetch(new URL('https://oauth2.googleapis.com/revoke'), {
+    const body = new URLSearchParams()
+    body.set('token', accessToken)
+    const response = await fetch('https://oauth2.googleapis.com/revoke', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ token: accessToken }).toString(),
+      body: body.toString(),
     })
 
     if (!response.ok) {
@@ -265,12 +267,12 @@ export class YouTubeMusicAuth implements ProviderAuth {
   }
 
   private async getUserInfo(accessToken: string): Promise<{ id: string; displayName: string }> {
-    const response = await fetch(new URL('https://www.googleapis.com/oauth2/v2/userinfo'), {
+    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
 
     if (!response.ok) {
-      throw new AuthRequiredError('Failed to fetch user info')
+      throw new AuthRequiredError('Failed to fetch user info', 'no-token')
     }
 
     const data = (await response.json()) as Record<string, unknown>

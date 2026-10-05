@@ -61,7 +61,17 @@ export function createYouTubeMusicProvider(
         { text: q.text },
         { limit: page.limit, cursor: page.cursor as string | undefined }
       )
-      return { items: tracks }
+
+      // Convert CanonicalTrack to SearchItem
+      const items = tracks.map((track, idx) => ({
+        id: track.refs?.['youtube-music'] || `yt-${idx}`,
+        ref: track.refs?.['youtube-music'] || '',
+        name: track.title,
+        type: 'track' as const,
+        track
+      }))
+
+      return { items }
     },
 
     async listPlaylists(page: PageRequest) {
@@ -87,7 +97,7 @@ export function createYouTubeMusicProvider(
       return { items: tracks }
     },
 
-    async getLikedTracks(page: PageRequest) {
+    async getLikedTracks(_page: PageRequest) {
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
       // YouTube API doesn't expose liked songs directly; return empty for now
       // TODO: Implement via favorites or watch history (M4a spike S5)
