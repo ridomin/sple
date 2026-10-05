@@ -4,6 +4,7 @@ export interface YouTubePlaylist {
   snippet: {
     title: string;
     description: string;
+    channelId: string;
     channelTitle: string;
     thumbnails?: { high?: { url: string } };
     publishedAt?: string;

@@ -49,7 +49,8 @@ async function getAllPlaylists(provider: Provider): Promise<PlaylistSummary[]> {
  *
  * Algorithm:
  * 1. Parse ref: call provider.parsePlaylistRef(input)
- *    - If returns a ref: fetch and return the playlist
+ *    - If returns a ref: fetch and return the playlist; if not found, continue
+ *      with name lookup (a single-word name can look like an ID)
  * 2. Exact name match:
  *    - Case-sensitive first
  *    - Then case-insensitive
@@ -59,10 +60,14 @@ async function getAllPlaylists(provider: Provider): Promise<PlaylistSummary[]> {
  */
 export async function resolvePlaylist(provider: Provider, input: string): Promise<PlaylistSummary> {
   // Step 1: Try to parse as a ref (ID, URI, or URL)
+  // A single-word name can look like an ID, so a not-found ID falls through to name lookup
   const parsedRef = provider.parsePlaylistRef(input)
   if (parsedRef !== null) {
-    const playlist = await provider.getPlaylist(parsedRef)
-    return playlist
+    try {
+      return await provider.getPlaylist(parsedRef)
+    } catch (error) {
+      if (!(error instanceof NotFoundError)) throw error
+    }
   }
 
   // Step 2: Try exact name match (case-sensitive, then case-insensitive)
