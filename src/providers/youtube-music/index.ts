@@ -57,7 +57,7 @@ export function createYouTubeMusicProvider(
 
     async search(q, page: PageRequest) {
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
-      const tracks = await client.searchTracks(
+      const { items: tracks, nextPageToken, totalResults } = await client.searchTracks(
         { text: q.text },
         { limit: page.limit, cursor: page.cursor as string | undefined }
       )
@@ -71,16 +71,24 @@ export function createYouTubeMusicProvider(
         track
       }))
 
-      return { items }
+      return {
+        items,
+        total: totalResults,
+        next: nextPageToken ? { cursor: nextPageToken } : undefined
+      }
     },
 
     async listPlaylists(page: PageRequest) {
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
-      const playlists = await client.listPlaylists({
+      const { items: playlists, nextPageToken, totalResults } = await client.listPlaylists({
         limit: page.limit,
         cursor: page.cursor as string | undefined
       })
-      return { items: playlists }
+      return {
+        items: playlists,
+        total: totalResults,
+        next: nextPageToken ? { cursor: nextPageToken } : undefined
+      }
     },
 
     async getPlaylist(ref: string) {
@@ -90,11 +98,15 @@ export function createYouTubeMusicProvider(
 
     async getPlaylistTracks(ref: string, page: PageRequest) {
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
-      const tracks = await client.getPlaylistTracks(
+      const { items, nextPageToken, totalResults } = await client.getPlaylistTracks(
         ref,
         { limit: page.limit, cursor: page.cursor as string | undefined }
       )
-      return { items: tracks }
+      return {
+        items,
+        total: totalResults,
+        next: nextPageToken ? { cursor: nextPageToken } : undefined
+      }
     },
 
     async getLikedTracks(_page: PageRequest) {

@@ -48,9 +48,10 @@ test('YouTubeMusicHttpClient', async (t) => {
       }
 
       const result = await client.listPlaylists({ limit: 50 })
-      assert.strictEqual(result.length, 1)
-      assert.strictEqual(result[0].name, 'My Playlist')
-      assert.strictEqual(result[0].trackCount, 5)
+      assert.strictEqual(result.items.length, 1)
+      assert.strictEqual(result.items[0].name, 'My Playlist')
+      assert.strictEqual(result.items[0].trackCount, 5)
+      assert.strictEqual(result.totalResults, 1)
     })
   })
 

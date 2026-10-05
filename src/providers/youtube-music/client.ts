@@ -7,7 +7,7 @@ export class YouTubeMusicHttpClient {
 
   constructor(private httpClient: HttpClient) {}
 
-  async listPlaylists(page?: { limit?: number; cursor?: string }): Promise<PlaylistSummary[]> {
+  async listPlaylists(page?: { limit?: number; cursor?: string }): Promise<{ items: PlaylistSummary[]; nextPageToken?: string; totalResults?: number }> {
     const maxResults = page?.limit ?? 50
     const url = new URL(this.baseUrl + '/playlists')
     url.searchParams.set('part', 'snippet,contentDetails,status')
@@ -22,7 +22,11 @@ export class YouTubeMusicHttpClient {
       (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubePlaylist>
     )
 
-    return body.items.map(p => this.youtubePlaylistToCanonical(p))
+    return {
+      items: body.items.map(p => this.youtubePlaylistToCanonical(p)),
+      nextPageToken: body.nextPageToken,
+      totalResults: body.pageInfo.totalResults
+    }
   }
 
   async getPlaylist(ref: string): Promise<PlaylistSummary> {
@@ -42,7 +46,7 @@ export class YouTubeMusicHttpClient {
     return this.youtubePlaylistToCanonical(body.items[0])
   }
 
-  async getPlaylistTracks(ref: string, page?: { limit?: number; cursor?: string }): Promise<CanonicalTrack[]> {
+  async getPlaylistTracks(ref: string, page?: { limit?: number; cursor?: string }): Promise<{ items: CanonicalTrack[]; nextPageToken?: string; totalResults?: number }> {
     const playlistId = this.extractPlaylistId(ref)
     if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
 
@@ -64,12 +68,12 @@ export class YouTubeMusicHttpClient {
       .map(item => item.contentDetails?.videoId || item.snippet.resourceId.videoId)
       .filter(Boolean)
 
-    if (videoIds.length === 0) return []
+    if (videoIds.length === 0) return { items: [], nextPageToken: body.nextPageToken, totalResults: body.pageInfo.totalResults }
 
     const videos = await this.getVideos(videoIds)
     const videoMap = new Map(videos.map(v => [v.id, v]))
 
-    return body.items
+    const items = body.items
       .map(item => {
         const videoId = item.contentDetails?.videoId || item.snippet.resourceId.videoId
         const video = videoMap.get(videoId)
@@ -81,9 +85,15 @@ export class YouTubeMusicHttpClient {
         return track
       })
       .filter((t): t is CanonicalTrack => t !== null)
+
+    return {
+      items,
+      nextPageToken: body.nextPageToken,
+      totalResults: body.pageInfo.totalResults
+    }
   }
 
-  async searchTracks(q: { text: string }, page?: { limit?: number; cursor?: string }): Promise<CanonicalTrack[]> {
+  async searchTracks(q: { text: string }, page?: { limit?: number; cursor?: string }): Promise<{ items: CanonicalTrack[]; nextPageToken?: string; totalResults?: number }> {
     const maxResults = page?.limit ?? 50
     const url = new URL(this.baseUrl + '/search')
     url.searchParams.set('part', 'snippet')
@@ -101,12 +111,18 @@ export class YouTubeMusicHttpClient {
 
     const videoIds = body.items.filter(item => item.id.videoId).map(item => item.id.videoId!)
 
-    if (videoIds.length === 0) return []
+    if (videoIds.length === 0) return { items: [], nextPageToken: body.nextPageToken, totalResults: body.pageInfo.totalResults }
 
     const videos = await this.getVideos(videoIds)
-    return videos
+    const items = videos
       .map(v => this.youtubeVideoToCanonical(v))
       .filter((t): t is CanonicalTrack => t !== null)
+
+    return {
+      items,
+      nextPageToken: body.nextPageToken,
+      totalResults: body.pageInfo.totalResults
+    }
   }
 
   async resolveTrack(track: CanonicalTrack, opts: { maxCandidates: number }): Promise<MatchCandidate[]> {
