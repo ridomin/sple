@@ -1,103 +1,124 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { PlaylistCreator } from '../../../src/core/import/playlist-creator.js'
-import { PlaylistError, PlaylistCreationError, PlaylistAddTracksError } from '../../../src/core/import/playlist-errors.js'
-import type { MatchReport } from '../../../src/core/matching/types.js'
+import { PlaylistCreationError, PlaylistAddTracksError } from '../../../src/core/import/playlist-errors.js'
+import { AuthRequiredError, QuotaExhaustedError } from '../../../src/core/provider/errors.js'
+import { FakeProvider } from '../../../src/providers/fake/index.js'
+import type { MatchReport, MatchResult } from '../../../src/core/matching/types.js'
+
+function makeProvider(): FakeProvider {
+  return new FakeProvider({
+    initialTracks: [
+      { id: 't1', title: 'Song 1', artists: ['A'], duration: 180000 },
+      { id: 't2', title: 'Song 2', artists: ['A'], duration: 180000 },
+      { id: 't3', title: 'Song 3', artists: ['A'], duration: 180000 },
+    ],
+  })
+}
+
+function result(position: number, status: MatchResult['status'], trackRef?: string): MatchResult {
+  return {
+    status,
+    position,
+    candidate: trackRef ? { trackRef, confidence: status === 'matched' ? 0.95 : 0.4, metadata: {} } : undefined,
+    track: { title: `Song ${position}`, artists: [], durationMs: 180000, refs: {} } as any,
+  }
+}
+
+function makeReport(results: MatchResult[]): MatchReport {
+  return {
+    importedAt: new Date().toISOString(),
+    sourceFile: { path: '/test.json', provider: 'spotify', playlistName: 'Test', trackCount: results.length },
+    targetProvider: 'fake',
+    results,
+    summary: { total: results.length, matched: 0, lowConfidence: 0, unmatched: 0, unsupported: 0 },
+  }
+}
+
+async function playlistTrackRefs(provider: FakeProvider, ref: string): Promise<string[]> {
+  const page = await provider.getPlaylistTracks(ref, {})
+  return page.items.map((t) => t.refs.fake as string)
+}
 
 test('PlaylistCreator', async (t) => {
-  let creator: PlaylistCreator
-  let mockProvider: any
-  let mockReport: MatchReport
+  await t.test('creates a private playlist with the given name', async () => {
+    const provider = makeProvider()
+    const res = await new PlaylistCreator().createPlaylistFromMatches(provider, makeReport([]), 'My Playlist')
 
-  function setupMocks() {
-    creator = new PlaylistCreator()
-    mockProvider = {
-      createPlaylist: (opts: any) => {
-        return Promise.resolve({
-          id: 'pl-123',
-          ref: 'pl-123',
-          url: 'https://example.com/pl-123',
-          name: 'My Playlist',
-          owner: { id: 'user-1' },
-          owned: true,
-          itemsReadable: true
-        })
-      },
-      populatePlaylist: (ref: string, trackRefs: string[], opts: any) => {
-        return Promise.resolve({ added: trackRefs, failed: [] })
-      }
-    }
-    mockReport = {
-      importedAt: new Date().toISOString(),
-      sourceFile: { path: '/test.json', provider: 'spotify', playlistName: 'Test', trackCount: 4 },
-      targetProvider: 'youtube-music',
-      results: [
-        { status: 'matched', candidate: { trackRef: 'track:1', confidence: 0.95, metadata: {} }, track: { title: 'Song 1', artists: [], album: '', durationMs: 180000, refs: {}, isrc: null }, position: 1 },
-        { status: 'matched', candidate: { trackRef: 'track:2', confidence: 0.92, metadata: {} }, track: { title: 'Song 2', artists: [], album: '', durationMs: 180000, refs: {}, isrc: null }, position: 2 },
-        { status: 'low-confidence', candidate: { trackRef: 'track:3', confidence: 0.55, metadata: {} }, track: { title: 'Song 3', artists: [], album: '', durationMs: 180000, refs: {}, isrc: null }, position: 3 },
-        { status: 'unmatched', track: { title: 'Song 4', artists: [], album: '', durationMs: 180000, refs: {}, isrc: null }, position: 4 }
-      ],
-      summary: { total: 4, matched: 2, lowConfidence: 1, unmatched: 1, unsupported: 0 }
-    }
-  }
-
-  await t.test('should create playlist with matched tracks', async () => {
-    setupMocks()
-    const result = await creator.createPlaylistFromMatches(mockProvider, mockReport, 'My Playlist')
-
-    assert.strictEqual(result.playlistId, 'pl-123')
-    assert.strictEqual(result.tracksAdded, 3) // Only matched + low-confidence
-    assert.strictEqual(result.tracksFailed, 0)
+    const playlist = await provider.getPlaylist(res.playlistId)
+    assert.equal(playlist.name, 'My Playlist')
+    assert.equal(playlist.public, false)
   })
 
-  await t.test('should report tracks that failed to add', async () => {
-    setupMocks()
-    mockProvider.populatePlaylist = (ref: string, trackRefs: string[], opts: any) => {
-      return Promise.resolve({ added: ['track:1', 'track:2'], failed: [{ ref: 'track:3', error: 'Invalid track' }] })
-    }
+  await t.test('adds only matched tracks, in order, skipping low-confidence and unmatched', async () => {
+    const provider = makeProvider()
+    const report = makeReport([
+      result(1, 'matched', 't1'),
+      result(2, 'low-confidence', 't3'),
+      result(3, 'unmatched'),
+      result(4, 'matched', 't2'),
+    ])
 
-    const result = await creator.createPlaylistFromMatches(mockProvider, mockReport, 'My Playlist')
+    const res = await new PlaylistCreator().createPlaylistFromMatches(provider, report, 'My Playlist')
 
-    assert.strictEqual(result.tracksAdded, 2)
-    assert.strictEqual(result.tracksFailed, 1)
+    assert.deepEqual(await playlistTrackRefs(provider, res.playlistId), ['t1', 't2'])
+    assert.equal(res.tracksAdded, 2)
+    assert.equal(res.tracksFailed, 0)
+    assert.deepEqual(res.failures, [])
   })
 
-  await t.test('should throw PlaylistCreationError if createPlaylist fails', async () => {
-    setupMocks()
-    mockProvider.createPlaylist = (opts: any) => {
-      return Promise.reject(new Error('Permission denied'))
+  await t.test('reports tracks the provider rejected', async () => {
+    const provider = makeProvider()
+    const report = makeReport([result(1, 'matched', 't1'), result(2, 'matched', 'missing')])
+
+    const res = await new PlaylistCreator().createPlaylistFromMatches(provider, report, 'My Playlist')
+
+    assert.equal(res.tracksAdded, 1)
+    assert.equal(res.tracksFailed, 1)
+    assert.deepEqual(res.failures, [{ ref: 'missing', error: 'Track not found' }])
+  })
+
+  await t.test('lets provider errors from createPlaylist propagate unchanged', async () => {
+    const provider = makeProvider()
+    const authError = new AuthRequiredError('missing scope', 'missing-scope', 'playlist-modify')
+    provider.createPlaylist = async () => {
+      throw authError
     }
 
     await assert.rejects(
-      () => creator.createPlaylistFromMatches(mockProvider, mockReport, 'My Playlist'),
+      () => new PlaylistCreator().createPlaylistFromMatches(provider, makeReport([]), 'My Playlist'),
+      (err) => err === authError
+    )
+  })
+
+  await t.test('wraps unexpected createPlaylist errors in PlaylistCreationError', async () => {
+    const provider = makeProvider()
+    provider.createPlaylist = async () => {
+      throw new Error('boom')
+    }
+
+    await assert.rejects(
+      () => new PlaylistCreator().createPlaylistFromMatches(provider, makeReport([]), 'My Playlist'),
       PlaylistCreationError
     )
   })
 
-  await t.test('should skip unmatched tracks', async () => {
-    setupMocks()
-    let capturedTracks: string[] | null = null
-    mockProvider.populatePlaylist = (ref: string, trackRefs: string[], opts: any) => {
-      capturedTracks = trackRefs
-      return Promise.resolve({ added: trackRefs, failed: [] })
-    }
+  await t.test('identifies the created playlist and keeps the cause when adding tracks fails', async () => {
+    const provider = makeProvider()
+    provider.setQuotaBucket(1)
+    const report = makeReport([result(1, 'matched', 't1'), result(2, 'matched', 't2')])
 
-    await creator.createPlaylistFromMatches(mockProvider, mockReport, 'My Playlist')
+    const err = await new PlaylistCreator()
+      .createPlaylistFromMatches(provider, report, 'My Playlist')
+      .then(
+        () => assert.fail('expected rejection'),
+        (e: unknown) => e
+      )
 
-    assert.ok(capturedTracks !== null)
-    assert.ok(!capturedTracks.includes('track:4'))
-    assert.strictEqual(capturedTracks.length, 3)
-  })
-
-  await t.test('should handle add-tracks failure gracefully', async () => {
-    setupMocks()
-    mockProvider.populatePlaylist = (ref: string, trackRefs: string[], opts: any) => {
-      return Promise.reject(new Error('Quota exceeded'))
-    }
-
-    await assert.rejects(
-      () => creator.createPlaylistFromMatches(mockProvider, mockReport, 'My Playlist'),
-      PlaylistAddTracksError
-    )
+    assert.ok(err instanceof PlaylistAddTracksError)
+    assert.ok(err.cause instanceof QuotaExhaustedError)
+    const playlist = await provider.getPlaylist(err.playlistId)
+    assert.equal(playlist.name, 'My Playlist')
+    assert.match(err.message, new RegExp(err.playlistId))
   })
 })

@@ -1,18 +1,27 @@
 export class PlaylistError extends Error {
-  constructor(message: string, public readonly code: string) {
-    super(message)
+  constructor(message: string, public readonly code: string, options?: ErrorOptions) {
+    super(message, options)
     this.name = 'PlaylistError'
   }
 }
 
 export class PlaylistCreationError extends PlaylistError {
-  constructor(message: string) {
-    super(message, 'PLAYLIST_CREATION_FAILED')
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, 'PLAYLIST_CREATION_FAILED', options)
   }
 }
 
+/**
+ * Adding tracks failed after the playlist was created. The playlist exists on
+ * the provider and may hold some of the tracks; `cause` is the provider error.
+ */
 export class PlaylistAddTracksError extends PlaylistError {
-  constructor(message: string, public readonly added: number = 0, public readonly failed: number = 0) {
-    super(message, 'PLAYLIST_ADD_TRACKS_FAILED')
+  constructor(
+    message: string,
+    public readonly playlistId: string,
+    public readonly playlistUrl: string | undefined,
+    options?: ErrorOptions
+  ) {
+    super(message, 'PLAYLIST_ADD_TRACKS_FAILED', options)
   }
 }
