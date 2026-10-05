@@ -1,124 +1,125 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
 import { createSpotifyProvider } from '../../src/providers/spotify/index.js'
 import { createYouTubeMusicProvider } from '../../src/providers/youtube-music/index.js'
-import { describe, it, expect, beforeEach } from '@jest/globals'
 
-describe('Provider Interface Compliance (E2E)', () => {
-  describe('Spotify provider', () => {
-    it('should have correct capabilities', () => {
+test('Provider Interface Compliance (E2E)', async (t) => {
+  await t.test('Spotify provider', async (t) => {
+    await t.test('should have correct capabilities', () => {
       const provider = createSpotifyProvider('test-client-id')
-      expect(provider.capabilities).toBeDefined()
-      expect(provider.capabilities.official).toBe(true)
-      expect(provider.capabilities.paginationModel).toBe('offset')
-      expect(provider.capabilities.isrcSearchMode).toBe('filter')
-      expect(provider.capabilities.playlistItemsAccess).toBe('owned-or-collaborator')
-      expect(provider.capabilities.maxTracksPerRequest).toBe(100)
+      assert.ok(provider.capabilities)
+      assert.strictEqual(provider.capabilities.official, true)
+      assert.strictEqual(provider.capabilities.paginationModel, 'offset')
+      assert.strictEqual(provider.capabilities.isrcSearchMode, 'filter')
+      assert.strictEqual(provider.capabilities.playlistItemsAccess, 'owned-or-collaborator')
+      assert.strictEqual(provider.capabilities.maxTracksPerRequest, 100)
     })
 
-    it('should implement all required methods', () => {
+    await t.test('should implement all required methods', () => {
       const provider = createSpotifyProvider('test-client-id')
-      expect(provider.id).toBe('spotify')
-      expect(provider.displayName).toBe('Spotify')
-      expect(typeof provider.parsePlaylistRef).toBe('function')
-      expect(typeof provider.search).toBe('function')
-      expect(typeof provider.listPlaylists).toBe('function')
-      expect(typeof provider.getPlaylist).toBe('function')
-      expect(typeof provider.getPlaylistTracks).toBe('function')
-      expect(typeof provider.getLikedTracks).toBe('function')
-      expect(typeof provider.createPlaylist).toBe('function')
-      expect(typeof provider.removePlaylist).toBe('function')
-      expect(typeof provider.resolveTrack).toBe('function')
-      expect(typeof provider.populatePlaylist).toBe('function')
+      assert.strictEqual(provider.id, 'spotify')
+      assert.strictEqual(provider.displayName, 'Spotify')
+      assert.strictEqual(typeof provider.parsePlaylistRef, 'function')
+      assert.strictEqual(typeof provider.search, 'function')
+      assert.strictEqual(typeof provider.listPlaylists, 'function')
+      assert.strictEqual(typeof provider.getPlaylist, 'function')
+      assert.strictEqual(typeof provider.getPlaylistTracks, 'function')
+      assert.strictEqual(typeof provider.getLikedTracks, 'function')
+      assert.strictEqual(typeof provider.createPlaylist, 'function')
+      assert.strictEqual(typeof provider.removePlaylist, 'function')
+      assert.strictEqual(typeof provider.resolveTrack, 'function')
+      assert.strictEqual(typeof provider.populatePlaylist, 'function')
     })
 
-    it('should have auth handler', () => {
+    await t.test('should have auth handler', () => {
       const provider = createSpotifyProvider('test-client-id')
-      expect(provider.auth).toBeDefined()
-      expect(typeof provider.auth.login).toBe('function')
-      expect(typeof provider.auth.status).toBe('function')
-      expect(typeof provider.auth.logout).toBe('function')
+      assert.ok(provider.auth)
+      assert.strictEqual(typeof provider.auth.login, 'function')
+      assert.strictEqual(typeof provider.auth.status, 'function')
+      assert.strictEqual(typeof provider.auth.logout, 'function')
     })
 
-    it('should parse playlist refs correctly', () => {
+    await t.test('should parse playlist refs correctly', () => {
       const provider = createSpotifyProvider('test-client-id')
-      expect(provider.parsePlaylistRef('spotify:playlist:123')).toBe('123')
-      expect(provider.parsePlaylistRef('https://open.spotify.com/playlist/123')).toBe('123')
-      expect(provider.parsePlaylistRef('123')).toBe('123')
+      assert.strictEqual(provider.parsePlaylistRef('spotify:playlist:123'), '123')
+      assert.strictEqual(provider.parsePlaylistRef('https://open.spotify.com/playlist/123'), '123')
+      assert.strictEqual(provider.parsePlaylistRef('123'), '123')
     })
   })
 
-  describe('YouTube Music provider', () => {
-    it('should have correct capabilities', () => {
+  await t.test('YouTube Music provider', async (t) => {
+    await t.test('should have correct capabilities', () => {
       const provider = createYouTubeMusicProvider('test-client-id', 'test-secret')
-      expect(provider.capabilities).toBeDefined()
-      expect(provider.capabilities.official).toBe(true)
-      expect(provider.capabilities.paginationModel).toBe('cursor-forward')
-      expect(provider.capabilities.isrcSearchMode).toBe('none')
-      expect(provider.capabilities.playlistItemsAccess).toBe('all')
-      expect(provider.capabilities.maxTracksPerRequest).toBe(1)
+      assert.ok(provider.capabilities)
+      assert.strictEqual(provider.capabilities.official, true)
+      assert.strictEqual(provider.capabilities.paginationModel, 'cursor-forward')
+      assert.strictEqual(provider.capabilities.isrcSearchMode, 'none')
+      assert.strictEqual(provider.capabilities.playlistItemsAccess, 'all')
+      assert.strictEqual(provider.capabilities.maxTracksPerRequest, 1)
     })
 
-    it('should implement all required methods', () => {
+    await t.test('should implement all required methods', () => {
       const provider = createYouTubeMusicProvider('test-client-id', 'test-secret')
-      expect(provider.id).toBe('youtube-music')
-      expect(provider.displayName).toBe('YouTube Music')
-      expect(typeof provider.parsePlaylistRef).toBe('function')
-      expect(typeof provider.search).toBe('function')
-      expect(typeof provider.listPlaylists).toBe('function')
-      expect(typeof provider.getPlaylist).toBe('function')
-      expect(typeof provider.getPlaylistTracks).toBe('function')
-      expect(typeof provider.getLikedTracks).toBe('function')
-      expect(typeof provider.createPlaylist).toBe('function')
-      expect(typeof provider.removePlaylist).toBe('function')
-      expect(typeof provider.resolveTrack).toBe('function')
-      expect(typeof provider.populatePlaylist).toBe('function')
+      assert.strictEqual(provider.id, 'youtube-music')
+      assert.strictEqual(provider.displayName, 'YouTube Music')
+      assert.strictEqual(typeof provider.parsePlaylistRef, 'function')
+      assert.strictEqual(typeof provider.search, 'function')
+      assert.strictEqual(typeof provider.listPlaylists, 'function')
+      assert.strictEqual(typeof provider.getPlaylist, 'function')
+      assert.strictEqual(typeof provider.getPlaylistTracks, 'function')
+      assert.strictEqual(typeof provider.getLikedTracks, 'function')
+      assert.strictEqual(typeof provider.createPlaylist, 'function')
+      assert.strictEqual(typeof provider.removePlaylist, 'function')
+      assert.strictEqual(typeof provider.resolveTrack, 'function')
+      assert.strictEqual(typeof provider.populatePlaylist, 'function')
     })
 
-    it('should have auth handler with real OAuth', () => {
+    await t.test('should have auth handler with real OAuth', () => {
       const provider = createYouTubeMusicProvider('test-client-id', 'test-secret')
-      expect(provider.auth).toBeDefined()
-      expect(typeof provider.auth.login).toBe('function')
-      expect(typeof provider.auth.status).toBe('function')
-      expect(typeof provider.auth.logout).toBe('function')
+      assert.ok(provider.auth)
+      assert.strictEqual(typeof provider.auth.login, 'function')
+      assert.strictEqual(typeof provider.auth.status, 'function')
+      assert.strictEqual(typeof provider.auth.logout, 'function')
     })
 
-    it('should parse playlist refs correctly', () => {
+    await t.test('should parse playlist refs correctly', () => {
       const provider = createYouTubeMusicProvider('test-client-id', 'test-secret')
-      expect(provider.parsePlaylistRef('https://www.youtube.com/playlist?list=123')).toBe('123')
-      expect(provider.parsePlaylistRef('invalid')).toBeNull()
+      assert.strictEqual(provider.parsePlaylistRef('https://www.youtube.com/playlist?list=123'), '123')
+      assert.strictEqual(provider.parsePlaylistRef('invalid'), null)
     })
   })
 
-  describe('Provider differences', () => {
-    it('Spotify should not support ISRC, YouTube should', () => {
+  await t.test('Provider differences', async (t) => {
+    await t.test('Spotify should not support ISRC, YouTube should', () => {
       const spotify = createSpotifyProvider('test-id')
       const youtube = createYouTubeMusicProvider('test-id', 'test-secret')
 
-      expect(spotify.capabilities.isrcSearchMode).toBe('filter')
-      expect(youtube.capabilities.isrcSearchMode).toBe('none')
+      assert.strictEqual(spotify.capabilities.isrcSearchMode, 'filter')
+      assert.strictEqual(youtube.capabilities.isrcSearchMode, 'none')
     })
 
-    it('Spotify uses offset pagination, YouTube uses cursor', () => {
+    await t.test('Spotify uses offset pagination, YouTube uses cursor', () => {
       const spotify = createSpotifyProvider('test-id')
       const youtube = createYouTubeMusicProvider('test-id', 'test-secret')
 
-      expect(spotify.capabilities.paginationModel).toBe('offset')
-      expect(youtube.capabilities.paginationModel).toBe('cursor-forward')
+      assert.strictEqual(spotify.capabilities.paginationModel, 'offset')
+      assert.strictEqual(youtube.capabilities.paginationModel, 'cursor-forward')
     })
 
-    it('Spotify can delete playlists, YouTube can', () => {
+    await t.test('Spotify can delete playlists, YouTube can', () => {
       const spotify = createSpotifyProvider('test-id')
       const youtube = createYouTubeMusicProvider('test-id', 'test-secret')
 
-      expect(spotify.capabilities.canDeletePlaylist).toBe(false)
-      expect(youtube.capabilities.canDeletePlaylist).toBe(true)
+      assert.strictEqual(spotify.capabilities.canDeletePlaylist, false)
+      assert.strictEqual(youtube.capabilities.canDeletePlaylist, true)
     })
 
-    it('Spotify has exact Liked Songs, YouTube has approximate', () => {
+    await t.test('Spotify has exact Liked Songs, YouTube has approximate', () => {
       const spotify = createSpotifyProvider('test-id')
       const youtube = createYouTubeMusicProvider('test-id', 'test-secret')
 
-      expect(spotify.capabilities.likedSongs.read).toBe('exact')
-      expect(youtube.capabilities.likedSongs.read).toBe('approximate')
+      assert.strictEqual(spotify.capabilities.likedSongs.read, 'exact')
+      assert.strictEqual(youtube.capabilities.likedSongs.read, 'approximate')
     })
   })
 })

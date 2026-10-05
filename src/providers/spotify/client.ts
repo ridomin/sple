@@ -1,219 +1,203 @@
-import { HttpClient } from '../../core/http/client.js';
-import {
-  AuthRequiredError,
-  AccessRestrictedError,
-  NotFoundError,
-  RateLimitError,
-  QuotaExhaustedError,
-  UsageError
-} from '../../core/provider/errors.js';
-import { PlaylistSummary, CanonicalTrack, MatchCandidate } from '../../core/provider/provider.js';
-import * as SpotifyTypes from './types.js';
+import { HttpClient } from '../../core/http/client.js'
+import { PlaylistSummary, CanonicalTrack, MatchCandidate } from '../../core/provider/provider.js'
+import * as SpotifyTypes from './types.js'
 
 export class SpotifyHttpClient {
-  private readonly baseUrl = 'https://api.spotify.com/v1';
+  private readonly baseUrl = 'https://api.spotify.com/v1'
 
   constructor(private httpClient: HttpClient) {}
 
-  async listPlaylists(
-    userId: string,
-    options: { limit?: number; offset?: number } = {}
-  ): Promise<{ playlists: PlaylistSummary[]; total: number; nextOffset?: number }> {
-    const limit = options.limit ?? 50;
-    const offset = options.offset ?? 0;
+  async getPlaylist(ref: string): Promise<PlaylistSummary> {
+    const playlistId = this.extractPlaylistId(ref)
+    if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
 
-    const response = await this.request<SpotifyTypes.SpotifyPlaylistsResponse>(
-      `GET`,
-      `/users/${userId}/playlists`,
-      { limit, offset }
-    );
+    const url = new URL(this.baseUrl + `/playlists/${playlistId}`)
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as SpotifyTypes.SpotifyPlaylist
+    )
 
-    return {
-      playlists: response.items.map(p => this.spotifyPlaylistToCanonical(p)),
-      total: response.total,
-      nextOffset: response.next ? offset + limit : undefined
-    };
+    return this.spotifyPlaylistToCanonical(body)
   }
 
-  async getPlaylist(playlistId: string): Promise<PlaylistSummary> {
-    const response = await this.request<SpotifyTypes.SpotifyPlaylist>(
-      `GET`,
-      `/playlists/${playlistId}`
-    );
-    return this.spotifyPlaylistToCanonical(response);
+  async getPlaylistTracks(ref: string, page?: { limit?: number; offset?: number }): Promise<CanonicalTrack[]> {
+    const playlistId = this.extractPlaylistId(ref)
+    if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
+
+    const limit = page?.limit ?? 50
+    const offset = page?.offset ?? 0
+
+    const url = new URL(this.baseUrl + `/playlists/${playlistId}/tracks`)
+    url.searchParams.set('limit', String(limit))
+    url.searchParams.set('offset', String(offset))
+
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as { items: SpotifyTypes.SpotifyPlaylistTrack[]; total: number; next: string | null }
+    )
+
+    return body.items
+      .filter(item => item.track !== null)
+      .map(item => this.spotifyTrackToCanonical(item.track!, item.added_at))
   }
 
-  async getPlaylistTracks(
-    playlistId: string,
-    options: { limit?: number; offset?: number } = {}
-  ): Promise<{ tracks: CanonicalTrack[]; total: number; nextOffset?: number }> {
-    const limit = options.limit ?? 50;
-    const offset = options.offset ?? 0;
+  async searchTracks(q: { text: string }, page?: { limit?: number; offset?: number }): Promise<CanonicalTrack[]> {
+    const limit = page?.limit ?? 50
+    const offset = page?.offset ?? 0
 
-    const response = await this.request<{
-      items: SpotifyTypes.SpotifyPlaylistTrack[];
-      total: number;
-      next: string | null;
-    }>(`GET`, `/playlists/${playlistId}/tracks`, { limit, offset });
+    const url = new URL(this.baseUrl + '/search')
+    url.searchParams.set('q', q.text)
+    url.searchParams.set('type', 'track')
+    url.searchParams.set('limit', String(limit))
+    url.searchParams.set('offset', String(offset))
 
-    return {
-      tracks: response.items
-        .filter(item => item.track !== null)  // Skip unavailable tracks
-        .map(item => this.spotifyTrackToCanonical(item.track!, item.added_at)),
-      total: response.total,
-      nextOffset: response.next ? offset + limit : undefined
-    };
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as SpotifyTypes.SpotifySearchResponse
+    )
+
+    return body.tracks.items.map(t => this.spotifyTrackToCanonical(t))
   }
 
-  async createPlaylist(
-    name: string,
-    description?: string,
-    isPublic?: boolean
-  ): Promise<PlaylistSummary> {
-    const user = await this.getCurrentUser();
-    const response = await this.request<SpotifyTypes.SpotifyPlaylist>(
-      `POST`,
-      `/users/${user.id}/playlists`,
-      undefined,
-      { name, description: description ?? '', public: isPublic ?? true }
-    );
-    return this.spotifyPlaylistToCanonical(response);
+  async resolveTrack(track: CanonicalTrack, opts: { maxCandidates: number }): Promise<MatchCandidate[]> {
+    const query = `track:${track.title} artist:${track.artists.join(' ')}${track.album ? ` album:${track.album}` : ''}`
+
+    const url = new URL(this.baseUrl + '/search')
+    url.searchParams.set('q', query)
+    url.searchParams.set('type', 'track')
+    url.searchParams.set('limit', String(opts.maxCandidates))
+
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as SpotifyTypes.SpotifySearchResponse
+    )
+
+    return body.tracks.items
+      .map(t => {
+        const canonical = this.spotifyTrackToCanonical(t)
+        return {
+          ref: t.uri,
+          track: canonical,
+          confidence: this.calculateConfidence(track, t),
+          strategy: 'metadata' as const
+        }
+      })
+      .filter(c => c.confidence > 0)
   }
 
-  async deletePlaylist(playlistId: string): Promise<void> {
-    await this.request(`DELETE`, `/playlists/${playlistId}/followers`);
+  async createPlaylist(input: {
+    name: string
+    description?: string
+    public: boolean
+    collaborative?: boolean
+  }): Promise<PlaylistSummary> {
+    const user = await this.getCurrentUser()
+    const url = new URL(this.baseUrl + `/users/${user.id}/playlists`)
+
+    const body = await this.httpClient.requestJson(
+      {
+        method: 'POST',
+        url: url.toString(),
+        body: JSON.stringify({
+          name: input.name,
+          description: input.description ?? '',
+          public: input.public,
+          collaborative: input.collaborative ?? false
+        })
+      },
+      (data: unknown) => data as SpotifyTypes.SpotifyPlaylist
+    )
+
+    return this.spotifyPlaylistToCanonical(body)
   }
 
-  async addTracksToPlaylist(playlistId: string, trackUris: string[]): Promise<void> {
-    for (let i = 0; i < trackUris.length; i += 100) {
-      await this.request(
-        `POST`,
-        `/playlists/${playlistId}/tracks`,
-        undefined,
-        { uris: trackUris.slice(i, i + 100) }
-      );
-    }
+  async removePlaylist(ref: string): Promise<{ action: 'deleted' | 'unfollowed' }> {
+    const playlistId = this.extractPlaylistId(ref)
+    if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
+
+    const url = new URL(this.baseUrl + `/playlists/${playlistId}/followers`)
+    await this.httpClient.request({ method: 'DELETE', url: url.toString() })
+    return { action: 'deleted' }
   }
 
-  async removeTracksFromPlaylist(playlistId: string, trackUris: string[]): Promise<void> {
-    for (let i = 0; i < trackUris.length; i += 100) {
-      await this.request(
-        `DELETE`,
-        `/playlists/${playlistId}/tracks`,
-        undefined,
-        { tracks: trackUris.slice(i, i + 100).map(uri => ({ uri })) }
-      );
-    }
-  }
+  async populatePlaylist(
+    ref: string,
+    trackRefs: string[],
+    _opts: { skipExisting: boolean }
+  ): Promise<{ added: string[]; failed: Array<{ ref: string; error: string }> }> {
+    const playlistId = this.extractPlaylistId(ref)
+    if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
 
-  async searchTracks(
-    query: string,
-    options: { limit?: number; offset?: number } = {}
-  ): Promise<{ tracks: CanonicalTrack[]; total: number; nextOffset?: number }> {
-    const limit = options.limit ?? 50;
-    const offset = options.offset ?? 0;
+    const added: string[] = []
+    const failed: Array<{ ref: string; error: string }> = []
 
-    const response = await this.request<SpotifyTypes.SpotifySearchResponse>(
-      `GET`,
-      `/search`,
-      { q: query, type: 'track', limit, offset }
-    );
+    // Spotify can accept up to 100 URIs per request
+    for (let i = 0; i < trackRefs.length; i += 100) {
+      try {
+        const batch = trackRefs.slice(i, i + 100)
+        const url = new URL(this.baseUrl + `/playlists/${playlistId}/tracks`)
 
-    return {
-      tracks: response.tracks.items.map(t => this.spotifyTrackToCanonical(t)),
-      total: response.tracks.total,
-      nextOffset: response.tracks.next ? offset + limit : undefined
-    };
-  }
+        await this.httpClient.request({
+          method: 'POST',
+          url: url.toString(),
+          body: JSON.stringify({ uris: batch })
+        })
 
-  async resolveTrack(
-    title: string,
-    artists: string[],
-    album?: string
-  ): Promise<MatchCandidate[]> {
-    const query = `track:${title} artist:${artists.join(' ')}${album ? ` album:${album}` : ''}`;
-    const response = await this.request<SpotifyTypes.SpotifySearchResponse>(
-      `GET`,
-      `/search`,
-      { q: query, type: 'track', limit: 10 }
-    );
-
-    return response.tracks.items.map(t => ({
-      trackRef: `spotify:track:${t.id}`,
-      confidence: this.calculateConfidence(title, artists, t),
-      metadata: {
-        providerTrackId: t.id,
-        title: t.name,
-        artists: t.artists.map(a => a.name),
-        album: t.album.name,
-        duration: t.duration_ms
+        added.push(...batch)
+      } catch (err) {
+        const batch = trackRefs.slice(i, i + 100)
+        batch.forEach(ref => {
+          failed.push({ ref, error: (err as Error).message })
+        })
       }
-    }));
+    }
+
+    return { added, failed }
   }
 
-  async getCurrentUser(): Promise<{ id: string; display_name: string }> {
-    const response = await this.request<SpotifyTypes.SpotifyUser>(`GET`, `/me`);
+  async getLikedTracks(page?: { limit?: number; offset?: number }): Promise<CanonicalTrack[]> {
+    const limit = page?.limit ?? 50
+    const offset = page?.offset ?? 0
+
+    const url = new URL(this.baseUrl + '/me/tracks')
+    url.searchParams.set('limit', String(limit))
+    url.searchParams.set('offset', String(offset))
+
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as { items: SpotifyTypes.SpotifyPlaylistTrack[]; total: number; next: string | null }
+    )
+
+    return body.items
+      .filter(item => item.track !== null)
+      .map(item => this.spotifyTrackToCanonical(item.track!, item.added_at))
+  }
+
+  private async getCurrentUser(): Promise<{ id: string; display_name: string }> {
+    const url = new URL(this.baseUrl + '/me')
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as SpotifyTypes.SpotifyUser
+    )
     return {
-      id: response.id,
-      display_name: response.display_name ?? 'Unknown'
-    };
-  }
-
-  private async request<T>(
-    method: string,
-    path: string,
-    query?: Record<string, any>,
-    body?: Record<string, any>
-  ): Promise<T> {
-    const url = new URL(this.baseUrl + path);
-    if (query) {
-      Object.entries(query).forEach(([k, v]) => url.searchParams.set(k, String(v)));
+      id: body.id,
+      display_name: body.display_name ?? 'Unknown'
     }
-
-    const response = await this.httpClient.request(method, url.toString(), {
-      body: body ? JSON.stringify(body) : undefined
-    });
-
-    if (response.status === 401) {
-      throw new AuthRequiredError('Spotify token expired or invalid');
-    }
-    if (response.status === 403) {
-      throw new AccessRestrictedError('Access denied by Spotify');
-    }
-    if (response.status === 404) {
-      throw new NotFoundError('Resource not found on Spotify');
-    }
-    if (response.status === 429) {
-      const retryAfter = response.headers.get('retry-after');
-      // Check if this is quota exhaustion vs rate limit
-      const body = response.body as any;
-      if (!retryAfter && body?.error?.message?.toLowerCase().includes('quota')) {
-        throw new QuotaExhaustedError('Spotify quota exceeded');
-      }
-      throw new RateLimitError(
-        'Spotify rate limit exceeded',
-        retryAfter ? parseInt(retryAfter) : 60
-      );
-    }
-    if (response.status >= 400) {
-      throw new UsageError(`Spotify API error: ${response.status}`);
-    }
-
-    return response.body as T;
   }
 
   private spotifyPlaylistToCanonical(playlist: SpotifyTypes.SpotifyPlaylist): PlaylistSummary {
     return {
+      ref: playlist.uri,
       id: playlist.id,
       name: playlist.name,
-      description: playlist.description ?? '',
+      description: playlist.description || undefined,
+      owner: { id: playlist.owner.id, displayName: playlist.owner.display_name },
+      owned: true,
+      itemsReadable: true,
       trackCount: playlist.tracks.total,
-      ownerName: playlist.owner.display_name,
-      ownerProviderId: playlist.owner.id,
-      isPublic: playlist.public,
-      thumbnail: playlist.images[0]?.url,
-      ref: playlist.uri
-    };
+      public: playlist.public,
+      url: playlist.external_urls.spotify
+    }
   }
 
   private spotifyTrackToCanonical(track: SpotifyTypes.SpotifyTrack, addedAt?: string): CanonicalTrack {
@@ -221,18 +205,36 @@ export class SpotifyHttpClient {
       title: track.name,
       artists: track.artists.map(a => a.name),
       album: track.album.name,
-      duration: track.duration_ms,
-      isrc: track.external_ids?.isrc,
-      ref: track.uri,
-      providerTrackId: track.id,
+      durationMs: track.duration_ms,
+      isrc: track.external_ids?.isrc || null,
+      refs: {
+        spotify: track.uri
+      },
       addedAt: addedAt ? new Date(addedAt).toISOString() : undefined
-    };
+    }
   }
 
-  private calculateConfidence(query: string, artists: string[], track: SpotifyTypes.SpotifyTrack): number {
-    // Simple title + artist matching; higher score = better match
-    const titleMatch = query.toLowerCase().includes(track.name.toLowerCase()) ? 0.5 : 0;
-    const artistMatch = artists.some(a => track.artists.some(ta => ta.name.toLowerCase().includes(a.toLowerCase()))) ? 0.5 : 0;
-    return titleMatch + artistMatch;
+  private calculateConfidence(track: CanonicalTrack, spotifyTrack: SpotifyTypes.SpotifyTrack): number {
+    const titleMatch = track.title.toLowerCase().includes(spotifyTrack.name.toLowerCase()) ||
+      spotifyTrack.name.toLowerCase().includes(track.title.toLowerCase()) ? 0.5 : 0
+    const artistMatch = track.artists.some(a =>
+      spotifyTrack.artists.some(sa => sa.name.toLowerCase().includes(a.toLowerCase()) ||
+        a.toLowerCase().includes(sa.name.toLowerCase()))
+    ) ? 0.5 : 0
+    return titleMatch + artistMatch
+  }
+
+  private extractPlaylistId(ref: string): string | null {
+    // Handle spotify:playlist:ID or https://open.spotify.com/playlist/ID or just ID
+    if (ref.startsWith('spotify:playlist:')) {
+      return ref.replace('spotify:playlist:', '')
+    }
+    try {
+      const url = new URL(ref)
+      const match = url.pathname.match(/\/playlist\/([a-zA-Z0-9]+)/)
+      return match ? match[1] : null
+    } catch {
+      return ref // Assume it's a raw ID
+    }
   }
 }
