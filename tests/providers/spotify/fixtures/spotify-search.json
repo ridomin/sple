@@ -1,0 +1,18 @@
+{
+  "tracks": {
+    "items": [
+      {
+        "id": "track-search-1",
+        "name": "Search Result One",
+        "artists": [{ "id": "artist-s1", "name": "Search Artist 1" }],
+        "album": { "id": "album-s1", "name": "Search Album 1", "release_date": "2024-01-01" },
+        "duration_ms": 200000,
+        "external_ids": { "isrc": "ISRC1234567890" },
+        "uri": "spotify:track:track-search-1",
+        "external_urls": { "spotify": "https://open.spotify.com/track/track-search-1" }
+      }
+    ],
+    "total": 1,
+    "next": null
+  }
+}
