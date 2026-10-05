@@ -48,19 +48,20 @@ export class YouTubeMusicAuth implements ProviderAuth {
         redirect.redirectUri
       )
 
+      const user = await this.getUserInfo(tokenResult.accessToken)
+
       const storedToken: StoredToken = {
         accessToken: tokenResult.accessToken,
         refreshToken: tokenResult.refreshToken,
         expiresAt: new Date(Date.now() + (tokenResult.expiresIn ?? 3600) * 1000).toISOString(),
         scopes: config.scopes,
-        userId: '',
+        userId: user.id,
+        displayName: user.displayName,
         grantedAt: new Date().toISOString(),
       }
 
       await saveTokens('youtube-music', storedToken, this.configDir)
       this.token = storedToken
-
-      const user = await this.getUserInfo(tokenResult.accessToken)
 
       return {
         loggedIn: true,
