@@ -12,11 +12,15 @@ const LONG_ID = 'PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf'
 const SHORT_ID = 'PLp1fQ2aB3cD4'
 const CHANNEL_ID = 'UCabcdefghijklmnopqrstuv'
 
+// Named after the URL of a playlist that does not exist
+const URL_NAMED_PLAYLIST = { id: 'PLnamedLikeAUrl0', title: 'https://music.youtube.com/playlist?list=PLmissing0000000' }
+
 /** Playlists the fake YouTube Data API knows about. */
 const PLAYLISTS = [
   { id: LONG_ID, title: 'Imported from Spotify' },
   // A name that is also ID-shaped (no spaces, ≥ 13 chars)
   { id: SHORT_ID, title: 'RoadTripMix2026' },
+  URL_NAMED_PLAYLIST,
 ]
 
 function apiPlaylist(p: { id: string; title: string }) {
@@ -97,6 +101,16 @@ test('YouTube Music playlist resolution', async (t) => {
 
   await t.test('an unknown ID is NotFoundError', async () => {
     await assert.rejects(resolvePlaylist(provider, 'PLdoesNotExist0000'), NotFoundError)
+  })
+
+  await t.test('an unknown URL is NotFoundError, without name lookup', async () => {
+    let listed = false
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (new URL(String(input instanceof Request ? input.url : input)).searchParams.get('mine') === 'true') listed = true
+      return fakeYouTubeApi(input, init)
+    }) as typeof fetch
+    await assert.rejects(resolvePlaylist(provider, URL_NAMED_PLAYLIST.title), NotFoundError)
+    assert.equal(listed, false)
   })
 
   await t.test('owner.id is the channel ID, not the playlist ID (#32)', async () => {

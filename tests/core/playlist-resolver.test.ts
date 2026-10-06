@@ -135,6 +135,28 @@ test('resolvePlaylist: throws NotFoundError when playlist does not exist', async
   )
 })
 
+test('resolvePlaylist: a missing URI does not fall back to name lookup', async () => {
+  clearPlaylistCache()
+  // A playlist named after the URI of a playlist that does not exist
+  const provider = new FakeProvider({
+    initialPlaylists: [
+      {
+        id: '1',
+        name: 'fake:playlist:missing',
+        owner: 'user-123',
+        public: true,
+        collaborative: false,
+        trackIds: [],
+      },
+    ],
+  })
+
+  await assert.rejects(
+    () => resolvePlaylist(provider, 'fake:playlist:missing'),
+    NotFoundError
+  )
+})
+
 test('resolvePlaylist: throws UsageError for ambiguous case-sensitive matches', async () => {
   clearPlaylistCache()
   const provider = new FakeProvider({

@@ -22,6 +22,8 @@ test('parseYouTubePlaylistId', async (t) => {
     [`https://example.com/playlist?list=${LONG_ID}`, null],
     ['https://www.youtube.com/playlist', null],
     ['https://www.youtube.com/playlist?list=not a valid id', null],
+    // list= must pass the same check as a bare ID
+    ['https://music.youtube.com/playlist?list=abc', null],
     [`ftp://www.youtube.com/playlist?list=${LONG_ID}`, null],
   ]
 
