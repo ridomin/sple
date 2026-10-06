@@ -1,6 +1,8 @@
 import { HttpClient } from '../../core/http/client.js'
 import { PlaylistSummary, CanonicalTrack, MatchCandidate } from '../../core/provider/provider.js'
+import { NotFoundError } from '../../core/provider/errors.js'
 import * as YouTubeTypes from './types.js'
+import { parseYouTubePlaylistId } from './playlist-ref.js'
 
 export class YouTubeMusicHttpClient {
   private readonly baseUrl = 'https://www.googleapis.com/youtube/v3'
@@ -42,7 +44,7 @@ export class YouTubeMusicHttpClient {
       (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubePlaylist>
     )
 
-    if (!body.items.length) throw new Error(`Playlist not found: ${ref}`)
+    if (!body.items.length) throw new NotFoundError(`Playlist not found: ${ref}`, 'playlist')
     return this.youtubePlaylistToCanonical(body.items[0])
   }
 
@@ -257,7 +259,7 @@ export class YouTubeMusicHttpClient {
       id: playlist.id,
       name: playlist.snippet.title,
       description: playlist.snippet.description || undefined,
-      owner: { id: playlist.id, displayName: playlist.snippet.channelTitle },
+      owner: { id: playlist.snippet.channelId, displayName: playlist.snippet.channelTitle },
       owned: true,
       itemsReadable: true,
       trackCount: playlist.contentDetails?.itemCount,
@@ -301,12 +303,7 @@ export class YouTubeMusicHttpClient {
   }
 
   private extractPlaylistId(ref: string): string | null {
-    try {
-      const url = new URL(ref)
-      return url.searchParams.get('list') || null
-    } catch {
-      return null
-    }
+    return parseYouTubePlaylistId(ref)
   }
 
   private extractVideoId(ref: string): string | null {
