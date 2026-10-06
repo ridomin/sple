@@ -3,6 +3,7 @@ import type { ProviderCapabilities } from '../../core/provider/capabilities.js'
 import { HttpClient } from '../../core/http/client.js'
 import { YouTubeMusicAuth } from './auth.js'
 import { YouTubeMusicHttpClient } from './client.js'
+import { parseYouTubePlaylistId } from './playlist-ref.js'
 
 const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
   official: true,
@@ -46,14 +47,7 @@ export function createYouTubeMusicProvider(
     capabilities: YOUTUBE_MUSIC_CAPABILITIES,
     auth,
 
-    parsePlaylistRef: (ref: string) => {
-      try {
-        const url = new URL(ref)
-        return url.searchParams.get('list') || null
-      } catch {
-        return null
-      }
-    },
+    parsePlaylistRef: parseYouTubePlaylistId,
 
     async search(q, page: PageRequest) {
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
