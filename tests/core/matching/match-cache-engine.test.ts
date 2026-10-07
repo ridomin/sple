@@ -99,3 +99,29 @@ test('strategy order: known-ref, cache, isrc, metadata', () => {
   assert.equal(new CacheStrategy(tempCache()).priority, 2)
   assert.equal(new CacheStrategy(tempCache()).name, 'cache')
 })
+
+// ---- Resuming (FR-MIG-4, #95) ----
+
+test('previous results are kept as they are and their tracks are not searched again', async () => {
+  const song2 = { position: 2, title: 'Jealous Guy', artists: ['John Lennon'], refs: { spotify: 'spotify:track:2' } }
+  const first = target()
+  const done = await new MatchingEngine().match(file([imagine]), first.provider, capabilities)
+  const previous = done.results
+
+  const t = target([{ ref: 'vid00000002', track: { title: 'Jealous Guy', artists: ['John Lennon'], refs: {} } }])
+  const seen: number[] = []
+  const report = await new MatchingEngine().match(file([imagine, song2]), t.provider, capabilities, {
+    previous,
+    onResult: (r) => seen.push(r.position),
+  })
+  assert.equal(t.queries.length, 1, 'only the new track is searched')
+  assert.deepEqual(seen, [2], 'onResult only for newly matched tracks')
+  assert.deepEqual(report.results.map((r) => [r.position, r.candidate?.ref]), [[1, 'vid00000001'], [2, 'vid00000002']])
+  assert.equal(report.summary.matched, 2)
+})
+
+test('onResult sees the final status (after --min-confidence)', async () => {
+  const statuses: string[] = []
+  await new MatchingEngine().match(file([imagine]), target().provider, capabilities, { minConfidence: 1, onResult: (r) => statuses.push(r.status) })
+  assert.deepEqual(statuses, ['low-confidence'])
+})

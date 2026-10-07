@@ -8,11 +8,14 @@ import { CanonicalFileReader } from '../../core/import/file-reader.js'
 import { MatchingEngine } from '../../core/matching/matching-engine.js'
 import { MatchCache } from '../../core/matching/match-cache.js'
 import { MatchReportWriter } from '../../core/import/match-report-writer.js'
-import { PlaylistCreator } from '../../core/import/playlist-creator.js'
+import { PlaylistCreator, matchedRefs } from '../../core/import/playlist-creator.js'
+import { RunStore, newRunItem, type RunItem, type RunState } from '../../core/import/run-store.js'
 import { PlaylistAddTracksError } from '../../core/import/playlist-errors.js'
 import type { MatchReport } from '../../core/matching/types.js'
+import type { Provider } from '../../core/provider/provider.js'
 
-const USAGE = 'Usage: sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--no-cache] [--dry-run] [--yes]'
+const USAGE = `Usage: sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--no-cache] [--dry-run] [--yes]
+       sple import --resume <runId|last> [--report <path>] [--yes]`
 
 export const name = 'import'
 export const summary = 'Import playlists from files'
@@ -35,7 +38,22 @@ export interface ImportDeps {
 /** `round(100 · value / total)`, halves up; 0 when total is 0. */
 const percent = (value: number, total: number) => (total === 0 ? 0 : Math.round((100 * value) / total))
 
-/** `sple import` (ADR-0007 Amendment 1, A9). */
+/** Flags that only make sense when starting an import. */
+const START_ONLY = ['name', 'min-confidence', 'no-cache', 'dry-run'] as const
+
+/** One line describing how far a run item has got. */
+export function describeProgress(item: RunItem): string {
+  switch (item.phase) {
+    case 'matching':
+      return `matched ${item.results.length} of ${item.file.tracks.length} tracks`
+    case 'matched':
+      return 'matched, playlist not created yet'
+    default:
+      return `added ${item.cursor} of ${item.toAdd.length} tracks`
+  }
+}
+
+/** `sple import` (ADR-0007 Amendment 1, A9; resumable runs: Amendment 4). */
 export async function run(ctx: CommandContext, args: string[], deps: ImportDeps = {}): Promise<number> {
   if (args.includes('--help') || args.includes('-h')) {
     ctx.io.out(`${USAGE}
@@ -46,6 +64,9 @@ Matches tracks on the target provider using a strategy chain
 Matches found by searching are kept for 30 days in the match cache, so a
 dry run followed by the real import searches only once.
 
+Progress is saved as the import runs. If it stops (quota, rate limit,
+expired login, crash), sple prints a run ID; continue with --resume.
+
 Arguments:
   file  Path to canonical export file (.json or .csv)
 
@@ -55,6 +76,8 @@ Options:
   --min-confidence <score>   Minimum confidence for auto-matching (0-1; default: 0.5)
   --no-cache                 Neither reuse nor store matches in the match cache
   --dry-run                  Show what would be imported without creating the playlist
+  --resume <runId|last>      Continue an interrupted import (on its original provider);
+                             "last" picks the most recent one
   --yes                      Skip confirmation prompt
   --provider <name>          Target provider (default: ${ctx.config.provider})
   --json                     Print one ImportOutput JSON document
@@ -66,6 +89,8 @@ Examples:
   sple import export.csv --name "My Music" --report report.txt --yes
   sple import playlist.json --dry-run
   sple import songs.json --min-confidence 0.7
+  sple import --resume 20261007-3fa9c1
+  sple import --resume last
 `)
     return EXIT_CODES.SUCCESS
   }
@@ -82,6 +107,7 @@ Examples:
         'min-confidence': { type: 'string' },
         'no-cache': { type: 'boolean' },
         'dry-run': { type: 'boolean' },
+        resume: { type: 'string' },
         yes: { type: 'boolean' },
       },
     })
@@ -89,114 +115,202 @@ Examples:
     throw new UsageError(e instanceof Error ? e.message : String(e))
   }
 
-  // 1. Validate flags, and the confirmation rule, before any file read or request.
-  if (parsed.positionals.length === 0) {
-    throw new UsageError(`${USAGE}\n\nNo file provided`)
-  }
-  if (parsed.positionals.length > 1) {
-    throw new UsageError('Only one file can be imported at a time')
-  }
-  const filePath = parsed.positionals[0]
-  if (filePath.trim() === '') {
-    throw new UsageError('File path cannot be empty')
-  }
-
-  let minConfidence = 0.5
-  if (parsed.values['min-confidence'] !== undefined) {
-    const score = Number(parsed.values['min-confidence'])
-    if (parsed.values['min-confidence'].trim() === '' || Number.isNaN(score) || score < 0 || score > 1) {
-      throw new UsageError('--min-confidence must be a number between 0 and 1')
-    }
-    minConfidence = score
-  }
-
-  const dryRun = parsed.values['dry-run'] === true
   const yes = parsed.values.yes === true || ctx.yes
   const stdinIsTTY = deps.stdinIsTTY ?? process.stdin.isTTY === true
-  if (!dryRun && !yes && !stdinIsTTY) {
-    throw new UsageError('Confirmation required but stdin is not a terminal. Use --yes to skip confirmation.')
-  }
-
-  const targetProvider = ctx.config.provider
-  if (!ctx.registry.has(targetProvider)) {
-    throw new UsageError(`Unknown provider '${targetProvider}'`)
-  }
-
+  const store = new RunStore({ configDir: ctx.config.configDir })
   const log = createLogger('import', ctx)
 
-  // 2. Read the file.
-  log.info(`Reading file: ${filePath}`)
-  const reader = new CanonicalFileReader({
-    trackRefParsers: ctx.registry.trackRefParsers(),
-    onWarning: (message) => ctx.io.err(message),
-  })
-  let canonicalFile
-  try {
-    canonicalFile = await reader.readFile(filePath)
-  } catch (error) {
-    throw new UsageError(
-      `Failed to read file: ${error instanceof Error ? error.message : String(error)}`
-    )
+  // 1. Validate flags, and the confirmation rule, before any file read or request.
+  const resumeId = parsed.values.resume
+  let state: RunState | undefined
+  let provider: Provider
+  let dryRun = false
+  let report: MatchReport
+
+  if (resumeId !== undefined) {
+    if (parsed.positionals.length > 0) throw new UsageError('--resume takes a run ID, not a file')
+    for (const flag of START_ONLY) {
+      if (parsed.values[flag] !== undefined) throw new UsageError(`--resume cannot be combined with --${flag}`)
+    }
+    store.prune()
+    // `last`: the most recent unfinished import (the ID isn't printed after Ctrl-C or a crash).
+    state = resumeId === 'last' ? store.list().find((r) => r.kind === 'import') : store.load(resumeId)
+    if (!state && resumeId === 'last') throw new UsageError('There are no unfinished imports')
+    if (!state || state.kind !== 'import') {
+      if (state?.kind === 'migrate') {
+        throw new UsageError(`Run ${resumeId} is a migration; continue it with "sple migrate --resume ${resumeId}"`)
+      }
+      const runs = store.list().filter((r) => r.kind === 'import')
+      const listing = runs.map((r) => `\n  ${r.runId}  "${r.items[0].name}" → ${r.target} (${describeProgress(r.items[0])})`)
+      throw new UsageError(
+        `No unfinished import '${resumeId}'` + (runs.length > 0 ? `. Unfinished imports:${listing.join('')}` : '')
+      )
+    }
+    const item = state.items[0]
+    if (item.phase !== 'adding' && !yes && !stdinIsTTY) {
+      throw new UsageError('Confirmation required but stdin is not a terminal. Use --yes to skip confirmation.')
+    }
+    if (!ctx.registry.has(state.target)) {
+      throw new UsageError(`Unknown provider '${state.target}'`)
+    }
+    provider = ctx.registry.create(state.target, ctx.config)
+    ctx.io.err(`Resuming import ${state.runId}: "${item.name}" → ${state.target} (${describeProgress(item)})`)
+  } else {
+    if (parsed.positionals.length === 0) {
+      throw new UsageError(`${USAGE}\n\nNo file provided`)
+    }
+    if (parsed.positionals.length > 1) {
+      throw new UsageError('Only one file can be imported at a time')
+    }
+    const filePath = parsed.positionals[0]
+    if (filePath.trim() === '') {
+      throw new UsageError('File path cannot be empty')
+    }
+
+    let minConfidence = 0.5
+    if (parsed.values['min-confidence'] !== undefined) {
+      const score = Number(parsed.values['min-confidence'])
+      if (parsed.values['min-confidence'].trim() === '' || Number.isNaN(score) || score < 0 || score > 1) {
+        throw new UsageError('--min-confidence must be a number between 0 and 1')
+      }
+      minConfidence = score
+    }
+
+    dryRun = parsed.values['dry-run'] === true
+    if (!dryRun && !yes && !stdinIsTTY) {
+      throw new UsageError('Confirmation required but stdin is not a terminal. Use --yes to skip confirmation.')
+    }
+
+    const targetProvider = ctx.config.provider
+    if (!ctx.registry.has(targetProvider)) {
+      throw new UsageError(`Unknown provider '${targetProvider}'`)
+    }
+
+    // 2. Read the file.
+    log.info(`Reading file: ${filePath}`)
+    const reader = new CanonicalFileReader({
+      trackRefParsers: ctx.registry.trackRefParsers(),
+      onWarning: (message) => ctx.io.err(message),
+    })
+    let canonicalFile
+    try {
+      canonicalFile = await reader.readFile(filePath)
+    } catch (error) {
+      throw new UsageError(
+        `Failed to read file: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+
+    provider = ctx.registry.create(targetProvider, ctx.config)
+    const cache = parsed.values['no-cache'] ? undefined : new MatchCache({ configDir: ctx.config.configDir })
+    const playlistName = parsed.values.name || canonicalFile.playlist.name
+
+    if (dryRun) {
+      // 3. Match. Auth, quota and rate-limit errors propagate; nothing is created or saved.
+      log.info(`Matching ${canonicalFile.tracks.length} tracks on ${targetProvider}`)
+      report = await new MatchingEngine({ cache }).match(canonicalFile, provider, provider.capabilities, {
+        minConfidence,
+        sourceFilePath: filePath,
+        targetPlaylistName: playlistName,
+      })
+    } else {
+      store.prune()
+      state = store.create('import', provider.id, { minConfidence, cache: cache !== undefined }, [
+        newRunItem(canonicalFile, { name: playlistName, sourceFilePath: filePath }),
+      ])
+    }
   }
 
-  // 3. Match. Auth, quota and rate-limit errors propagate; nothing is created.
-  const provider = ctx.registry.create(targetProvider, ctx.config)
-  log.info(`Matching ${canonicalFile.tracks.length} tracks on ${targetProvider}`)
-  const cache = parsed.values['no-cache'] ? undefined : new MatchCache({ configDir: ctx.config.configDir })
-  const report = await new MatchingEngine({ cache }).match(canonicalFile, provider, provider.capabilities, {
-    minConfidence,
-    sourceFilePath: filePath,
-    targetPlaylistName: parsed.values.name,
-  })
+  const resumeHint = (s: RunState) => ctx.io.err(`sple: import stopped; resume with: sple import --resume ${s.runId}`)
+
+  if (state) {
+    // 3. Match, checkpointing after every track so searches already spent are never repeated.
+    const item = state.items[0]
+    if (item.phase === 'matching') {
+      const s = state
+      const cache = s.options.cache ? new MatchCache({ configDir: ctx.config.configDir }) : undefined
+      log.info(`Matching ${item.file.tracks.length - item.results.length} tracks on ${s.target}`)
+      try {
+        item.report = await new MatchingEngine({ cache }).match(item.file, provider, provider.capabilities, {
+          minConfidence: s.options.minConfidence,
+          sourceFilePath: item.sourceFilePath,
+          targetPlaylistName: item.name,
+          previous: item.results,
+          onResult: (result) => {
+            item.results.push(result)
+            store.save(s)
+          },
+        })
+      } catch (error) {
+        resumeHint(s)
+        throw error
+      }
+      item.phase = 'matched'
+      item.toAdd = matchedRefs(item.report)
+      store.save(s)
+    }
+    report = item.report!
+  }
 
   // 4. --report: JSON when the path ends in .json, otherwise text.
   const writer = new MatchReportWriter()
   const reportPath = parsed.values.report
   if (reportPath) {
-    if (reportPath.toLowerCase().endsWith('.json')) await writer.writeJson(report, reportPath)
-    else await writer.writeText(report, reportPath)
+    if (reportPath.toLowerCase().endsWith('.json')) await writer.writeJson(report!, reportPath)
+    else await writer.writeText(report!, reportPath)
     log.info(`Match report written to ${reportPath}`)
   }
 
   // 5. Result so far: the text report on stdout (table/TSV), counts on stderr.
   const textMode = !ctx.json && !ctx.quiet
-  if (textMode) ctx.io.out(await writer.writeText(report))
-  const { matched, total, lowConfidence } = report.summary
+  if (textMode) ctx.io.out(await writer.writeText(report!))
+  const { matched, total, lowConfidence } = report!.summary
   ctx.io.err(`${matched}/${total} tracks ready to import (${percent(matched, total)}%)`)
   if (lowConfidence > 0) {
-    ctx.io.err(`${lowConfidence} low-confidence match(es) skipped (below --min-confidence ${minConfidence})`)
+    ctx.io.err(`${lowConfidence} low-confidence match(es) skipped (below --min-confidence ${report!.minConfidence})`)
   }
 
-  const name = report.targetPlaylistName
-  const output: ImportOutput = { dryRun, report, added: 0, failed: [] }
+  const name = report!.targetPlaylistName
+  const output: ImportOutput = { dryRun, report: report!, added: 0, failed: [] }
 
-  if (dryRun) {
+  if (dryRun || !state) {
     if (textMode) ctx.io.out(`[dry-run] Would create private playlist "${name}" with ${matched} tracks`)
     if (ctx.json) ctx.io.out(JSON.stringify(output))
     return EXIT_CODES.SUCCESS
   }
 
-  // 6. Confirm (skipped with --yes).
-  if (!yes) {
+  const s = state
+  const item = s.items[0]
+
+  // 6. Confirm (skipped with --yes, and once the playlist exists).
+  if (item.phase === 'matched' && !yes) {
     const prompt = deps.prompt ?? ((q: string) => confirm(q, false))
     if (!(await prompt(`Create playlist "${name}" with ${matched} matched track(s)?`))) {
+      store.delete(s.runId)
       ctx.io.err('Aborted; nothing was changed.')
       return EXIT_CODES.ERROR
     }
   }
 
-  // 7. Create the private playlist and add the matched tracks in position order.
+  // 7. Create the private playlist and add the matched tracks in position order, checkpointing each batch.
+  const reconcile = item.phase === 'adding'
+  item.phase = 'adding'
+  store.save(s)
   let result
   try {
-    result = await new PlaylistCreator().createPlaylistFromMatches(provider, report, name)
+    result = await new PlaylistCreator().writeMatches(provider, item, name, { checkpoint: () => store.save(s), reconcile })
   } catch (error) {
     if (error instanceof PlaylistAddTracksError) {
       // The playlist exists; say where, then let the CLI report the provider error and its exit code.
       ctx.io.err(`sple: playlist ${error.playlistUrl ?? error.playlistId} was created, but adding tracks failed`)
+      resumeHint(s)
       throw error.cause ?? error
     }
+    resumeHint(s)
     throw error
   }
+  item.phase = 'done'
+  store.delete(s.runId)
 
   const requested = result.tracksAdded + result.tracksFailed
   output.playlist = result.playlist
