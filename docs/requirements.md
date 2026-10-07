@@ -247,7 +247,7 @@ Command grammar, output modes, `--json` shapes, error output, stdin input, parti
 | **M2 — Spotify polish** | FR-PL-5 (edit), FR-SEARCH-3 (field filters), FR-EXP-5 (export all), FR-PL-1 `--filter` option. |
 | **M3 — Import + matching** | FR-EXP-7, matching engine (strategy chain, metadata matching as the core), match report (tested against the fake provider). **Done 2026-10-05**; playlist creation landed in M3.1 (#23). The spec review of 2026-10-07 changed parts of the contract; see §12. |
 | **M4a — YouTube Music, read-only** | **Done 2026-10-07** (#65; checked live on `main`). Spikes S5–S7 done ([report](spikes/M4a-youtube-spikes.md)). `docs/PRIVACY.md` (NFR-9) before any YouTube data is stored. Google auth (login/logout with revocation/status), search, `playlist list/show`, export, Liked export (the `LM` playlist, spike S5). Login requests `youtube` (owner decision 2026-10-07); reads also accept `youtube.readonly` (ADR-0003 Amendment 3). |
-| **M4b — YouTube Music, writes + migrate** | Create/remove playlists, populate-playlist, quota ledger and cost estimate, resumable `migrate` (FR-MIG). Enables Switcher persona. |
+| **M4b — YouTube Music, writes + migrate** | Create/remove playlists, populate-playlist, quota ledger and cost estimate, resumable `migrate` (FR-MIG). Enables Switcher persona. **Implemented 2026-10-07** (match cache #94, resumable runs #95, estimate #96, `migrate` #97; [migrate guide](user/migrate.md)); a live migration to YouTube is still to be run. |
 | **Later** | Other providers, unscheduled. |
 
 ## 12. Implementation status and known deviations

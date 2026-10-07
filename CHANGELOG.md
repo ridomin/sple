@@ -7,6 +7,7 @@
 - **Match cache:** matches found by searching are kept in `match-cache.json` for 30 days and reused by later imports, so a dry run followed by the real import searches only once. `sple import --no-cache` turns it off; `sple auth logout` deletes the provider's entries (#94).
 - **Resumable imports:** `sple import` saves its progress in `runs/<id>.json` after every matched track and every batch of added tracks. When it stops (quota, rate limit, expired login, crash) it prints `sple import --resume <id>`, which continues without searching, creating or adding anything twice; `--resume last` picks the most recent one (#95).
 - **Quota estimate:** for YouTube, `sple import` prints the searches and units it will need against what's left today, and asks before starting an import that needs more than one day (#96).
+- **`sple migrate`:** `--from <provider> --to <provider>` with playlists, `--all` and/or `--liked`, as one confirmed, resumable run: each source becomes a private playlist with its matched tracks (Liked Songs: "Liked Songs (from <Source>)"). `--report <dir>`, `--dry-run`, `--json` and `--resume <id|last>` are supported ([guide](docs/user/migrate.md)) (#97).
 
 ## [M4a] 2026-10-07 — YouTube Music, read-only
 

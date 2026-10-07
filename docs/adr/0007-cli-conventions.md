@@ -566,3 +566,79 @@ A run is resumable for **30 days** after `createdAt`. After that it is ignored a
 | A9 `import` | For a target with a daily quota, the estimate lines go to stderr before matching. A fresh run that needs more than today's quota asks `Start anyway? (y/n)` first, unless it is a dry run or has `--yes`. |
 | A9 `ImportOutput` | New optional `estimate: QuotaEstimate`. |
 
+## Amendment 6 (`migrate`, #97)
+
+- **Date:** 2026-10-07
+- **Why:** FR-MIG-1. `migrate` was reserved (A1). It is export → match → import in one command, built on the match cache (ADR 0009 Amendment 2), resumable runs (Amendment 4) and the quota estimate (ADR 0002 Amendment 5). A1's reservation is withdrawn.
+
+### Usage
+
+```
+sple migrate --from <provider> --to <provider> (<playlist>… | --all) [--liked] [--name <name>]
+             [--min-confidence <0..1>] [--report <dir>] [--no-cache] [--dry-run] [--yes]
+sple migrate --from <provider> --to <provider> --liked [options]
+sple migrate --resume <runId|last> [--report <dir>] [--yes]
+```
+
+The global `--provider` is ignored. There are no short flags, and no `-` (stdin) input yet.
+
+### Validation (exit 2, before any request)
+
+| Condition | Message |
+|---|---|
+| `--from` or `--to` missing (without `--resume`) | usage, then `--from and --to are required` |
+| unregistered provider | `Unknown provider '<id>'. Valid providers: …` |
+| `--from` = `--to` | `--from and --to must be different providers` |
+| no playlist, `--all` or `--liked` | `Nothing to migrate: pass playlists, --all or --liked` |
+| playlists and `--all` | `Pass playlists or --all, not both` |
+| `--name` with more than one source (or with `--all`) | `--name needs exactly one source playlist (or --liked alone)` |
+| `--min-confidence` outside [0, 1] | as A9 |
+| not `--dry-run`, not `--yes`, stdin not a TTY | as A9 |
+| `--report` names an existing non-directory | `<path> is not a directory` |
+| `--resume` with playlists, or with `--from`, `--to`, `--all`, `--liked`, `--name`, `--min-confidence`, `--no-cache` or `--dry-run` | `--resume takes a run ID, not playlists` / `--resume cannot be combined with --<flag>` |
+
+### Order of work
+
+1. **Resolve** the sources on `--from`: each playlist argument as in `export` (ambiguous names exit 2; duplicates are migrated once). `--all` adds every playlist `listPlaylists` returns, and `--liked` adds Liked Songs. A source that can't be resolved or read is **skipped** as in `export` (§5: `sple: skipped "<input>": <message>`). Auth, quota and rate-limit errors stop the command.
+2. **Read** every source's tracks (progress on stderr) into canonical files, exactly as `export` builds them. Nothing is sent to the target yet. If nothing is left: `sple: nothing to migrate`, and the exit code is the skips' (§5) or 0.
+3. stderr: `[[dry-run] ]Migrating <n> playlist(s) (<t> track(s)) from <from> to <to>` (singular for 1), then the quota estimate for the target (ADR 0002 Amendment 5) over all sources.
+4. **Confirm once** (not on `--dry-run` or `--yes`): `Create <n> private playlist(s) on <Target display name>? (y/n): `. Declining → `Aborted; nothing was changed.`, exit 1, no run file. (Unlike `import`, the question comes before matching, because one answer covers many playlists. Low-confidence and unmatched tracks are never added.)
+5. Unless `--dry-run`, **create the run** (`kind: 'migrate'`, one item per source). Item names: `--name`, else the source playlist's name, and for Liked Songs `Liked Songs (from <Source display name>)` (FR-MIG-1; likes are never written).
+6. For each item in order: match it (checkpointed per track, progress on stderr), write `--report`, then create the private playlist and add the matched tracks (checkpointed per batch), as `import` does. On a dry run, only match and report.
+7. Delete the run.
+
+**Stops:** as Amendment 4, with `sple: migrate stopped; resume with: sple migrate --resume <runId>`. A per-track add failure doesn't stop the run.
+
+**Resuming:** `--resume <runId|last>` loads a `migrate` run (an `import` run → `Run <id> is an import; continue it with "sple import --resume <id>"`; missing → `No unfinished migration '<id>'` plus the list of unfinished migrations, each `  <runId>  <n> playlists → <target> (<done> done)`; `last` with none → `There are no unfinished migrations`). stderr: `Resuming migration <runId>: <n> playlists → <target> (<done> done)`, then the estimate for the remaining work. A resume never asks: the run exists only after confirmation. Items already `done` aren't touched but are reported again. The others continue at their phase (with the reconcile step when `adding`). Skipped sources from the original command are not retried.
+
+### Output
+
+| Mode | stdout |
+|---|---|
+| table / TSV | One line per playlist as it finishes: `"<source name>" → "<name>" (<id>)[ <url>]: added <added> of <matched> matched tracks (<low> low-confidence, <unmatched> unmatched)`. Dry run: `[dry-run] "<source name>" → "<name>": would add <matched> of <total> tracks (<low> low-confidence, <unmatched> unmatched)` |
+| `--quiet` | Each created playlist's ID; nothing on a dry run |
+| `--json` | One `MigrateOutput` at the end |
+
+```ts
+interface MigrateOutput {
+  dryRun: boolean
+  from: string                    // source provider (on resume: from the run's snapshots)
+  to: ProviderId
+  playlists: Array<{
+    source: { kind: 'playlist' | 'liked'; name: string; ref?: string }
+    name: string                  // target playlist name
+    summary: MatchReport['summary']
+    playlist?: { id: string; ref: string; name: string; url?: string }   // absent on a dry run
+    added: number
+    failed: Array<{ ref: string; error: string }>
+    reportPath?: string
+  }>
+  skipped: Array<{ input: string; error: ErrorInfo }>                     // §3.6
+  estimate?: QuotaEstimate
+}
+```
+
+`--report <dir>` (created if missing) gets one JSON `MatchReport` per source, named `<NN>-<slug(name)>.json` (`NN` = 1-based position, two digits; slug as `export`). Existing files are overwritten.
+
+**Summary and exit code:** per-track failures are printed as in A9. With no skips and no failures, stderr gets `sple: migrated <n> playlist(s)` (dry run: `sple: [dry-run] matched <n> playlist(s); nothing was created`) and the exit code is 0. Otherwise stderr gets `sple: migrated <k> of <m> playlists; <s> skipped, <f> track(s) failed to add (see above)` (only the parts that apply). The exit code follows §5 priority over the skips' codes, plus 1 for track failures, and `--json` adds the `PartialFailure` `ErrorOutput`.
+
