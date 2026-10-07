@@ -10,6 +10,7 @@
 - **`auth login` warns** when you declined a requested permission on the consent screen (#72).
 - **`auth status` shows the refresh-token expiry** when the provider limits it (Google apps in Testing status: 7 days) (#80).
 - **Docs:** [YouTube Music setup](docs/user/youtube-music-setup.md), [privacy policy](docs/PRIVACY.md) (#86), [logging](docs/user/logging.md), [CONTRIBUTING.md](CONTRIBUTING.md), a rewritten [import guide](docs/user/import.md) (#71).
+- **Spikes S5–S7 reported** ([report](docs/spikes/M4a-youtube-spikes.md)): `LM` is readable (S5); a Google Desktop client needs its secret even with PKCE (S6); the playlist-creation cap was not measured (S7) (#82).
 - **Tooling:** `npm run check:stubs` in CI (#74); a shared auth contract test suite for every OAuth provider (#75), built on recorded, sanitized API responses (#76).
 
 ### Fixed

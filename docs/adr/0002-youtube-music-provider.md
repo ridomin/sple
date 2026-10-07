@@ -341,3 +341,11 @@ A **video decoration** is a `(…)` or `[…]` segment, with the whitespace befo
 | `listPlaylists` filter | `playlists.list?mine=true` returns only the user's own playlists, so every item is `owned: true`, with or without `--owned`. `--followed` returns an empty page without a request, because the Data API doesn't expose saved playlists. |
 | `getPlaylist` ownership | `owned` is true only when the playlist's `snippet.channelId` equals the user's channel ID. The channel ID comes from `channels.list?mine=true&part=id` (1 unit), looked up once per run. |
 
+## Amendment 4 (spikes S6–S7, #82)
+
+- **Date:** 2026-10-07
+- **Report:** [M4a YouTube spikes](../spikes/M4a-youtube-spikes.md). This closes open item 6, together with Amendment 3 (S5). The `youtubei.js` question lapsed with Option B.
+
+**S6:** a Desktop client's token exchange with PKCE but without `client_secret` fails with HTTP 400 `invalid_request` ("client_secret is missing."). The auth design in §4 stands: the user's non-confidential secret is required and stored.
+
+**S7:** not run (owner decision); measuring the cap would mean creating playlists in the owner's account until YouTube refuses. The daily playlist-creation cap stays unknown, and R8's handling stands.
