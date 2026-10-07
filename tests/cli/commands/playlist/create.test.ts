@@ -164,7 +164,10 @@ test('create --dry-run on a TTY prints a [dry-run] sentence', async () => {
 
 test('create --dry-run TSV has an empty id and --quiet prints nothing', async () => {
   const { provider } = setup()
-  assert.equal((await create(provider, ['Road Trip', '--dry-run'])).out, '\tRoad Trip\t')
+  const tsv = await create(provider, ['Road Trip', '--dry-run'])
+  assert.equal(tsv.out, '\tRoad Trip\t')
+  // #34: the TSV row looks like a real run, so stderr says it was a dry run.
+  assert.equal(tsv.err, '[dry-run] Would create private playlist "Road Trip" in Fake Provider')
   assert.equal((await create(provider, ['Road Trip', '--dry-run', '--quiet'])).out, '')
 })
 
