@@ -80,6 +80,7 @@ Examples:
   const visibility = collaborative ? 'collaborative' : isPublic ? 'public' : 'private'
 
   if (values['dry-run']) {
+    const sentence = `[dry-run] Would create ${visibility} playlist "${playlistName}" in ${provider.displayName}`
     const output: PlaylistCreateOutput = {
       dryRun: true,
       name: playlistName,
@@ -95,12 +96,12 @@ Examples:
         // Nothing was created, so there is no ID to print (ADR 0007 §2.6).
         break
       case 'table':
-        ctx.io.out(
-          `[dry-run] Would create ${visibility} playlist "${playlistName}" in ${provider.displayName}`
-        )
+        ctx.io.out(sentence)
         break
       case 'tsv':
+        // The row looks like a real run (ADR-0007 §2.6), so say it was a dry run on stderr.
         ctx.io.out(tsvLine(['', playlistName, '']))
+        ctx.io.err(sentence)
         break
     }
     return EXIT_CODES.SUCCESS

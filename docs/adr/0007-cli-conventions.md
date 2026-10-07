@@ -101,7 +101,7 @@ For `export` writing to stdout (one source, no `-o`), stdout is the exported fil
 
 #### 2.6 Dry run (FR-PL-6)
 
-`--dry-run` makes no write calls. The planned result is printed in the active mode: TTY as a sentence prefixed `[dry-run] Would …`, TSV and `--quiet` as for a real run (for `create`, the TSV `id` is empty and `--quiet` prints nothing), `--json` with `dryRun: true` (§3.4, §3.5).
+`--dry-run` makes no write calls. The planned result is printed in the active mode: TTY as a sentence prefixed `[dry-run] Would …`, TSV and `--quiet` as for a real run (for `create`, the TSV `id` is empty and `--quiet` prints nothing), `--json` with `dryRun: true` (§3.4, §3.5). Because a TSV row cannot show that nothing changed, TSV mode also prints the `[dry-run] Would …` sentence on **stderr** (#34); stdout stays the same as a real run, so pipes are unaffected.
 
 ### 3. JSON output shapes
 

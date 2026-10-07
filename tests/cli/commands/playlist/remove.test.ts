@@ -179,6 +179,16 @@ test('remove --dry-run on a TTY prints a [dry-run] sentence', async () => {
   assert.equal(r.out, '[dry-run] Would unfollow playlist "Road Trip" (7) in Fake Provider')
 })
 
+test('remove --dry-run in TSV mode keeps the real-run row and says it is a dry run on stderr (#34)', async () => {
+  const { provider } = setup()
+  const r = await remove(provider, ['7', '--dry-run'])
+  assert.equal(r.code, 0, r.err)
+  assert.equal(r.out, 'deleted\t7\tRoad Trip')
+  assert.match(r.err, /^\[dry-run\] Would delete playlist "Road Trip" \(7\) in Fake Provider$/m)
+  const real = await remove(provider, ['7', '--yes'])
+  assert.ok(!real.err.includes('[dry-run]'))
+})
+
 test('remove --dry-run --json reports dryRun: true and the planned action', async () => {
   const { provider } = setup()
   const r = await remove(provider, ['7', '--dry-run', '--json'])

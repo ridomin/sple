@@ -144,6 +144,7 @@ Examples:
     playlist: { id: playlist.id, ref: playlist.ref, name: playlist.name },
   }
 
+  const dryRunSentence = `[dry-run] Would ${verb.present} playlist "${playlist.name}" (${playlist.id}) in ${provider.displayName}`
   switch (mode) {
     case 'json':
       ctx.io.out(JSON.stringify(output, null, 2))
@@ -152,14 +153,12 @@ Examples:
       ctx.io.out(playlist.id)
       break
     case 'table':
-      ctx.io.out(
-        dryRun
-          ? `[dry-run] Would ${verb.present} playlist "${playlist.name}" (${playlist.id}) in ${provider.displayName}`
-          : `${verb.past} playlist "${playlist.name}" (${playlist.id})`
-      )
+      ctx.io.out(dryRun ? dryRunSentence : `${verb.past} playlist "${playlist.name}" (${playlist.id})`)
       break
     case 'tsv':
       ctx.io.out(tsvLine([action, playlist.id, playlist.name]))
+      // The row looks like a real run (ADR-0007 §2.6), so say it was a dry run on stderr.
+      if (dryRun) ctx.io.err(dryRunSentence)
       break
   }
   return EXIT_CODES.SUCCESS
