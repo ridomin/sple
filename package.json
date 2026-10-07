@@ -17,6 +17,7 @@
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "check:stubs": "tsx scripts/check-auth-stubs.ts",
     "test": "node --test --import=tsx 'tests/**/*.test.ts'",
     "test:watch": "node --test --watch --import=tsx 'tests/**/*.test.ts'",
     "prepack": "npm run build"
