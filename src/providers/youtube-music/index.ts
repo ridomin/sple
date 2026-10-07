@@ -4,7 +4,7 @@ import { HttpClient } from '../../core/http/client.js'
 import { YouTubeMusicAuth } from './auth.js'
 import { YouTubeMusicHttpClient } from './client.js'
 import { mapYouTubeHttpError } from './errors.js'
-import { parseYouTubePlaylistId } from './playlist-ref.js'
+import { parseYouTubePlaylistId, parseYouTubeTrackRef } from './playlist-ref.js'
 
 const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
   official: true,
@@ -50,6 +50,7 @@ export function createYouTubeMusicProvider(
     auth,
 
     parsePlaylistRef: parseYouTubePlaylistId,
+    parseTrackRef: parseYouTubeTrackRef,
 
     async search(q, page: PageRequest) {
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])

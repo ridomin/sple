@@ -128,6 +128,8 @@ export interface Provider {
    * otherwise null (caller falls back to name lookup). Pure, no I/O.
    */
   parsePlaylistRef(input: string): string | null
+  /** The canonical track ref (ADR-0003 §3.1) if `input` is a track ID, URI or URL for this provider; otherwise null. Pure, no I/O. */
+  parseTrackRef(input: string): string | null
 
   /**
    * Lists the user's playlists. With a `filter`, a page may hold fewer than

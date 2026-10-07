@@ -228,9 +228,9 @@ test('FakeProvider', async (t) => {
     assert.ok(item.type === 'track')
     assert.strictEqual(item.name, 'Bohemian Rhapsody')
     assert.strictEqual(item.id, 'track-1')
-    assert.strictEqual(item.ref, 'track-1')
+    assert.strictEqual(item.ref, 'fake:track:track-1')
     assert.strictEqual(item.track.title, 'Bohemian Rhapsody')
-    assert.deepStrictEqual(item.track.refs, { fake: 'track-1' })
+    assert.deepStrictEqual(item.track.refs, { fake: 'fake:track:track-1' })
   })
 
   await t.test('searches by artist', async () => {
@@ -345,6 +345,14 @@ test('FakeProvider', async (t) => {
     }
   })
 
+  await t.test('parseTrackRef accepts only fake:track:<id>', () => {
+    assert.strictEqual(provider.parseTrackRef('fake:track:t1'), 'fake:track:t1')
+    assert.strictEqual(provider.parseTrackRef(' fake:track:a_b-1 '), 'fake:track:a_b-1')
+    assert.strictEqual(provider.parseTrackRef('t1'), null)
+    assert.strictEqual(provider.parseTrackRef('fake:playlist:1'), null)
+    assert.strictEqual(provider.parseTrackRef('spotify:track:4uLU6hMCjMI75M1A2tKUQC'), null)
+  })
+
   await t.test('searchTracks by metadata returns hits whose title matches', async () => {
     provider.addTrack({
       id: 'track-resolve',
@@ -358,7 +366,8 @@ test('FakeProvider', async (t) => {
       { limit: 10 }
     )
 
-    assert.deepStrictEqual(hits.map((h) => h.ref), ['track-resolve'])
+    assert.deepStrictEqual(hits.map((h) => h.ref), ['fake:track:track-resolve'])
+    assert.strictEqual(hits[0].track.refs.fake, 'fake:track:track-resolve')
     assert.strictEqual(hits[0].track.title, 'Shape of You')
     assert.deepStrictEqual(hits[0].track.artists, ['Ed Sheeran'])
   })
@@ -379,14 +388,14 @@ test('FakeProvider', async (t) => {
 
     const hits = await provider3.searchTracks({ kind: 'isrc', isrc: 'USRC17607839' }, { limit: 10 })
 
-    assert.deepStrictEqual(hits.map((h) => h.ref), ['track-isrc'])
+    assert.deepStrictEqual(hits.map((h) => h.ref), ['fake:track:track-isrc'])
   })
 
   await t.test('searchTracks honours limit', async () => {
     const p = new FakeProvider()
     for (let i = 0; i < 5; i++) p.addTrack({ id: `t${i}`, title: 'Same Title', artists: ['A'], duration: 200 })
     const hits = await p.searchTracks({ kind: 'metadata', title: 'Same Title', artists: [] }, { limit: 3 })
-    assert.deepStrictEqual(hits.map((h) => h.ref), ['t0', 't1', 't2'])
+    assert.deepStrictEqual(hits.map((h) => h.ref), ['fake:track:t0', 'fake:track:t1', 'fake:track:t2'])
   })
 
   await t.test('searchTracks returns no hits for an unknown track', async () => {
@@ -420,7 +429,7 @@ test('FakeProvider', async (t) => {
 
     const result = await provider.populatePlaylist(
       playlist.ref,
-      ['pop-track-1', 'pop-track-2'],
+      ['fake:track:pop-track-1', 'fake:track:pop-track-2'],
       { skipExisting: false }
     )
 
@@ -443,7 +452,7 @@ test('FakeProvider', async (t) => {
 
     const result = await provider.populatePlaylist(
       playlist.ref,
-      ['exist-track', 'missing-track'],
+      ['fake:track:exist-track', 'fake:track:missing-track'],
       { skipExisting: false }
     )
 
@@ -472,7 +481,7 @@ test('FakeProvider', async (t) => {
     // First two should succeed
     const result1 = await provider4.populatePlaylist(
       playlist.ref,
-      ['quota-track-0', 'quota-track-1'],
+      ['fake:track:quota-track-0', 'fake:track:quota-track-1'],
       { skipExisting: false }
     )
     assert.strictEqual(result1.added.length, 2)
@@ -482,7 +491,7 @@ test('FakeProvider', async (t) => {
       () =>
         provider4.populatePlaylist(
           playlist.ref,
-          ['quota-track-2', 'quota-track-3'],
+          ['fake:track:quota-track-2', 'fake:track:quota-track-3'],
           { skipExisting: false }
         ),
       (error: any) =>

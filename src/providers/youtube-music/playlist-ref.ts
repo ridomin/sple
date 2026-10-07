@@ -28,3 +28,30 @@ export function parseYouTubePlaylistId(input: string): string | null {
   const list = url.searchParams.get('list')
   return list && BARE_ID.test(list) ? list : null
 }
+
+const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/
+
+/**
+ * Parse a YouTube track reference (ADR-0003 §3.1). Accepts a bare 11-char
+ * video ID, `http(s)://{www.,m.,music.,}youtube.com/…?v=<id>`, or
+ * `https://youtu.be/<id>`. Returns the bare video ID (the canonical track
+ * ref), or null. Pure; no I/O.
+ */
+export function parseYouTubeTrackRef(input: string): string | null {
+  const s = input.trim()
+  if (VIDEO_ID.test(s)) return s
+
+  let url: URL
+  try {
+    url = new URL(s)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+  const id = HOSTS.has(url.hostname)
+    ? url.searchParams.get('v')
+    : url.hostname === 'youtu.be'
+      ? url.pathname.slice(1)
+      : null
+  return id && VIDEO_ID.test(id) ? id : null
+}

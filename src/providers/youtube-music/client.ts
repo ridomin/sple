@@ -3,7 +3,7 @@ import { PlaylistSummary, CanonicalTrack } from '../../core/provider/provider.js
 import { NotFoundError, isFatalProviderError } from '../../core/provider/errors.js'
 import { YouTubeConflictError } from './errors.js'
 import * as YouTubeTypes from './types.js'
-import { parseYouTubePlaylistId } from './playlist-ref.js'
+import { parseYouTubePlaylistId, parseYouTubeTrackRef } from './playlist-ref.js'
 
 export class YouTubeMusicHttpClient {
   private readonly baseUrl = 'https://www.googleapis.com/youtube/v3'
@@ -247,7 +247,7 @@ export class YouTubeMusicHttpClient {
 
   private youtubePlaylistToCanonical(playlist: YouTubeTypes.YouTubePlaylist): PlaylistSummary {
     return {
-      ref: `https://www.youtube.com/playlist?list=${playlist.id}`,
+      ref: playlist.id,
       id: playlist.id,
       name: playlist.snippet.title,
       description: playlist.snippet.description || undefined,
@@ -268,7 +268,7 @@ export class YouTubeMusicHttpClient {
       album: undefined,
       durationMs: this.parseDuration(video.contentDetails?.duration),
       refs: {
-        'youtube-music': `https://www.youtube.com/watch?v=${video.id}`
+        'youtube-music': video.id
       },
       addedAt: video.snippet.publishedAt
     }
@@ -289,11 +289,6 @@ export class YouTubeMusicHttpClient {
   }
 
   private extractVideoId(ref: string): string | null {
-    try {
-      const url = new URL(ref)
-      return url.searchParams.get('v') || null
-    } catch {
-      return null
-    }
+    return parseYouTubeTrackRef(ref)
   }
 }

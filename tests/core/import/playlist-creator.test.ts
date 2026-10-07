@@ -55,15 +55,15 @@ test('PlaylistCreator', async (t) => {
   await t.test('adds only matched tracks, in order, skipping low-confidence and unmatched', async () => {
     const provider = makeProvider()
     const report = makeReport([
-      result(1, 'matched', 't1'),
-      result(2, 'low-confidence', 't3'),
+      result(1, 'matched', 'fake:track:t1'),
+      result(2, 'low-confidence', 'fake:track:t3'),
       result(3, 'unmatched'),
-      result(4, 'matched', 't2'),
+      result(4, 'matched', 'fake:track:t2'),
     ])
 
     const res = await new PlaylistCreator().createPlaylistFromMatches(provider, report, 'My Playlist')
 
-    assert.deepEqual(await playlistTrackRefs(provider, res.playlistId), ['t1', 't2'])
+    assert.deepEqual(await playlistTrackRefs(provider, res.playlistId), ['fake:track:t1', 'fake:track:t2'])
     assert.equal(res.tracksAdded, 2)
     assert.equal(res.tracksFailed, 0)
     assert.deepEqual(res.failures, [])
@@ -71,13 +71,13 @@ test('PlaylistCreator', async (t) => {
 
   await t.test('reports tracks the provider rejected', async () => {
     const provider = makeProvider()
-    const report = makeReport([result(1, 'matched', 't1'), result(2, 'matched', 'missing')])
+    const report = makeReport([result(1, 'matched', 'fake:track:t1'), result(2, 'matched', 'fake:track:missing')])
 
     const res = await new PlaylistCreator().createPlaylistFromMatches(provider, report, 'My Playlist')
 
     assert.equal(res.tracksAdded, 1)
     assert.equal(res.tracksFailed, 1)
-    assert.deepEqual(res.failures, [{ ref: 'missing', error: 'Track not found' }])
+    assert.deepEqual(res.failures, [{ ref: 'fake:track:missing', error: 'Track not found' }])
   })
 
   await t.test('lets provider errors from createPlaylist propagate unchanged', async () => {
@@ -108,7 +108,7 @@ test('PlaylistCreator', async (t) => {
   await t.test('identifies the created playlist and keeps the cause when adding tracks fails', async () => {
     const provider = makeProvider()
     provider.setQuotaBucket(1)
-    const report = makeReport([result(1, 'matched', 't1'), result(2, 'matched', 't2')])
+    const report = makeReport([result(1, 'matched', 'fake:track:t1'), result(2, 'matched', 'fake:track:t2')])
 
     const err = await new PlaylistCreator()
       .createPlaylistFromMatches(provider, report, 'My Playlist')

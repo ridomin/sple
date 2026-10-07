@@ -85,6 +85,7 @@ test('YouTube Music playlist resolution', async (t) => {
     await t.test(`resolves ${input}`, async () => {
       const playlist = await resolvePlaylist(provider, input)
       assert.equal(playlist.id, LONG_ID)
+      assert.equal(playlist.ref, LONG_ID, 'canonical playlist ref is the bare ID (ADR-0003 §3.1)')
       assert.equal(playlist.name, 'Imported from Spotify')
     })
   }
