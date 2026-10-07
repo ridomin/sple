@@ -52,6 +52,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check auth code for unfinished stubs
+        run: npm run check:stubs
+
       - name: Check for uncommitted changes
         run: |
           npm run build
