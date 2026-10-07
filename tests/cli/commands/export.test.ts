@@ -64,7 +64,7 @@ test('sple export (M1-26, FR-EXP-1/2/3/6)', async (t) => {
     assert.equal(file.playlist.name, 'Road Trip')
     assert.equal(file.playlist.trackCount, 3)
     assert.deepEqual(file.tracks.map((x) => x.position), [1, 2, 3])
-    assert.deepEqual(file.tracks.map((x) => x.refs.fake), ['t1', 't2', 't3'])
+    assert.deepEqual(file.tracks.map((x) => x.refs.fake), ['fake:track:t1', 'fake:track:t2', 'fake:track:t3'])
   })
 
   await t.test('--format csv to stdout: RFC 4180 with CRLF', async () => {

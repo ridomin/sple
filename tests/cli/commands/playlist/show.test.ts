@@ -64,7 +64,7 @@ test('playlist show (M1-23, FR-PL-2)', async (t) => {
     const lines = r.out.split('\n')
     assert.equal(lines.length, 2)
     const [pos, title, artists, album, duration, addedAt, id] = lines[0].split('\t')
-    assert.deepEqual([pos, title, artists, album, duration, id], ['1', 'Song 1', 'Artist A, Artist B', 'Album 1', '3:05', 't1'])
+    assert.deepEqual([pos, title, artists, album, duration, id], ['1', 'Song 1', 'Artist A, Artist B', 'Album 1', '3:05', 'fake:track:t1'])
     assert.match(addedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
     assert.equal(lines[1].split('\t')[0], '2')
     assert.equal(r.err, '')
@@ -72,9 +72,9 @@ test('playlist show (M1-23, FR-PL-2)', async (t) => {
 
   await t.test('resolves a URI and an exact name (case-insensitive fallback)', async () => {
     const p = fake([playlist('5', { name: 'Road Trip', trackIds: ['t1'] })], tracks(1))
-    assert.equal((await run(p, ['fake:playlist:5', '--quiet'])).out, 't1')
+    assert.equal((await run(p, ['fake:playlist:5', '--quiet'])).out, 'fake:track:t1')
     clearPlaylistCache()
-    assert.equal((await run(p, ['road trip', '--quiet'])).out, 't1')
+    assert.equal((await run(p, ['road trip', '--quiet'])).out, 'fake:track:t1')
   })
 
   await t.test('an ambiguous name exits 2 and lists every match with its owner', async () => {
@@ -125,7 +125,7 @@ test('playlist show (M1-23, FR-PL-2)', async (t) => {
     })
     const r = await run(p, ['9', '--quiet'])
     assert.equal(r.code, 0)
-    assert.equal(r.out, 't1')
+    assert.equal(r.out, 'fake:track:t1')
     assert.match(r.err, /"Shared" is owned by alice; readable via collaborator access/)
   })
 
@@ -135,7 +135,7 @@ test('playlist show (M1-23, FR-PL-2)', async (t) => {
     const requests = spyTracks(p)
     const r = await run(p, ['1', '--quiet'])
     assert.equal(r.code, 0)
-    assert.deepEqual(r.out.split('\n'), all.map((x) => x.id))
+    assert.deepEqual(r.out.split('\n'), all.map((x) => `fake:track:${x.id}`))
     assert.deepEqual(requests, [
       { limit: 100, offset: 0 },
       { limit: 100, offset: 100 },
@@ -150,7 +150,7 @@ test('playlist show (M1-23, FR-PL-2)', async (t) => {
     const out = JSON.parse(r.out) satisfies PlaylistShowOutput
     assert.equal(out.playlist.name, 'J')
     assert.deepEqual(out.tracks.map((x: { position: number }) => x.position), [1, 2, 3])
-    assert.equal(out.tracks[0].refs.fake, 't1')
+    assert.equal(out.tracks[0].refs.fake, 'fake:track:t1')
     assert.deepEqual(out.unsupportedItems, [])
   })
 
@@ -160,7 +160,7 @@ test('playlist show (M1-23, FR-PL-2)', async (t) => {
     p.getPlaylistTracks = async (ref, page) => ({ ...(await original(ref, page)), total: 5 })
     const r = await run(p, ['1', '--quiet'])
     assert.equal(r.code, 0)
-    assert.equal(r.out, 't1\nt2')
+    assert.equal(r.out, 'fake:track:t1\nfake:track:t2')
     assert.match(r.err, /warning: 3 of 5 items in "Mixed" are not supported/)
   })
 
@@ -175,7 +175,7 @@ test('playlist show (M1-23, FR-PL-2)', async (t) => {
     const p = fake([playlist('1', { trackIds: ['t1'] })], tracks(1))
     const ok = await run(p, ['-', '--quiet'], {}, { readRefs: async () => ['1'] })
     assert.equal(ok.code, 0)
-    assert.equal(ok.out, 't1')
+    assert.equal(ok.out, 'fake:track:t1')
     for (const refs of [[], ['1', '1']]) {
       const r = await run(p, ['-'], {}, { readRefs: async () => refs })
       assert.equal(r.code, EXIT_CODES.USAGE_ERROR, JSON.stringify(refs))
@@ -189,7 +189,7 @@ test('playlist show (M1-23, FR-PL-2)', async (t) => {
     const refs = listed.out.split('\n')
     const r = await run(p, ['-', '--quiet'], {}, { readRefs: async () => refs })
     assert.equal(r.code, 0)
-    assert.equal(r.out, 't2')
+    assert.equal(r.out, 'fake:track:t2')
   })
 
   await t.test('usage errors exit 2: no playlist, two playlists, --json with --quiet, unknown flag', async () => {

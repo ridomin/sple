@@ -478,7 +478,7 @@ function makeCreationProvider(): FakeProvider {
   ;(provider.capabilities as any).isrcSearchMode = 'lookup'
   provider.searchTracks = async (q) => {
     if (q.kind !== 'isrc' || q.isrc !== 'USRC10000002') return []
-    return [{ ref: 't2', track: { title: 'Song 2', artists: ['A'], durationMs: 180000, refs: { fake: 't2' } } }]
+    return [{ ref: 'fake:track:t2', track: { title: 'Song 2', artists: ['A'], durationMs: 180000, refs: { fake: 'fake:track:t2' } } }]
   }
   return provider
 }
@@ -491,7 +491,7 @@ function withImportFile(tracks: CanonicalPlaylistFile['tracks'], fn: (path: stri
 }
 
 const knownRefTrack = (position: number, fakeRef: string) =>
-  ({ position, title: `Song ${position}`, artists: ['A'], durationMs: 180000, refs: { fake: fakeRef } }) as any
+  ({ position, title: `Song ${position}`, artists: ['A'], durationMs: 180000, refs: { fake: `fake:track:${fakeRef}` } }) as any
 
 async function createdTrackRefs(provider: FakeProvider): Promise<string[]> {
   const page = await provider.getPlaylistTracks('1', {})
@@ -506,7 +506,7 @@ test('import command: creates playlist with matched tracks and skips low-confide
     const result = await run(ctx, [filePath, '--yes', '--min-confidence', '0.99'])
 
     assert.equal(result, EXIT_CODES.SUCCESS)
-    assert.deepEqual(await createdTrackRefs(provider), ['t1'])
+    assert.deepEqual(await createdTrackRefs(provider), ['fake:track:t1'])
     assert(ctx.mockIO.err.some((msg) => msg.includes('1 low-confidence match(es) skipped')), ctx.mockIO.err.join('\n'))
   })
 })
@@ -518,7 +518,7 @@ test('import command: exits non-zero and lists tracks the provider rejected', as
     const result = await run(ctx, [filePath, '--yes'])
 
     assert.equal(result, EXIT_CODES.ERROR)
-    assert.deepEqual(await createdTrackRefs(provider), ['t1'])
+    assert.deepEqual(await createdTrackRefs(provider), ['fake:track:t1'])
     assert(ctx.mockIO.err.some((msg) => msg.includes('gone') && msg.includes('Track not found')), ctx.mockIO.err.join('\n'))
     const last = JSON.parse(ctx.mockIO.err[ctx.mockIO.err.length - 1])
     assert.equal(last.error.type, 'PartialFailure')

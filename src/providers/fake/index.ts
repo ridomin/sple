@@ -52,6 +52,8 @@ let loginCounter = 0
 
 const FAKE_PLAYLIST_URI = /^fake:playlist:([A-Za-z0-9_-]+)$/
 const FAKE_PLAYLIST_ID = /^[0-9]+$/
+const FAKE_TRACK_URI = /^fake:track:([A-Za-z0-9_-]+)$/
+const trackRef = (id: string) => `fake:track:${id}`
 
 export class FakeProvider implements Provider {
   readonly id: ProviderId = 'fake'
@@ -160,6 +162,12 @@ export class FakeProvider implements Provider {
     return null
   }
 
+  /** Canonical fake track ref is `fake:track:<id>`, the only accepted form (ADR-0003 §3.1). */
+  parseTrackRef(input: string): string | null {
+    const m = FAKE_TRACK_URI.exec(input.trim())
+    return m ? trackRef(m[1]) : null
+  }
+
   async search(
     q: { text: string; type: SearchType },
     page: PageRequest
@@ -178,7 +186,7 @@ export class FakeProvider implements Provider {
           .map((t) => ({
             type: 'track',
             id: t.id,
-            ref: t.id,
+            ref: trackRef(t.id),
             name: t.title,
             track: this.trackToCanonical(t),
           }))
@@ -349,7 +357,7 @@ export class FakeProvider implements Provider {
     return Array.from(this.tracks.values())
       .filter(matches)
       .slice(0, opts.limit)
-      .map((t) => ({ ref: t.id, track: this.trackToCanonical(t) }))
+      .map((t) => ({ ref: trackRef(t.id), track: this.trackToCanonical(t) }))
   }
 
   async populatePlaylist(
@@ -365,13 +373,14 @@ export class FakeProvider implements Provider {
     const added: string[] = []
     const failed: Array<{ ref: string; error: string }> = []
 
-    for (const trackRef of trackRefs) {
-      if (!this.tracks.has(trackRef)) {
-        failed.push({ ref: trackRef, error: 'Track not found' })
+    for (const ref of trackRefs) {
+      const id = FAKE_TRACK_URI.exec(ref)?.[1]
+      if (!id || !this.tracks.has(id)) {
+        failed.push({ ref, error: 'Track not found' })
         continue
       }
 
-      if (opts.skipExisting && playlist.trackIds.includes(trackRef)) {
+      if (opts.skipExisting && playlist.trackIds.includes(id)) {
         continue
       }
 
@@ -383,9 +392,9 @@ export class FakeProvider implements Provider {
         )
       }
 
-      playlist.trackIds.push(trackRef)
+      playlist.trackIds.push(id)
       this.quotaBucket--
-      added.push(trackRef)
+      added.push(ref)
     }
 
     return { added, failed }
@@ -399,7 +408,7 @@ export class FakeProvider implements Provider {
       durationMs: track.duration,
       isrc: track.isrc ?? null,
       refs: {
-        fake: track.id,
+        fake: trackRef(track.id),
       },
       addedAt: new Date().toISOString(),
     }

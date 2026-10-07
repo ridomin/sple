@@ -9,7 +9,7 @@ import {
 } from '../../core/provider/errors.js'
 import { HttpClient, type HttpLogEntry } from '../../core/http/client.js'
 import { SpotifyAuth } from './auth.js'
-import { parseSpotifyPlaylistRef } from './playlist-ref.js'
+import { parseSpotifyPlaylistRef, parseSpotifyTrackRef } from './playlist-ref.js'
 import { requiredScopes, type PlaylistVisibility, type SpotifyM1Operation } from './scopes.js'
 import { mapSpotifyPlaylistToSummary, determineItemsReadable, mapSpotifyPlaylistItems, mapSpotifyTrackToCanonical, mapSpotifySearchResults } from './mappers.js'
 import { mapSpotifyHttpError } from './errors.js'
@@ -171,6 +171,7 @@ export function createSpotifyProvider(
     capabilities: SPOTIFY_CAPABILITIES,
     auth,
     parsePlaylistRef: parseSpotifyPlaylistRef,
+    parseTrackRef: parseSpotifyTrackRef,
     async search(q, page) {
       // Scope check (M1-11): search needs a logged-in user (AuthRequiredError, exit 3) but no scope.
       await guard('search')
