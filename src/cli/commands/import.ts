@@ -6,12 +6,13 @@ import { createLogger } from '../log.js'
 import { UsageError } from '../../core/provider/errors.js'
 import { CanonicalFileReader } from '../../core/import/file-reader.js'
 import { MatchingEngine } from '../../core/matching/matching-engine.js'
+import { MatchCache } from '../../core/matching/match-cache.js'
 import { MatchReportWriter } from '../../core/import/match-report-writer.js'
 import { PlaylistCreator } from '../../core/import/playlist-creator.js'
 import { PlaylistAddTracksError } from '../../core/import/playlist-errors.js'
 import type { MatchReport } from '../../core/matching/types.js'
 
-const USAGE = 'Usage: sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--dry-run] [--yes]'
+const USAGE = 'Usage: sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--no-cache] [--dry-run] [--yes]'
 
 export const name = 'import'
 export const summary = 'Import playlists from files'
@@ -40,8 +41,10 @@ export async function run(ctx: CommandContext, args: string[], deps: ImportDeps 
     ctx.io.out(`${USAGE}
 
 Import a playlist from a canonical export file (JSON or CSV).
-Matches tracks on the target provider using a three-strategy chain
-(known ref → ISRC → metadata matching) and creates a new playlist.
+Matches tracks on the target provider using a strategy chain
+(known ref → match cache → ISRC → metadata matching) and creates a new playlist.
+Matches found by searching are kept for 30 days in the match cache, so a
+dry run followed by the real import searches only once.
 
 Arguments:
   file  Path to canonical export file (.json or .csv)
@@ -50,6 +53,7 @@ Options:
   --name <name>              Name for the imported playlist (default: the file's playlist name)
   --report <path>            Also write the match report to a file (.json → JSON, else text)
   --min-confidence <score>   Minimum confidence for auto-matching (0-1; default: 0.5)
+  --no-cache                 Neither reuse nor store matches in the match cache
   --dry-run                  Show what would be imported without creating the playlist
   --yes                      Skip confirmation prompt
   --provider <name>          Target provider (default: ${ctx.config.provider})
@@ -76,6 +80,7 @@ Examples:
         name: { type: 'string' },
         report: { type: 'string' },
         'min-confidence': { type: 'string' },
+        'no-cache': { type: 'boolean' },
         'dry-run': { type: 'boolean' },
         yes: { type: 'boolean' },
       },
@@ -137,7 +142,8 @@ Examples:
   // 3. Match. Auth, quota and rate-limit errors propagate; nothing is created.
   const provider = ctx.registry.create(targetProvider, ctx.config)
   log.info(`Matching ${canonicalFile.tracks.length} tracks on ${targetProvider}`)
-  const report = await new MatchingEngine().match(canonicalFile, provider, provider.capabilities, {
+  const cache = parsed.values['no-cache'] ? undefined : new MatchCache({ configDir: ctx.config.configDir })
+  const report = await new MatchingEngine({ cache }).match(canonicalFile, provider, provider.capabilities, {
     minConfidence,
     sourceFilePath: filePath,
     targetPlaylistName: parsed.values.name,

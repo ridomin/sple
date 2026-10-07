@@ -50,8 +50,8 @@ describe('MetadataStrategy', () => {
     strategy = new MetadataStrategy()
   })
 
-  test('should have priority 3 (lowest)', () => {
-    assert.strictEqual(strategy.priority, 3)
+  test('should have priority 4 (lowest)', () => {
+    assert.strictEqual(strategy.priority, 4)
   })
 
   test('should have name "metadata"', () => {

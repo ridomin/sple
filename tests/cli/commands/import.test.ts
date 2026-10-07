@@ -36,7 +36,8 @@ function createTestContext(overrides?: Partial<CommandContext>): CommandContext 
       create: () => new FakeProvider({ pagination: 'cursor-forward', playlists: { access: ['owned'] } }),
       trackRefParsers: () => ({ fake: parseFakeTrackRef }),
     } as any,
-    config: { provider: 'spotify', verbose: false },
+    // A fresh config dir per context: imports write the match cache there.
+    config: { provider: 'spotify', verbose: false, configDir: mkdtempSync(join(tmpdir(), 'sple-import-config-')) },
     io: {
       out: (msg: string) => mockIO.logOut(msg),
       err: (msg: string) => mockIO.logErr(msg),
@@ -670,4 +671,54 @@ test('import command: per-track failures are listed on stderr; --json stdout sti
     assert.deepEqual(output.failed, [{ ref: 'fake:track:gone', error: 'Track not found' }])
     assert.equal(output.added, 1)
   })
+})
+
+// ---- Match cache (ADR 0009 Amendment 2, #94) ----
+
+/** A context whose provider is one FakeProvider kept across runs, counting searchTracks calls. */
+function cachingContext() {
+  const provider = new FakeProvider({
+    pagination: 'cursor-forward',
+    playlists: { access: ['owned'] },
+    initialTracks: [{ id: 't1', title: 'Test Song', artists: ['Test Artist'], album: 'Test Album', duration: 180000 }],
+  } as any)
+  let searches = 0
+  const search = provider.searchTracks.bind(provider)
+  provider.searchTracks = async (q, o) => {
+    searches++
+    return search(q, o)
+  }
+  const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({ fake: parseFakeTrackRef }) } as any })
+  return { ctx, searches: () => searches }
+}
+
+test('import command: a dry run fills the match cache, so the real import searches nothing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sple-import-cache-'))
+  const filePath = join(dir, 'p.json')
+  writeFileSync(filePath, JSON.stringify(createTestFile()))
+  const { ctx, searches } = cachingContext()
+
+  assert.equal(await run(ctx, [filePath, '--dry-run']), EXIT_CODES.SUCCESS)
+  const afterDryRun = searches()
+  assert.ok(afterDryRun > 0)
+  assert.ok(readFileSync(join(ctx.config.configDir!, 'match-cache.json'), 'utf8').includes('spotify|spotify:track:123'))
+
+  assert.equal(await run({ ...ctx, json: true }, [filePath, '--yes']), EXIT_CODES.SUCCESS)
+  assert.equal(searches(), afterDryRun, 'no new search')
+  const output = JSON.parse(ctx.mockIO.out.at(-1)!)
+  assert.deepEqual(output.report.results[0].strategies, ['known-ref', 'cache'])
+})
+
+test('import command: --no-cache neither reads nor writes the cache', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sple-import-nocache-'))
+  const filePath = join(dir, 'p.json')
+  writeFileSync(filePath, JSON.stringify(createTestFile()))
+  const { ctx, searches } = cachingContext()
+
+  await run(ctx, [filePath, '--dry-run', '--no-cache'])
+  assert.throws(() => readFileSync(join(ctx.config.configDir!, 'match-cache.json')), /ENOENT/)
+  await run(ctx, [filePath, '--dry-run'])
+  const filled = searches()
+  await run(ctx, [filePath, '--dry-run', '--no-cache'])
+  assert.equal(searches(), filled + 1, 'searched again despite the cached entry')
 })

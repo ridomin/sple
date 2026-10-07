@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (M4b: YouTube Music writes and migration)
+
+### Added
+
+- **Match cache:** matches found by searching are kept in `match-cache.json` for 30 days and reused by later imports, so a dry run followed by the real import searches only once. `sple import --no-cache` turns it off; `sple auth logout` deletes the provider's entries (#94).
+
 ## [M4a] 2026-10-07 — YouTube Music, read-only
 
 ### Added

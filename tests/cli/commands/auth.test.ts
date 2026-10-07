@@ -15,6 +15,7 @@ import { handleAuthCommand } from '../../../src/cli/commands/auth.js'
 import { handleLogin } from '../../../src/cli/commands/auth/login.js'
 import { handleStatus } from '../../../src/cli/commands/auth/status.js'
 import { handleLogout } from '../../../src/cli/commands/auth/logout.js'
+import { MatchCache } from '../../../src/core/matching/match-cache.js'
 import { EXIT_CODES } from '../../../src/cli/exit-codes.js'
 import { AuthRequiredError, UsageError } from '../../../src/core/provider/errors.js'
 import type { AuthStatus, Provider, ProviderAuth } from '../../../src/core/provider/provider.js'
@@ -300,6 +301,25 @@ test('logout: revoked vs local-only, deleted data, notice', async () => {
   const p2 = providerWith({ logout: async () => ({ revoked: false, deletedData: [], notice: 'Do X' }) })
   assert.equal(await handleLogout([target(p2)], b.io), 0)
   assert.deepEqual(b.out, ['Logged out from Fake Provider', 'Do X'])
+})
+
+test('logout: deletes the match-cache entries involving the provider', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sple-logout-cache-'))
+  const cache = new MatchCache({ configDir: dir })
+  const candidate = { ref: 'fake:track:9', track: { title: 'T', artists: ['A'], refs: {} }, confidence: 0.9, strategy: 'metadata' as const }
+  cache.put('fake', { title: 'T', artists: ['A'], refs: { spotify: 'spotify:track:1' } }, candidate)
+  cache.put('spotify', { title: 'T', artists: ['A'], refs: { 'youtube-music': 'abcdefghijk' } }, { ...candidate, ref: 'spotify:track:2' })
+
+  const a = makeIO()
+  const p = providerWith({ logout: async () => ({ revoked: true, deletedData: ['access_token'] }) })
+  assert.equal(await handleLogout([target(p)], a.io, { configDir: dir }), 0)
+  assert.deepEqual(a.out, ['Revoked access with Fake Provider', 'Deleted: access_token, match_cache'])
+  const left = JSON.parse(readFileSync(join(dir, 'match-cache.json'), 'utf8'))
+  assert.deepEqual(Object.keys(left.targets), ['spotify'])
+
+  const b = makeIO()
+  assert.equal(await handleLogout([target(p)], b.io, { configDir: dir }), 0)
+  assert.deepEqual(b.out, ['Revoked access with Fake Provider', 'Deleted: access_token'], 'nothing left to delete')
 })
 
 test('logout: error returns 1 but other providers are still logged out', async () => {
