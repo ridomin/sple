@@ -35,6 +35,7 @@ Everything is stored in sple's config directory on your computer (`~/.config/spl
 | `tokens.json` (mode 0600) | OAuth access and refresh tokens, the granted scopes, your account ID and name, token expiry times | `sple auth logout`, or the next login replaces it |
 | `quota.json` (mode 0600) | Counts of today's YouTube API calls per quota bucket. No YouTube content. | Replaced each day |
 | `match-cache.json` (mode 0600) | Matches that `sple import` found by searching: for each source track ref, the matched track's ID, title, artists and duration, the match confidence, and when it was found | Each entry for **30 days** after it was found; `sple auth logout` deletes the entries for that provider |
+| `runs/<id>.json` (mode 0600) | Progress of an unfinished `sple import`: a copy of the source playlist, the match results so far, the created playlist's ID, and how many tracks were added | Deleted when the import finishes or you decline it; otherwise at most **30 days**. `sple auth logout` deletes the runs that involve that provider |
 | `.env` | Your OAuth client ID and secret, which you entered yourself | You delete it |
 
 sple keeps **no other YouTube data**. Match-cache entries are never refreshed: an entry older than 30 days is ignored and removed the next time the file is written. `sple import --no-cache` neither reads nor writes the cache.
@@ -45,7 +46,7 @@ Files you create with `sple export` (or `--report`) are **your own data**, creat
 
 ### Revoking access and deleting data
 
-- `sple auth logout --provider youtube-music` revokes sple's token at Google, deletes `tokens.json`'s YouTube entry and deletes the match-cache entries that involve YouTube. It reports whether Google confirmed the revocation.
+- `sple auth logout --provider youtube-music` revokes sple's token at Google, deletes `tokens.json`'s YouTube entry, and deletes the match-cache entries and unfinished imports that involve YouTube. It reports whether Google confirmed the revocation.
 - You can also remove access at any time from your Google account's [third-party connections page](https://myaccount.google.com/connections), or by deleting the OAuth client in your Google Cloud project.
 - To delete everything sple stored, delete its config directory.
 

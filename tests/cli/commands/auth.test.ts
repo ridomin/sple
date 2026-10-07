@@ -16,6 +16,7 @@ import { handleLogin } from '../../../src/cli/commands/auth/login.js'
 import { handleStatus } from '../../../src/cli/commands/auth/status.js'
 import { handleLogout } from '../../../src/cli/commands/auth/logout.js'
 import { MatchCache } from '../../../src/core/matching/match-cache.js'
+import { RunStore, newRunItem } from '../../../src/core/import/run-store.js'
 import { EXIT_CODES } from '../../../src/cli/exit-codes.js'
 import { AuthRequiredError, UsageError } from '../../../src/core/provider/errors.js'
 import type { AuthStatus, Provider, ProviderAuth } from '../../../src/core/provider/provider.js'
@@ -320,6 +321,21 @@ test('logout: deletes the match-cache entries involving the provider', async () 
   const b = makeIO()
   assert.equal(await handleLogout([target(p)], b.io, { configDir: dir }), 0)
   assert.deepEqual(b.out, ['Revoked access with Fake Provider', 'Deleted: access_token'], 'nothing left to delete')
+})
+
+test('logout: deletes the unfinished runs involving the provider', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sple-logout-runs-'))
+  const store = new RunStore({ configDir: dir })
+  const file = { schemaVersion: 1, exportedAt: '', generator: { name: 'sple', version: '0' }, source: { provider: 'spotify', kind: 'playlist' }, playlist: { name: 'P', trackCount: 0 }, tracks: [], unsupportedItems: [] } as const
+  const mine = store.create('import', 'fake', { minConfidence: 0.5, cache: true }, [newRunItem(structuredClone(file) as any, { name: 'P', sourceFilePath: 'p.json' })])
+  const other = store.create('import', 'spotify', { minConfidence: 0.5, cache: true }, [newRunItem(structuredClone(file) as any, { name: 'P', sourceFilePath: 'p.json' })])
+
+  const a = makeIO()
+  const p = providerWith({ logout: async () => ({ revoked: false, deletedData: [] }) })
+  assert.equal(await handleLogout([target(p)], a.io, { configDir: dir }), 0)
+  assert.deepEqual(a.out, ['Logged out from Fake Provider', 'Deleted: runs'])
+  assert.equal(store.load(mine.runId), undefined)
+  assert.ok(store.load(other.runId))
 })
 
 test('logout: error returns 1 but other providers are still logged out', async () => {
