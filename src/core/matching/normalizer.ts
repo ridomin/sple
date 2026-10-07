@@ -1,131 +1,100 @@
 /**
- * TrackNormalizer provides static methods for normalizing track metadata
- * and calculating confidence scores for track matching.
- *
- * Uses simple word-based overlap for title and artist similarity,
- * with no external fuzzy-matching libraries.
+ * Text normalization and metadata scoring for the metadata strategy
+ * (ADR-0009 Amendment 1 §3–4). Every implementation must reproduce the test
+ * vectors in §5, so the steps below follow the spec literally.
  */
-export class TrackNormalizer {
-  /**
-   * Normalize title: remove (feat., remix, etc.), normalize unicode NFD, lowercase.
-   * @param title Track title to normalize
-   * @returns Normalized title string
-   */
-  static normalizeTitle(title: string): string {
-    if (!title) return ''
 
-    // NFD: decompose accents and combining characters
-    let normalized = title.normalize('NFD')
+const APOSTROPHES = /['‘’ʼ]/g
+const NOT_LETTER_OR_NUMBER = /[^\p{L}\p{N}]+/gu
 
-    // Remove common suffixes: (feat. X), (ft. X), (remix), (cover), (acoustic), (instrumental)
-    normalized = normalized
-      .replace(/\s*\(feat\.\s+[^)]+\)/gi, '')
-      .replace(/\s*\(ft\.\s+[^)]+\)/gi, '')
-      .replace(/\s*\(remix\)/gi, '')
-      .replace(/\s*\(remix by [^)]+\)/gi, '')
-      .replace(/\s*\(cover\)/gi, '')
-      .replace(/\s*\(acoustic\)/gi, '')
-      .replace(/\s*\(instrumental\)/gi, '')
+/** ADR-0009 A1 §3 `normalizeText`. */
+export function normalizeText(s: string): string {
+  return s
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(APOSTROPHES, '')
+    .replace(/&/g, ' and ')
+    .replace(NOT_LETTER_OR_NUMBER, ' ')
+    .trim()
+}
 
-    // Lowercase and trim
-    normalized = normalized.toLowerCase().trim()
+/** The distinct words of `normalizeText(s)`, in first-seen order. */
+export function tokens(s: string): string[] {
+  const text = normalizeText(s)
+  return text ? [...new Set(text.split(' '))] : []
+}
 
-    return normalized
+const VERSION =
+  /^(?:(?:\d{4} )?(?:digital |digitally )?(?:remaster|remastered)(?: \d{4})?(?: version)?|explicit|clean|mono|stereo|radio edit|single version|album version)$/
+const CREDIT_BRACKET = /^(?:feat|ft|featuring|with) .+$/
+const CREDIT_DASH = /^(?:feat|ft|featuring) .+$/
+
+/** `(…)` or `[…]` without nested brackets, with the whitespace before it. */
+const BRACKETED = /\s*(?:\(([^()[\]]*)\)|\[([^()[\]]*)\])/g
+/** `<head> <dash> <tail>`, split at the last dash surrounded by whitespace. */
+const DASH_SUFFIX = /^(.*)\s+[-–—]\s+(.*)$/s
+
+/**
+ * ADR-0009 A1 §3 `stripTitleDecorations`: drop remaster/edition markers and
+ * featured-artist credits, but keep words that change the recording (live,
+ * remix, acoustic, …).
+ */
+export function stripTitleDecorations(title: string): string {
+  let result = title.replace(BRACKETED, (segment, paren?: string, square?: string) => {
+    const content = normalizeText(paren ?? square ?? '')
+    return VERSION.test(content) || CREDIT_BRACKET.test(content) ? '' : segment
+  })
+
+  for (let m = DASH_SUFFIX.exec(result); m; m = DASH_SUFFIX.exec(result)) {
+    const tail = normalizeText(m[2])
+    if (!VERSION.test(tail) && !CREDIT_DASH.test(tail)) break
+    result = m[1]
+  }
+  return result
+}
+
+export function titleTokens(title: string): string[] {
+  return tokens(stripTitleDecorations(title))
+}
+
+export interface ScoredTrack {
+  title: string
+  artists: string[]
+  durationMs?: number
+}
+
+export interface MetadataScore {
+  title: number
+  artist: number
+  confidence: number
+  /** Only accepted hits can become a match candidate. */
+  accepted: boolean
+}
+
+const isSubset = (a: string[], b: string[]) => a.every((x) => b.includes(x))
+
+/** ADR-0009 A1 §4. */
+export function scoreMetadata(source: ScoredTrack, candidate: ScoredTrack): MetadataScore {
+  const ts = titleTokens(source.title)
+  const tc = titleTokens(candidate.title)
+  const title =
+    ts.length === 0 || tc.length === 0 ? 0 : ts.filter((w) => tc.includes(w)).length / Math.max(ts.length, tc.length)
+
+  const as = source.artists.map(tokens).filter((t) => t.length > 0)
+  const ac = candidate.artists.map(tokens).filter((t) => t.length > 0)
+  const artist =
+    as.length === 0 || ac.length === 0
+      ? 0
+      : as.filter((a) => ac.some((x) => isSubset(a, x) || isSubset(x, a))).length / as.length
+
+  let confidence: number
+  if (typeof source.durationMs === 'number' && typeof candidate.durationMs === 'number') {
+    const duration = Math.abs(source.durationMs - candidate.durationMs) <= 5000 ? 1 : 0
+    confidence = 0.5 * title + 0.35 * artist + 0.15 * duration
+  } else {
+    confidence = (0.5 * title + 0.35 * artist) / 0.85
   }
 
-  /**
-   * Normalize artist name: normalize unicode NFD, lowercase, trim.
-   * @param artist Artist name to normalize
-   * @returns Normalized artist name
-   */
-  static normalizeArtist(artist: string): string {
-    if (!artist) return ''
-
-    let normalized = artist.normalize('NFD')
-    normalized = normalized.toLowerCase().trim()
-
-    return normalized
-  }
-
-  /**
-   * Calculate title similarity using word-based overlap (0-1).
-   * Splits titles into words and counts matching words.
-   * @param query Query title
-   * @param candidate Candidate title to compare
-   * @returns Similarity score between 0 and 1
-   */
-  static calculateTitleSimilarity(query: string, candidate: string): number {
-    const normQuery = this.normalizeTitle(query).split(/\s+/).filter(w => w)
-    const normCandidate = this.normalizeTitle(candidate).split(/\s+/).filter(w => w)
-
-    if (normQuery.length === 0 || normCandidate.length === 0) {
-      return 0
-    }
-
-    const matches = normQuery.filter(word => normCandidate.includes(word)).length
-    return matches / Math.max(normQuery.length, normCandidate.length)
-  }
-
-  /**
-   * Calculate artist similarity as percentage of query artists found in candidates.
-   * Uses substring matching for flexibility (e.g., "The Beatles" contains "Beatles").
-   * @param queryArtists Artists from the query
-   * @param candidateArtists Artists from the candidate
-   * @returns Similarity score between 0 and 1 (percentage of query artists matched)
-   */
-  static calculateArtistSimilarity(queryArtists: string[], candidateArtists: string[]): number {
-    const normQuery = queryArtists.map(a => this.normalizeArtist(a))
-    const normCandidate = candidateArtists.map(a => this.normalizeArtist(a))
-
-    if (normQuery.length === 0 || normCandidate.length === 0) {
-      return 0
-    }
-
-    const matches = normQuery.filter(qa =>
-      normCandidate.some(ca => ca.includes(qa) || qa.includes(ca))
-    ).length
-    return matches / normQuery.length // Percentage of query artists found
-  }
-
-  /**
-   * Check if two durations are within tolerance (default ±5 seconds).
-   * @param duration1 First duration in milliseconds
-   * @param duration2 Second duration in milliseconds
-   * @param toleranceMs Tolerance in milliseconds (default 5000)
-   * @returns true if durations are within tolerance
-   */
-  static isWithinDurationTolerance(
-    duration1: number,
-    duration2: number,
-    toleranceMs: number = 5000
-  ): boolean {
-    return Math.abs(duration1 - duration2) <= toleranceMs
-  }
-
-  /**
-   * Calculate combined confidence score for metadata match.
-   * Weights: title 50%, artist 35%, duration 15%.
-   * @param queryTitle Query track title
-   * @param queryArtists Query track artists
-   * @param queryDuration Query track duration in milliseconds
-   * @param candidateTitle Candidate track title
-   * @param candidateArtists Candidate track artists
-   * @param candidateDuration Candidate track duration in milliseconds
-   * @returns Confidence score between 0 and 1
-   */
-  static calculateMetadataConfidence(
-    queryTitle: string,
-    queryArtists: string[],
-    queryDuration: number,
-    candidateTitle: string,
-    candidateArtists: string[],
-    candidateDuration: number
-  ): number {
-    const titleScore = this.calculateTitleSimilarity(queryTitle, candidateTitle)
-    const artistScore = this.calculateArtistSimilarity(queryArtists, candidateArtists)
-    const durationOk = this.isWithinDurationTolerance(queryDuration, candidateDuration) ? 1 : 0
-
-    const confidence = titleScore * 0.5 + artistScore * 0.35 + durationOk * 0.15
-    return Math.min(1, confidence)
-  }
+  return { title, artist, confidence, accepted: title >= 0.5 && artist > 0 && confidence >= 0.4 }
 }

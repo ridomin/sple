@@ -64,6 +64,8 @@ interface MatchingStrategy {
 
 ### Metadata Scoring
 
+> Superseded by Amendment 1 §3–4: normalization folds accents, apostrophes and punctuation, keeps `remix`/`live`/…, and a hit is accepted only with title overlap ≥ 0.5 and some artist overlap.
+
 Metadata confidence combines three signals:
 
 - **Title similarity** (weight 50%): word-overlap after normalization

@@ -1,11 +1,10 @@
 import type { MatchingStrategy, MatchCandidate, MatchRequest } from '../types.js'
 import type { Provider } from '../../provider/provider.js'
-import { TrackNormalizer } from '../normalizer.js'
+import { scoreMetadata } from '../normalizer.js'
 
 /**
- * Metadata strategy: searches for tracks using normalized title and artist metadata.
- * This is the lowest-priority (fallback) matching strategy using word-based overlap
- * and confidence scoring without external fuzzy-matching libraries.
+ * Metadata strategy: searches by title and artists and scores each hit with
+ * ADR-0009 A1 §4 (token overlap on normalized title and artists, plus duration).
  * Priority 3 (lowest) - runs after known-ref and ISRC matching.
  */
 export class MetadataStrategy implements MatchingStrategy {
@@ -28,32 +27,14 @@ export class MetadataStrategy implements MatchingStrategy {
       { limit: 10 }
     )
 
-    // Score each result and return the best match
-    let bestCandidate: MatchCandidate | null = null
-    let bestScore = 0
-
+    // ADR-0009 A1 §4: the best accepted hit wins; ties go to the earlier hit.
+    let best: MatchCandidate | null = null
     for (const hit of hits) {
-      const score = TrackNormalizer.calculateMetadataConfidence(
-        track.title,
-        track.artists,
-        track.durationMs ?? 0,
-        hit.track.title,
-        hit.track.artists,
-        hit.track.durationMs ?? 0
-      )
-
-      if (score > bestScore) {
-        bestScore = score
-        bestCandidate = { ref: hit.ref, track: hit.track, confidence: score, strategy: 'metadata' }
+      const score = scoreMetadata(track, hit.track)
+      if (score.accepted && (!best || score.confidence > best.confidence)) {
+        best = { ref: hit.ref, track: hit.track, confidence: score.confidence, strategy: 'metadata' }
       }
     }
-
-    // Only return if confidence is above threshold (0.4)
-    // Below 0.4 is too risky for automatic matching
-    if (bestCandidate && bestScore >= 0.4) {
-      return bestCandidate
-    }
-
-    return null
+    return best
   }
 }

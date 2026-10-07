@@ -217,6 +217,28 @@ describe('MetadataStrategy', () => {
       assert.strictEqual(await strategy.execute(request(track), provider), null)
     })
 
+    test('never returns a hit whose title shares nothing with the source (#25)', async () => {
+      const { provider } = providerReturning([
+        hit('yt:1', { title: 'Scumbag Millionaire - Attitude (Live in Uddevalla)', artists: ['Scumbag Millionaire'], durationMs: 125000 }),
+      ])
+      const track = { title: 'Full Speed Go', artists: ['Scumbag Millionaire'], durationMs: 127106, refs: {} }
+      assert.strictEqual(await strategy.execute(request(track), provider), null)
+    })
+
+    test('never returns a hit by a different artist', async () => {
+      const { provider } = providerReturning([hit('x', { title: 'Hallelujah', artists: ['Jeff Buckley'], durationMs: 280000 })])
+      const track = { title: 'Hallelujah', artists: ['Leonard Cohen'], durationMs: 280000, refs: {} }
+      assert.strictEqual(await strategy.execute(request(track), provider), null)
+    })
+
+    test('on a tie the earlier hit wins', async () => {
+      const { provider } = providerReturning([
+        hit('first', { title: 'Imagine', artists: ['John Lennon'], durationMs: 183000 }),
+        hit('second', { title: 'Imagine', artists: ['John Lennon'], durationMs: 183000 }),
+      ])
+      assert.strictEqual((await strategy.execute(request(imagine), provider))!.ref, 'first')
+    })
+
     test('returns null when there are no hits', async () => {
       const { provider } = providerReturning([])
       assert.strictEqual(await strategy.execute(request(imagine), provider), null)
