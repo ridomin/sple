@@ -112,7 +112,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
     }
   }
 
-  async logout(): Promise<{ revoked: boolean; deletedData: string[] }> {
+  async logout(): Promise<{ revoked: boolean; deletedData: string[]; notice?: string }> {
     const token = loadTokens('youtube-music', this.configDir)
 
     let revoked = false
@@ -129,7 +129,13 @@ export class YouTubeMusicAuth implements ProviderAuth {
     this.token = undefined
 
     // sple keeps no other YouTube data (no match cache or migration state yet).
-    return { revoked, deletedData: ['access_token', 'refresh_token'] }
+    return {
+      revoked,
+      deletedData: ['access_token', 'refresh_token'],
+      notice:
+        'Export files you created were not touched; they are yours to keep or delete ' +
+        '(https://github.com/ridomin/sple/blob/main/docs/PRIVACY.md).',
+    }
   }
 
   /**
