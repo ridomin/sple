@@ -72,7 +72,7 @@ Global Options:
 
 Examples:
   sple auth login
-  sple --provider spotify search track "hello world"
+  sple search "hello world" --type track
   sple playlist list
 `
 }
