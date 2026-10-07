@@ -204,7 +204,7 @@ test('create via the CLI router works end-to-end with the fake provider', async 
   const err: string[] = []
   const code = await cliRun(['--provider', 'fake', '--json', 'playlist', 'create', 'Road Trip', '--public'], {
     io: { out: (m) => out.push(m), err: (m) => err.push(m) },
-    env: {},
+    env: { SPLE_ENABLE_FAKE_PROVIDER: '1' },
   })
   assert.equal(code, 0)
   assert.equal(JSON.parse(out.join('\n')).public, true)

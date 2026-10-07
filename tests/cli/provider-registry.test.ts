@@ -25,7 +25,7 @@ test('registry: providers are built from config at create time', () => {
 })
 
 test('registry: trackRefParsers lists each registered provider’s pure parseTrackRef, without a client ID', () => {
-  const parsers = createDefaultRegistry().trackRefParsers()
+  const parsers = createDefaultRegistry({ enableFake: true }).trackRefParsers()
   assert.deepEqual(Object.keys(parsers).sort(), ['fake', 'spotify', 'youtube-music'])
   assert.equal(parsers.spotify!('https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC'), 'spotify:track:4uLU6hMCjMI75M1A2tKUQC')
   assert.equal(parsers['youtube-music']!('https://youtu.be/dQw4w9WgXcQ'), 'dQw4w9WgXcQ')

@@ -17,7 +17,10 @@ import {
   ProviderError,
 } from '../../src/core/provider/errors.js'
 
-async function exec(argv: string[], env: NodeJS.ProcessEnv = {}) {
+/** Most CLI tests drive the fake provider, so it is enabled unless a test passes its own env. */
+const FAKE_ENABLED = { SPLE_ENABLE_FAKE_PROVIDER: '1' }
+
+async function exec(argv: string[], env: NodeJS.ProcessEnv = FAKE_ENABLED) {
   const out: string[] = []
   const err: string[] = []
   const code = await run(argv, {
@@ -107,8 +110,8 @@ test('envFilePermissionWarning warns when .env is readable by others', { skip: p
   }
 })
 
-test('registry instantiates all three providers', () => {
-  const reg = createDefaultRegistry()
+test('registry instantiates all three providers when the fake provider is enabled', () => {
+  const reg = createDefaultRegistry({ enableFake: true })
   const cfg = loadConfig({}, { SPLE_SPOTIFY_CLIENT_ID: 'sid', SPLE_YOUTUBE_MUSIC_CLIENT_ID: 'yid' })
   assert.deepStrictEqual(reg.list().sort(), ['fake', 'spotify', 'youtube-music'])
   for (const id of reg.list()) {
@@ -307,4 +310,29 @@ test('--debug after the command prints one redacted sple:http line per request (
     else process.env.XDG_CONFIG_HOME = prevXdg
     rmSync(xdg, { recursive: true, force: true })
   }
+})
+
+// PRV-6 / ADR-0003 A2: the fake provider is registered only with SPLE_ENABLE_FAKE_PROVIDER=1.
+test('the fake provider is not registered by default', async () => {
+  assert.deepStrictEqual(createDefaultRegistry().list().sort(), ['spotify', 'youtube-music'])
+
+  const r = await exec(['--provider', 'fake', 'auth', 'status'], {})
+  assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
+  assert.match(r.err, /Unknown provider 'fake'\. Valid providers: spotify, youtube-music$/m)
+
+  const unknown = await exec(['--provider', 'nope', 'auth', 'status'], {})
+  assert.match(unknown.err, /Valid providers: spotify, youtube-music$/m)
+})
+
+test('root help lists registered providers only', async () => {
+  const plain = await exec(['--help'], {})
+  assert.match(plain.out, /--provider <name>\s+Specify the provider \(spotify, youtube-music\)/)
+  const withFake = await exec(['--help'])
+  assert.match(withFake.out, /--provider <name>\s+Specify the provider \(spotify, youtube-music, fake\)/)
+})
+
+test('SPLE_ENABLE_FAKE_PROVIDER=1 registers the fake provider', async () => {
+  const r = await exec(['--provider', 'fake', 'playlist', 'list', '--quiet'], { SPLE_ENABLE_FAKE_PROVIDER: '1' })
+  assert.strictEqual(r.code, 0)
+  assert.deepStrictEqual(createDefaultRegistry({ enableFake: true }).list().sort(), ['fake', 'spotify', 'youtube-music'])
 })

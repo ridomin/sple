@@ -25,6 +25,23 @@ test('FakeProvider', async (t) => {
     rmSync(tempDir, { recursive: true, force: true })
   })
 
+  await t.test('default capabilities match ADR-0003 §5', () => {
+    const caps = new FakeProvider().capabilities
+    assert.deepStrictEqual(caps.quotaModel, { kind: 'rate-limited' })
+    assert.strictEqual(caps.paginationModel, 'offset')
+    assert.strictEqual(caps.maxSearchPageSize, 50)
+    assert.strictEqual(caps.maxTracksPerRequest, 100)
+    assert.strictEqual(caps.playlistItemsAccess, 'all')
+    assert.strictEqual(caps.isrcSearchMode, 'none')
+    assert.strictEqual(caps.canDeletePlaylist, true)
+    assert.strictEqual(caps.supportsCollaborative, true)
+    assert.deepStrictEqual(caps.likedSongs, { read: 'exact', write: false })
+    assert.strictEqual('canCreatePlaylist' in caps, false, 'no fields outside ProviderCapabilities')
+    for (const key of ['official', 'requiresRiskAcknowledgement', 'requiresClientSecret', 'supportsRevocation', 'searchReturnsDuration', 'musicAwareSearch']) {
+      assert.strictEqual(typeof (caps as any)[key], 'boolean', key)
+    }
+  })
+
   await t.test('initialization with default config', () => {
     assert.ok(provider.capabilities)
     assert.strictEqual(provider.capabilities.canDeletePlaylist, true)
