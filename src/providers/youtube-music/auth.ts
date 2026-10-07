@@ -3,16 +3,12 @@ import { loadTokens, saveTokens, deleteTokens, type StoredToken } from '../../co
 import { OAuthHandler } from '../../core/auth/oauth-handler.js'
 import type { OAuthConfig } from '../../core/auth/auth.js'
 import { AuthRequiredError, ProviderError } from '../../core/provider/errors.js'
+import { assertScopes, grantedScopes, missingScopes } from '../../core/auth/scopes.js'
 
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 // Google only returns a refresh_token for offline access, and on repeat consent only with prompt=consent
 const GOOGLE_AUTH_PARAMS = { access_type: 'offline', prompt: 'consent' }
-
-/** Split a token response's space-separated `scope`; absent means the requested scopes were granted (RFC 6749 §5.1). */
-function grantedScopes(scope: string | undefined, requested: string[]): string[] {
-  return scope !== undefined ? scope.split(/\s+/).filter((s) => s.length > 0) : requested
-}
 
 export class YouTubeMusicAuth implements ProviderAuth {
   private config: OAuthConfig
@@ -79,7 +75,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
         user: { id: user.id, displayName: user.displayName },
         scopes: storedToken.scopes,
         expiresAt: storedToken.expiresAt,
-        missingScopes: config.scopes.filter((s) => !storedToken.scopes.includes(s)),
+        missingScopes: missingScopes(config.scopes, storedToken.scopes),
       }
     } finally {
       handler.cleanup()
@@ -193,15 +189,12 @@ export class YouTubeMusicAuth implements ProviderAuth {
     return updated
   }
 
-  async requireScopes(scopes: string[]): Promise<StoredToken> {
+  async requireScopes(scopes: readonly string[]): Promise<StoredToken> {
     const token = await this.getToken()
     if (!token) {
       throw new AuthRequiredError('Not logged in', 'no-token')
     }
-    const missing = scopes.find((s) => !token.scopes.includes(s))
-    if (missing !== undefined) {
-      throw new AuthRequiredError(`Run "sple auth login" to grant ${missing}`, 'missing-scope', missing)
-    }
+    assertScopes(token.scopes, scopes)
     return token
   }
 

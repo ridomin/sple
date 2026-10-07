@@ -7,7 +7,6 @@ import { createSpotifyProvider } from '../../../src/providers/spotify/index.js'
 import {
   SPOTIFY_LOGIN_SCOPES,
   SPOTIFY_OPERATION_SCOPES,
-  assertScopes,
   requiredScopes,
 } from '../../../src/providers/spotify/scopes.js'
 import { saveTokens } from '../../../src/core/config/token-store.js'
@@ -128,18 +127,6 @@ test('requiredScopes narrows createPlaylist by visibility', () => {
     'playlist-modify-private',
   ])
   assert.deepEqual(requiredScopes('createPlaylist'), ['playlist-modify-public', 'playlist-modify-private'])
-})
-
-test('assertScopes throws missing-scope naming the first missing scope', () => {
-  assert.doesNotThrow(() => assertScopes(['a', 'b'], ['b']))
-  assert.throws(
-    () => assertScopes(['a'], ['a', 'b', 'c']),
-    (e: unknown) =>
-      e instanceof AuthRequiredError &&
-      e.reason === 'missing-scope' &&
-      e.scope === 'b' &&
-      e.message === 'Run "sple auth login" to grant b'
-  )
 })
 
 for (const op of OPERATIONS) {
