@@ -4,11 +4,11 @@ A command-line tool for exporting, searching, and migrating playlists across mus
 
 ## Features
 
-- **Multi-provider support:** Seamlessly work with multiple music providers
-- **Playlist export:** Export playlists with metadata (tracks, artists, albums)
-- **Cross-provider migration:** Migrate playlists between services
-- **Flexible authentication:** Support for interactive, no-browser, and manual OAuth flows
-- **Token management:** Secure, multi-provider token storage with automatic refresh
+- **Search** the Spotify or YouTube Music catalog for tracks, albums, artists and playlists
+- **Manage playlists:** list, show, create and remove
+- **Export** playlists and Liked Songs to a lossless JSON format or CSV
+- **Import** an exported file into another provider: tracks are matched by ref, ISRC or metadata, with a match report (a one-step `migrate` command is planned)
+- **Authentication:** browser, no-browser and manual OAuth flows, with tokens stored locally and refreshed automatically
 
 ## Getting Started
 
@@ -87,25 +87,55 @@ sple auth logout --provider youtube-music
 sple auth logout --all
 ```
 
+### Search
+
+```bash
+sple search "daft punk" --type artist
+sple search "harder better faster stronger" --type track --limit 5
+sple search "road trip" --type playlist --provider youtube-music
+```
+
+`--type` is `track` (default), `album`, `artist` or `playlist`. YouTube Music has no albums.
+
+### Playlists
+
+```bash
+sple playlist list [--owned | --followed]
+sple playlist show "Road trip"                 # name, ID, URI or URL
+sple playlist create "New mix" --private
+sple playlist remove "Old mix"                 # Spotify unfollows; YouTube deletes
+```
+
+### Export
+
+```bash
+sple export "Road trip" -o road-trip.json      # canonical JSON (lossless)
+sple export "Road trip" --format csv -o road-trip.csv
+sple export --liked -o liked.json              # Liked Songs
+```
+
+The JSON format is published as [a JSON Schema](schemas/canonical-playlist.v1.schema.json). Export files are yours: sple never tracks or deletes them.
+
 ### Import
 
 ```bash
-sple import <file> [--provider spotify|youtube-music] [--name "Name"]
+sple import road-trip.json --provider youtube-music
+sple import road-trip.json --provider youtube-music --dry-run --report report.json
 ```
 
-Create a new playlist by matching tracks from an exported canonical file. Uses a three-strategy matching chain: known refs → ISRC → metadata. See [import guide](docs/user/import.md).
+`import` matches each track on the target provider (known ref, then ISRC, then title, artist and duration), prints a match report, and after you confirm creates a private playlist with the matched tracks. See the [import guide](docs/user/import.md).
 
-Example:
+### Global options
 
-```bash
-# Import Spotify playlist to YouTube Music
-sple import my-songs.json --provider youtube-music
+| Option | Effect |
+|---|---|
+| `--provider <name>` | `spotify` (default, or `SPLE_DEFAULT_PROVIDER`) or `youtube-music` |
+| `--json` | Machine-readable output on stdout |
+| `--quiet` | IDs only |
+| `--yes` | Don't ask for confirmation (required for prompts when stdin isn't a terminal) |
+| `--verbose`, `--debug` | Diagnostic lines on stderr; filter them with `DEBUG=sple:…` ([logging](docs/user/logging.md)) |
 
-# With a match report
-sple import my-songs.json --report report.txt
-```
-
-Note: playlist creation on the target provider is not implemented yet; `sple import` currently matches tracks and prints or saves the match report.
+Exit codes: 0 success, 1 error or partial failure, 2 usage error, 3 authentication needed, 4 not found, 5 quota or rate limit.
 
 ### Configuration
 
@@ -128,116 +158,77 @@ SPLE_GOOGLE_CLIENT_SECRET=your_google_secret
 SPLE_DEFAULT_PROVIDER=spotify
 ```
 
-See `.env.example` for a template.
+Copy the block above into your `.env` and fill in the values; lines you don't need can stay commented out with `#`.
 
 ### Tokens
 
-Tokens are stored securely in `~/.config/sple/tokens.json` (same directory as `.env`):
+Tokens are stored in `tokens.json` in the same directory as `.env`:
 - User-only permissions (`0600` on POSIX)
 - Multiple providers can be authenticated simultaneously
 - Tokens are refreshed automatically when expired
 - Never check tokens into version control
+
+The same directory holds `quota.json`, which counts today's YouTube API calls. See the [privacy policy](docs/PRIVACY.md) for everything sple stores.
 
 ## Project Structure
 
 ```
 sple/
 ├── src/
-│   ├── core/              # Core abstractions
-│   │   ├── auth/          # Auth interface and OAuth handler
-│   │   ├── config/        # Config paths and token store
-│   │   ├── http/          # HTTP client base class
-│   │   └── provider/      # Provider interface and capabilities
-│   ├── providers/         # Provider adapters
-│   │   ├── spotify/
-│   │   ├── youtube-music/
-│   │   └── fake/          # Fake provider for testing
-│   └── cli/               # CLI commands and entry point
-├── docs/
-│   ├── adr/               # Architecture Decision Records
-│   ├── M0-IMPLEMENTATION-PLAN.md
-│   └── requirements.md
-├── test/                  # Test files
-├── tsconfig.json
-├── jest.config.js
-└── package.json
+│   ├── cli/               # Entry point, commands, output formatting, logging
+│   ├── core/
+│   │   ├── auth/          # OAuth (PKCE, loopback), scope helpers
+│   │   ├── config/        # Config paths, .env, token store
+│   │   ├── export/        # Canonical file and CSV writers
+│   │   ├── http/          # HTTP client: retries, token refresh, debug logging
+│   │   ├── import/        # File reader, match report, playlist creation
+│   │   ├── matching/      # Matching engine, normalizer, strategies
+│   │   ├── provider/      # Provider interface, capabilities, errors
+│   │   └── quota/         # Daily quota ledger
+│   └── providers/
+│       ├── spotify/
+│       ├── youtube-music/
+│       └── fake/          # In-memory provider for tests (SPLE_ENABLE_FAKE_PROVIDER=1)
+├── tests/                 # node:test suites and recorded fixtures
+├── schemas/               # Canonical playlist JSON Schema
+├── scripts/               # Repository checks (check:stubs)
+└── docs/
+    ├── requirements.md    # Requirements, milestones, and deviations (§12)
+    ├── adr/               # Architecture Decision Records
+    ├── user/              # User guides
+    └── PRIVACY.md
 ```
 
 ## Architecture
 
-This project follows a provider-agnostic architecture documented in Architecture Decision Records (ADRs):
+The behavior is specified in [docs/requirements.md](docs/requirements.md) and the Architecture Decision Records:
 
-- **ADR-0003:** [Provider interface and capabilities](docs/adr/0003-provider-interface-and-capabilities.md)
-- **ADR-0004:** [Token store and config](docs/adr/0004-token-store-and-config.md)
+| ADR | Topic |
+|---|---|
+| [0002](docs/adr/0002-youtube-music-provider.md) | YouTube Music provider (Data API v3, quota) |
+| [0003](docs/adr/0003-provider-interface-and-capabilities.md) | Provider interface, capabilities, scope tables |
+| [0004](docs/adr/0004-token-store-and-config.md) | Config, token store |
+| [0005](docs/adr/0005-canonical-track-model.md) | Canonical track model |
+| [0007](docs/adr/0007-cli-conventions.md) | CLI conventions: output, errors, exit codes, logging |
+| [0008](docs/adr/0008-canonical-playlist-file.md) | Canonical playlist file (JSON, CSV) |
+| [0009](docs/adr/0009-matching-strategy.md) | Matching strategy and match report |
+| [0010](docs/adr/0010-http-oauth-and-token-refresh.md) | HTTP client, OAuth and token refresh |
 
 ### Key Design Decisions
 
-1. **Closed provider interface:** All operations are mediated through a single `Provider` interface. No provider-specific code in core logic.
-
-2. **Capability-driven CLI:** The CLI checks provider capabilities before acting (e.g., `owned-only` playlists, pagination model, quota limits).
-
-3. **Transparent token refresh:** HTTP clients handle token refresh automatically; the CLI and core are unaware of refresh logic.
-
-4. **Typed errors:** A closed set of error types map to exit codes for predictable CLI behavior.
+1. **Closed provider interface:** all operations go through one `Provider` interface, and core never branches on a provider ID.
+2. **Capability-driven CLI:** differences between providers (pagination, page sizes, playlist access, quota model) are declared as capabilities.
+3. **Transparent token refresh:** the HTTP client refreshes tokens, so commands don't handle refresh themselves.
+4. **Typed errors:** a closed set of error types maps to exit codes.
 
 ## Development
 
-### Building
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, testing patterns and how changes are made. In short:
 
 ```bash
-npm run build
-```
-
-Outputs compiled code to `dist/`.
-
-### Linting
-
-```bash
-npm run lint
-```
-
-### Testing
-
-```bash
-npm test
-```
-
-All tests use mocked providers and HTTP responses. No real API calls.
-
-### Running locally
-
-```bash
-npm run dev -- auth login --provider spotify
-```
-
-## Contributing
-
-### Code style
-
-- TypeScript with `strict` mode
-- ESM modules
-- No external provider SDKs (use native fetch + type definitions)
-
-### Testing
-
-- All code changes require tests
-- Use mock fixtures for HTTP responses
-- No real API credentials in tests
-- Target ≥ 50% coverage on core modules
-
-### Committing
-
-Follow conventional commits:
-- `feat:` new feature
-- `fix:` bug fix
-- `refactor:` code reorganization
-- `test:` test additions/changes
-- `docs:` documentation
-- `chore:` build, dependencies, tooling
-
-Example:
-```bash
-git commit -m "feat(auth): add token refresh to HTTP client"
+npm install && npm run build
+npm run lint && npm test && npm run check:stubs
+node dist/cli/cli.js --help
 ```
 
 ## License

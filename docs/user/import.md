@@ -1,73 +1,57 @@
-# Importing Playlists
+# Importing playlists
 
-`sple import` matches tracks from an exported canonical file against your target provider, produces a match report, and (after confirmation) creates a new private playlist with the matched tracks.
+`sple import` reads a playlist file, matches each track on the target provider, prints a match report, and, after you confirm, creates a new **private** playlist with the matched tracks. The full contract is [ADR 0007](../adr/0007-cli-conventions.md) A9.
 
-## Basic Usage
+```
+sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--dry-run] [--yes]
+```
+
+The target is the global `--provider` (default `spotify`, or `SPLE_DEFAULT_PROVIDER`). There are no short flags.
 
 ```bash
-sple import <file> [--provider spotify|youtube-music] [--name "Playlist Name"]
+# Copy a Spotify playlist to YouTube Music
+sple export "Road trip" -o road-trip.json
+sple import road-trip.json --provider youtube-music
+
+# See the matches first, keep a JSON report, change nothing
+sple import road-trip.json --provider youtube-music --dry-run --report report.json
+
+# Non-interactive (scripts, CI): --yes is required when stdin is not a terminal
+sple import road-trip.json --provider youtube-music --name "Road trip (YT)" --yes
 ```
 
-### Example
+## Input files
 
-```bash
-# Import a Spotify export to YouTube Music
-sple import my-playlist.json --provider youtube-music --name "My Music on YouTube"
+The format is chosen by extension (case-insensitive): `.json` or `.csv`. Anything else, or a file that can't be read, exits with code 2 (`Failed to read file: <reason>`). Details are in [ADR 0008](../adr/0008-canonical-playlist-file.md) Amendment 1.
 
-# Import with a match report
-sple import my-playlist.json --report import-report.txt
-```
+- **JSON:** the canonical v1 file written by `sple export` ([schema](../../schemas/canonical-playlist.v1.schema.json)). It records the source provider and each track's refs, so re-importing into a provider the file already has refs for needs no searching.
+- **CSV:** the eight `sple export --format csv` columns, `position,title,artists,album,duration_ms,added_at,isrc,ref`, in any order. Extra columns are ignored, and a UTF-8 BOM from spreadsheet apps is fine. The playlist name defaults to the file name.
+  - **Source inference:** sple works out which provider the `ref` column belongs to, using the one provider that recognizes every non-empty ref. If none or several do, it prints `sple: warning: could not tell which provider the CSV refs belong to; matching by metadata only`.
 
-## How Matching Works
+## How matching works
 
-The matching engine uses a three-step strategy chain:
+Tracks are matched one at a time, in order. For each track, the first strategy that finds a candidate wins ([ADR 0009](../adr/0009-matching-strategy.md)):
 
-1. **Known Ref** (highest priority)
-   - If the exported file already has a reference for the target provider, use it directly.
-   - Example: if you exported a playlist, re-imported it to the same provider.
-   - Confidence: 100%
+| # | Strategy | When | Confidence |
+|---|---|---|---|
+| 1 | **Known ref** | The file already has a ref for the target provider | 100%, no request |
+| 2 | **ISRC** | The track has an ISRC and the target can search by ISRC (Spotify can, YouTube can't) | 95% |
+| 3 | **Metadata** | The track has a title | 50% title + 35% artist + 15% duration (within 5 s) |
 
-2. **ISRC** (medium priority)
-   - If both the source and target providers support ISRC (International Standard Recording Code), search by ISRC.
-   - Spotify supports ISRC; YouTube Music does not. A track is only eligible if the file records an ISRC for it.
-   - Confidence: 95% (very high but not perfect)
+A metadata candidate counts only if at least half the title words match and at least one artist matches. Titles are compared after normalization: case, accents, typographic punctuation, `feat.` credits, and tags such as `Remastered 2009` or `Radio Edit` are ignored. Tags that change the recording, such as `Live` or `Remix`, are kept.
 
-3. **Metadata** (lowest priority, most common)
-   - Normalize the track title and artist name, then search on the target provider.
-   - Score based on title match (50%), artist match (35%), and duration match (15%).
-   - Confidence: variable (typically 40–95%)
+On YouTube Music, matching searches only the Music category and prefers official "Artist - Topic" uploads, so you get the song rather than a music video.
 
-The engine tries each applicable strategy in order and returns the first match. Matches below `--min-confidence` are reported as low-confidence.
+Candidates below `--min-confidence` (default `0.5`) are **low-confidence**: they're reported but not added. Authentication errors (exit 3) and quota or rate-limit errors (exit 5) stop the whole import before anything is created.
 
-## Options
+## What gets printed
 
-### `--provider`
-Target provider for import. Default: `spotify`.
-
-### `--name`
-Name for the new playlist. Default: original playlist name from the file.
-
-### `--report`
-Save a match report to the given file. Can be `.json` (machine-readable) or `.txt` (human-readable).
-
-### `--min-confidence`
-Minimum confidence score to automatically match a track (0–1). Below this threshold, matches are marked as "low-confidence", listed in the report for review, and **not added** to the playlist.
-
-Default: `0.5` (50%)
-
-### `--dry-run`
-Show what would be imported without creating the playlist.
-
-### `--yes`
-Skip the confirmation prompt before creating the playlist.
-
-## Match Report
-
-After matching completes, `sple` prints a summary:
+On a terminal (and in TSV mode) stdout gets the text report:
 
 ```
-Match Report: My Playlist
+Match Report: Road trip
 Source: spotify → Target: youtube-music
+Imported at: 2026-10-07T10:00:00.000Z
 
 Summary
 -------
@@ -79,58 +63,57 @@ Unsupported:     0 (0%)
 
 Recommendations
 ---------------
-• 2 tracks could not be matched. Check the match report for details.
-```
+• 2 track(s) could not be matched. Check the match report for details.
+• 3 track(s) have low confidence matches. Review and adjust if needed.
 
-### Low-Confidence Matches
+Unmatched Tracks
+----------------
+5: Very Obscure Song — Local Artist
+18: Unreleased Demo — Someone
 
-If a match's confidence score falls below `--min-confidence`, it's marked as "low-confidence" and listed in the report:
-
-```
 Low-Confidence Matches
 ---------------------
 15: Track Title → Slightly Different Title (42%)
-42: Song Name (remix) → Song Name (78%)
 ```
 
-Low-confidence matches are left out of the created playlist. To include them:
-
-1. Check the match report for each low-confidence track.
-2. If the suggested matches are correct, re-run with a lower `--min-confidence`.
-3. Otherwise, edit the canonical file (JSON only) to add the correct track ref, then re-run import.
-
-### Unmatched Tracks
-
-Tracks that could not be matched at all are listed:
+stderr gets `95/100 tracks ready to import (95%)` and, if any were skipped, `3 low-confidence match(es) skipped (below --min-confidence 0.5)`. Then it asks:
 
 ```
-Unmatched Tracks
-----------------
-5: Very Obscure Local Artist Song
-18: Unreleased Demo Track
+Create playlist "Road trip" with 95 matched track(s)? (y/n):
 ```
 
-Options:
-- **Add the track manually** to the created playlist after import.
-- **Edit the file** (JSON) to add known refs for these tracks, then re-run.
-- **Accept the import** without these tracks.
+Answering anything but `y` prints `Aborted; nothing was changed.` and exits 1. After creating the playlist:
 
-## Creating the Playlist
+```
+Created private playlist "Road trip" (PLxxxx) https://www.youtube.com/playlist?list=PLxxxx with 95 of 95 tracks
+```
 
-After you confirm (or with `--yes`), `sple` creates a private playlist and adds the matched tracks in their original order.
+| Option | Effect |
+|---|---|
+| `--name <name>` | Playlist name (default: the file's playlist name) |
+| `--report <path>` | Also write the report: JSON ([match report v1](../adr/0009-matching-strategy.md), §6 of Amendment 1) when the path ends in `.json`, text otherwise. Overwrites an existing file. |
+| `--min-confidence <0..1>` | Threshold for adding a match (default `0.5`) |
+| `--dry-run` | Match and report only. Prints `[dry-run] Would create private playlist "<name>" with <n> tracks`. |
+| `--yes` | Don't ask. **Required** when stdin isn't a terminal (unless `--dry-run`); otherwise sple exits 2 before any request. |
+| `--json` | stdout gets one `ImportOutput` document instead of the report: `{ dryRun, report, playlist?, added, failed }` |
+| `--quiet` | stdout gets only the created playlist's ID (nothing on a dry run) |
 
-- If the provider rejects some tracks, each one is listed with its error, followed by a summary such as `sple: added 98 of 100 tracks; 2 failed (see above)`. The command exits with code 1 (with `--json`, the last stderr line is a `PartialFailure` error).
-- If adding tracks stops entirely (for example, the quota runs out), `sple` prints the created playlist's link or ID and exits with that error's code (5 for quota, 3 for authentication). The playlist may already contain some of the tracks.
-- If the provider requires a permission you haven't granted, run `sple auth login` again.
+## When something goes wrong
 
-## Known Limitations
+- **Some tracks fail to add:** each one is printed as `sple: failed to add <ref>: <error>`, then `sple: added 93 of 95 tracks; 2 failed (see above)`, and sple exits 1. With `--json`, stdout still gets the `ImportOutput` and stderr ends with a `PartialFailure` error.
+- **Adding stops entirely** (quota, authentication): `sple: playlist <url or id> was created, but adding tracks failed`, and the exit code is the error's (5 for quota, 3 for authentication). The playlist may already hold some tracks.
+- **YouTube quota:** adding a track costs 50 of the 10,000 daily units, and a metadata search uses one of 100 daily searches, so YouTube imports are limited to roughly 100 new tracks a day. sple stops with exit code 5 before going over and says when the quota resets (midnight Pacific Time). See [the YouTube setup guide](youtube-music-setup.md#quota).
+- **Missing permission:** run `sple auth login --provider <provider>` again.
 
-- **YouTube Music:** No ISRC support. Matching relies on metadata only, which is less reliable for remixes and alternate versions.
-- **Liked Songs:** Import does not target Liked/Saved Tracks; matches are intended for a new playlist.
-- **Duplicate matches:** If two different source tracks match the same target track, the import will add both, resulting in duplicates.
+## Improving matches
 
-## Resumable Imports
+- Lower `--min-confidence` if the low-confidence suggestions are right.
+- Add a `refs` entry for the target provider to a track in the JSON file. The known-ref strategy then uses it as is.
+- Unmatched tracks can be added by hand after the import.
 
-(Planned for v1.1)
+## Limitations
 
-Long imports (1,000+ tracks) can be interrupted and resumed. Progress is saved to a state file, allowing you to pause when hitting rate limits or quotas.
+- **YouTube Music has no ISRC search,** so it matches by metadata only. That's less reliable for remixes and alternate versions.
+- **Duplicates:** if two source tracks match the same target track, both are added.
+- **Liked Songs** can be exported (`sple export --liked`), but import always creates a playlist. It never adds likes.
+- **Not resumable yet:** an interrupted import has to be re-run, and it creates a new playlist.
