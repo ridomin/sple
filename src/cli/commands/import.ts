@@ -13,6 +13,8 @@ import { RunStore, newRunItem, type RunItem, type RunState } from '../../core/im
 import { PlaylistAddTracksError } from '../../core/import/playlist-errors.js'
 import type { MatchReport } from '../../core/matching/types.js'
 import type { Provider } from '../../core/provider/provider.js'
+import { QuotaLedger } from '../../core/quota/ledger.js'
+import { countImportWork, estimateQuota, type QuotaEstimate } from '../../core/quota/estimate.js'
 
 const USAGE = `Usage: sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--no-cache] [--dry-run] [--yes]
        sple import --resume <runId|last> [--report <path>] [--yes]`
@@ -28,6 +30,8 @@ export interface ImportOutput {
   playlist?: { id: string; ref: string; name: string; url?: string }
   added: number
   failed: Array<{ ref: string; error: string }>
+  /** Targets with a daily quota only (ADR 0002 Amendment 5). */
+  estimate?: QuotaEstimate
 }
 
 export interface ImportDeps {
@@ -51,6 +55,35 @@ export function describeProgress(item: RunItem): string {
     default:
       return `added ${item.cursor} of ${item.toAdd.length} tracks`
   }
+}
+
+/**
+ * Print the quota the remaining work needs, for targets with a daily quota
+ * (FR-MIG-5, ADR 0002 Amendment 5). Returns the estimate, if any.
+ */
+function printEstimate(
+  ctx: CommandContext,
+  provider: Provider,
+  items: RunItem[],
+  cache: MatchCache | undefined,
+  dryRun: boolean
+): QuotaEstimate | undefined {
+  const caps = provider.capabilities
+  if (caps.quotaModel.kind !== 'daily-buckets') return undefined
+  const used = new QuotaLedger(provider.id, caps.quotaModel.buckets, { configDir: ctx.config.configDir }).used()
+  const estimate = estimateQuota(countImportWork(items, provider.id, caps, cache, { dryRun }), caps, used)
+  if (!estimate || estimate.days === 0) return estimate
+  const parts = estimate.buckets
+    .filter((b) => b.need > 0)
+    .map((b) => `${b.bucket} up to ${b.need} (${b.remainingToday} of ${b.dailyLimit} left today)`)
+  ctx.io.err(`Quota estimate for ${provider.id}: ${parts.join('; ')}`)
+  if (estimate.days > 1) {
+    ctx.io.err(
+      `That needs about ${estimate.days} days of quota. sple stops when today's quota runs out ` +
+        `(it resets at ${estimate.resetAt}) and prints how to resume.`
+    )
+  }
+  return estimate
 }
 
 /** `sple import` (ADR-0007 Amendment 1, A9; resumable runs: Amendment 4). */
@@ -126,6 +159,7 @@ Examples:
   let provider: Provider
   let dryRun = false
   let report: MatchReport
+  let estimate: QuotaEstimate | undefined
 
   if (resumeId !== undefined) {
     if (parsed.positionals.length > 0) throw new UsageError('--resume takes a run ID, not a file')
@@ -155,6 +189,8 @@ Examples:
     }
     provider = ctx.registry.create(state.target, ctx.config)
     ctx.io.err(`Resuming import ${state.runId}: "${item.name}" → ${state.target} (${describeProgress(item)})`)
+    const cache = state.options.cache ? new MatchCache({ configDir: ctx.config.configDir }) : undefined
+    estimate = printEstimate(ctx, provider, state.items, cache, false)
   } else {
     if (parsed.positionals.length === 0) {
       throw new UsageError(`${USAGE}\n\nNo file provided`)
@@ -204,6 +240,18 @@ Examples:
     provider = ctx.registry.create(targetProvider, ctx.config)
     const cache = parsed.values['no-cache'] ? undefined : new MatchCache({ configDir: ctx.config.configDir })
     const playlistName = parsed.values.name || canonicalFile.playlist.name
+    const item = newRunItem(canonicalFile, { name: playlistName, sourceFilePath: filePath })
+
+    // Matching spends quota too, so the estimate comes first, and a run that
+    // won't fit in today's quota is confirmed before any request.
+    estimate = printEstimate(ctx, provider, [item], cache, dryRun)
+    if (estimate && estimate.days > 1 && !dryRun && !yes) {
+      const prompt = deps.prompt ?? ((q: string) => confirm(q, false))
+      if (!(await prompt('Start anyway?'))) {
+        ctx.io.err('Aborted; nothing was changed.')
+        return EXIT_CODES.ERROR
+      }
+    }
 
     if (dryRun) {
       // 3. Match. Auth, quota and rate-limit errors propagate; nothing is created or saved.
@@ -215,9 +263,7 @@ Examples:
       })
     } else {
       store.prune()
-      state = store.create('import', provider.id, { minConfidence, cache: cache !== undefined }, [
-        newRunItem(canonicalFile, { name: playlistName, sourceFilePath: filePath }),
-      ])
+      state = store.create('import', provider.id, { minConfidence, cache: cache !== undefined }, [item])
     }
   }
 
@@ -271,7 +317,7 @@ Examples:
   }
 
   const name = report!.targetPlaylistName
-  const output: ImportOutput = { dryRun, report: report!, added: 0, failed: [] }
+  const output: ImportOutput = { dryRun, report: report!, added: 0, failed: [], ...(estimate && { estimate }) }
 
   if (dryRun || !state) {
     if (textMode) ctx.io.out(`[dry-run] Would create private playlist "${name}" with ${matched} tracks`)
