@@ -257,7 +257,6 @@ The specification (this file and the ADRs) is the target. This section lists whe
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
 | D10 | Spotify exports `external_ids.isrc` (FR-EXP-2) | `isrc` is hard-coded to `null` | #28 |
-| D11 | Fake provider opt-in (PRV-6) | Always registered, listed in help and `auth status` | #46 |
 | D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: scopes `youtube` + `userinfo.profile` from the first login; no scope checks; `quotaModel` is `rate-limited` (no daily ledger); `getLikedTracks` returns nothing; `search` ignores `--type`; `listPlaylists` ignores `--owned`/`--followed` and marks every playlist owned; `auth status` refreshes over the network; logout reports deleting a match cache and migration state that do not exist; no `docs/PRIVACY.md`; spikes S5–S7 not run | #29 |
 | D14 | `auth status` reports expired tokens as expired (ADR-0007 A10) | Reported as "expires in less than 5 minutes" | #31 |
 | D15 | `auth login`/`logout` honor `--quiet` (ADR-0007 §3.7) | `--quiet` is ignored | #48 |

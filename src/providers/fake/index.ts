@@ -48,6 +48,28 @@ export interface FakeProviderConfig {
   configDir?: string
 }
 
+/** Fake provider defaults (ADR-0003 §5); tests override any value through `capabilities`. */
+const FAKE_CAPABILITIES: ProviderCapabilities = {
+  official: false,
+  requiresRiskAcknowledgement: false,
+  userSuppliedClientId: false,
+  requiresClientSecret: false,
+  supportsRefreshToken: false,
+  supportsRevocation: false,
+  paginationModel: 'offset',
+  maxSearchPageSize: 50,
+  readPageSize: { playlists: 50, playlistItems: 100, liked: 50 },
+  playlistItemsAccess: 'all',
+  likedSongs: { read: 'exact', write: false },
+  isrcSearchMode: 'none',
+  searchReturnsDuration: true,
+  musicAwareSearch: false,
+  canDeletePlaylist: true,
+  supportsCollaborative: true,
+  maxTracksPerRequest: 100,
+  quotaModel: { kind: 'rate-limited' },
+}
+
 let loginCounter = 0
 
 const FAKE_PLAYLIST_URI = /^fake:playlist:([A-Za-z0-9_-]+)$/
@@ -79,23 +101,7 @@ export class FakeProvider implements Provider {
     this.userId = config.userId ?? 'fake-user'
     this.configDir = config.configDir
 
-    // Build capabilities with proper types
-    const caps: any = {
-      canDeletePlaylist: config.capabilities?.canDeletePlaylist ?? true,
-      supportsCollaborative: config.capabilities?.supportsCollaborative ?? true,
-      canCreatePlaylist: true,
-      isrcSearchMode: config.capabilities?.isrcSearchMode ?? 'none',
-      playlistItemsAccess: config.capabilities?.playlistItemsAccess ?? 'all',
-      paginationModel: config.capabilities?.paginationModel ?? 'offset',
-      quotaModel: config.capabilities?.quotaModel ?? 'undocumented',
-      maxSearchPageSize: config.capabilities?.maxSearchPageSize ?? 50,
-      readPageSize: config.capabilities?.readPageSize ?? { playlists: 50, playlistItems: 100, liked: 50 },
-      maxTracksPerRequest: config.capabilities?.maxTracksPerRequest ?? 100,
-      likedSongs: config.capabilities?.likedSongs ?? { read: 'exact', write: false },
-      supportsRefreshToken: config.capabilities?.supportsRefreshToken ?? false,
-      userSuppliedClientId: false,
-    }
-    this.capabilities = caps as ProviderCapabilities
+    this.capabilities = { ...FAKE_CAPABILITIES, ...config.capabilities }
 
     this.auth = {
       login: async (opts) => {

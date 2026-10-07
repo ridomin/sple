@@ -53,12 +53,14 @@ function nonEmpty(v: string | undefined): string | undefined {
 /** Build the config. Precedence: flags > env (incl. .env) > defaults. */
 export function loadConfig(
   flags: GlobalFlags = {},
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  /** Registered providers; messages list only these (ADR-0007 A1). */
+  validProviders: readonly ProviderId[] = PROVIDER_IDS
 ): Config {
   const rawProvider = nonEmpty(flags.provider) ?? nonEmpty(env.SPLE_DEFAULT_PROVIDER) ?? DEFAULT_PROVIDER
-  if (!isProviderId(rawProvider)) {
+  if (!(validProviders as readonly string[]).includes(rawProvider) || !isProviderId(rawProvider)) {
     throw new UsageError(
-      `Unknown provider '${rawProvider}'. Valid providers: ${PROVIDER_IDS.join(', ')}`
+      `Unknown provider '${rawProvider}'. Valid providers: ${validProviders.join(', ')}`
     )
   }
 

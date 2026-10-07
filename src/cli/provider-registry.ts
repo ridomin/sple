@@ -57,10 +57,12 @@ function requireClientId(value: string | undefined, envVar: string, name: string
 export interface DefaultRegistryOptions {
   /** HTTP attempt sink for `--debug` (ADR 0007 §6). */
   onHttp?: (entry: HttpLogEntry) => void
+  /** Register the `fake` provider (`SPLE_ENABLE_FAKE_PROVIDER=1`; PRV-6). */
+  enableFake?: boolean
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): ProviderRegistry {
-  return new ProviderRegistry()
+  const registry = new ProviderRegistry()
     .register('spotify', (config) =>
       createSpotifyProvider(
         requireClientId(config.spotifyClientId, 'SPLE_SPOTIFY_CLIENT_ID', 'Spotify'),
@@ -76,5 +78,6 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Pro
       ),
       parseYouTubeTrackRef
     )
-    .register('fake', () => new FakeProvider(), parseFakeTrackRef)
+  if (options.enableFake) registry.register('fake', () => new FakeProvider(), parseFakeTrackRef)
+  return registry
 }

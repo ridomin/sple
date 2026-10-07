@@ -3,7 +3,7 @@
 import { parseArgs } from 'node:util'
 import { pathToFileURL } from 'node:url'
 import { realpathSync } from 'node:fs'
-import { loadConfig, loadEnvFile, envFilePermissionWarning, PROVIDER_IDS } from './config.js'
+import { loadConfig, loadEnvFile, envFilePermissionWarning } from './config.js'
 import { EXIT_CODES, getExitCode, formatErrorMessage, formatErrorOutput } from './exit-codes.js'
 import { createDefaultRegistry, type ProviderRegistry } from './provider-registry.js'
 import { readPackageVersion } from './version.js'
@@ -45,7 +45,7 @@ export interface CommandGroupModule {
 const MAIN_COMMANDS = ['auth', 'search', 'playlist', 'export', 'import', 'migrate'] as const
 const LEGACY_COMMANDS = ['migrate'] as const
 
-function rootHelpText(version: string): string {
+function rootHelpText(version: string, providers: readonly string[]): string {
   return `sple v${version}
 
 Usage: sple [options] <command> [command-options]
@@ -59,7 +59,7 @@ Commands:
   migrate    Migrate playlists between providers (available in a later release)
 
 Global Options:
-  --provider <name>  Specify the provider (${PROVIDER_IDS.join(', ')}); default: spotify
+  --provider <name>  Specify the provider (${providers.join(', ')}); default: spotify
   --json             Output in JSON format
   --quiet            Quiet mode (IDs only)
   --verbose          Enable verbose output (stderr)
@@ -102,26 +102,26 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
 
     const [command, ...commandArgs] = rest
 
+    const env = opts.env ?? process.env
+    // --debug: one redacted line per HTTP attempt on stderr (ADR 0007 §6).
+    const onHttp = values.debug === true ? (entry: HttpLogEntry) => io.err(formatHttpLine(entry)) : undefined
+    const registry =
+      opts.registry ?? createDefaultRegistry({ onHttp, enableFake: env.SPLE_ENABLE_FAKE_PROVIDER === '1' })
     const config = loadConfig(
       {
         provider: values.provider,
         verbose: values.verbose === true || values.debug === true,
       },
-      opts.env
+      env,
+      registry.list()
     )
-    // --debug: one redacted line per HTTP attempt on stderr (ADR 0007 §6).
-    const onHttp = values.debug === true ? (entry: HttpLogEntry) => io.err(formatHttpLine(entry)) : undefined
-    const registry = opts.registry ?? createDefaultRegistry({ onHttp })
-    if (!registry.has(config.provider)) {
-      throw new UsageError(`Unknown provider '${config.provider}'`)
-    }
 
     if (!command) {
       if (values.help) {
-        io.out(rootHelpText(version))
+        io.out(rootHelpText(version, registry.list()))
         return EXIT_CODES.SUCCESS
       }
-      io.out(rootHelpText(version))
+      io.out(rootHelpText(version, registry.list()))
       return EXIT_CODES.SUCCESS
     }
 
