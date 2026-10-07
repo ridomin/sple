@@ -9,6 +9,11 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 // Google only returns a refresh_token for offline access, and on repeat consent only with prompt=consent
 const GOOGLE_AUTH_PARAMS = { access_type: 'offline', prompt: 'consent' }
 
+/** Split a token response's space-separated `scope`; absent means the requested scopes were granted (RFC 6749 §5.1). */
+function grantedScopes(scope: string | undefined, requested: string[]): string[] {
+  return scope !== undefined ? scope.split(/\s+/).filter((s) => s.length > 0) : requested
+}
+
 export class YouTubeMusicAuth implements ProviderAuth {
   private config: OAuthConfig
   private oauthHandler?: OAuthHandler
@@ -60,7 +65,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
         accessToken: tokenResult.accessToken,
         refreshToken: tokenResult.refreshToken,
         expiresAt: new Date(Date.now() + (tokenResult.expiresIn ?? 3600) * 1000).toISOString(),
-        scopes: config.scopes,
+        scopes: grantedScopes(tokenResult.scope, config.scopes),
         userId: user.id,
         displayName: user.displayName,
         grantedAt: new Date().toISOString(),
@@ -72,8 +77,9 @@ export class YouTubeMusicAuth implements ProviderAuth {
       return {
         loggedIn: true,
         user: { id: user.id, displayName: user.displayName },
-        scopes: config.scopes,
+        scopes: storedToken.scopes,
         expiresAt: storedToken.expiresAt,
+        missingScopes: config.scopes.filter((s) => !storedToken.scopes.includes(s)),
       }
     } finally {
       handler.cleanup()
@@ -96,6 +102,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
             ...token,
             accessToken: newToken.accessToken,
             expiresAt: new Date(Date.now() + (newToken.expiresIn ?? 3600) * 1000).toISOString(),
+            scopes: grantedScopes(newToken.scope, token.scopes),
           }
           await saveTokens('youtube-music', updated, this.configDir)
           this.token = updated
@@ -152,6 +159,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
             ...token,
             accessToken: newToken.accessToken,
             expiresAt: new Date(Date.now() + (newToken.expiresIn ?? 3600) * 1000).toISOString(),
+            scopes: grantedScopes(newToken.scope, token.scopes),
           }
           await saveTokens('youtube-music', updated, this.configDir)
           this.token = updated
@@ -177,6 +185,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
       ...token,
       accessToken: newToken.accessToken,
       expiresAt: new Date(Date.now() + (newToken.expiresIn ?? 3600) * 1000).toISOString(),
+      scopes: grantedScopes(newToken.scope, token.scopes),
     }
 
     await saveTokens('youtube-music', updated, this.configDir)
@@ -189,9 +198,10 @@ export class YouTubeMusicAuth implements ProviderAuth {
     if (!token) {
       throw new AuthRequiredError('Not logged in', 'no-token')
     }
-    // TODO: Check if token has required scopes
-    void scopes
-    // TODO: Check if token has required scopes; if not, ask for re-login
+    const missing = scopes.find((s) => !token.scopes.includes(s))
+    if (missing !== undefined) {
+      throw new AuthRequiredError(`Run "sple auth login" to grant ${missing}`, 'missing-scope', missing)
+    }
     return token
   }
 
@@ -203,7 +213,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
     code: string,
     codeVerifier: string,
     redirectUri: string
-  ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number }> {
+  ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number; scope?: string }> {
     const body = new URLSearchParams()
     body.set('grant_type', 'authorization_code')
     body.set('code', code)
@@ -232,10 +242,11 @@ export class YouTubeMusicAuth implements ProviderAuth {
       accessToken: data.access_token,
       refreshToken: typeof data.refresh_token === 'string' ? data.refresh_token : undefined,
       expiresIn: typeof data.expires_in === 'number' ? data.expires_in : 3600,
+      scope: typeof data.scope === 'string' ? data.scope : undefined,
     }
   }
 
-  private async refreshToken(refreshToken: string): Promise<{ accessToken: string; expiresIn?: number }> {
+  private async refreshToken(refreshToken: string): Promise<{ accessToken: string; expiresIn?: number; scope?: string }> {
     const body = new URLSearchParams()
     body.set('grant_type', 'refresh_token')
     body.set('refresh_token', refreshToken)
@@ -260,6 +271,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
     return {
       accessToken: data.access_token,
       expiresIn: typeof data.expires_in === 'number' ? data.expires_in : 3600,
+      scope: typeof data.scope === 'string' ? data.scope : undefined,
     }
   }
 

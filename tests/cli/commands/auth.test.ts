@@ -161,6 +161,23 @@ test('login: errors map to exit codes and use formatted messages', async () => {
   assert.equal(await handleLogin(p2, io), EXIT_CODES.AUTH_REQUIRED)
 })
 
+test('login: warns on stderr when the user declined some requested scopes', async () => {
+  const { io, out, err } = makeIO()
+  const p = providerWith({ login: async () => loggedIn({ scopes: ['b'], missingScopes: ['a'] }) })
+  assert.equal(await handleLogin(p, io), EXIT_CODES.SUCCESS)
+  assert.ok(out.includes('Scopes: b'))
+  const warning = err.join('\n')
+  assert.match(warning, /Warning: .* did not grant: a/)
+  assert.match(warning, new RegExp(`sple auth login --provider ${p.id}`))
+})
+
+test('login: no warning when every requested scope was granted', async () => {
+  const { io, err } = makeIO()
+  const p = providerWith({ login: async () => loggedIn({ missingScopes: [] }) })
+  assert.equal(await handleLogin(p, io), EXIT_CODES.SUCCESS)
+  assert.deepStrictEqual(err, [])
+})
+
 test('status: not logged in still exits 0 (ADR-0007 §3.7)', async () => {
   const { io, out } = makeIO()
   const p = providerWith({ status: async () => ({ loggedIn: false, scopes: [] }) })

@@ -78,6 +78,11 @@ export async function handleLogin(
     if (status.expiresAt) {
       io.out(`Token expires: ${status.expiresAt}`)
     }
+    if (status.missingScopes && status.missingScopes.length > 0) {
+      io.err(`Warning: ${provider.displayName} did not grant: ${status.missingScopes.join(', ')}`)
+      io.err('Commands that need these permissions will fail. Run')
+      io.err(`"sple auth login --provider ${provider.id}" again and approve every requested permission.`)
+    }
     return EXIT_CODES.SUCCESS
   } catch (error) {
     io.err(`Login failed: ${formatErrorMessage(error)}`)

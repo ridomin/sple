@@ -55,6 +55,11 @@ export function mapYouTubeHttpError(res: HttpResponse): ProviderError {
     const resourceType = reason === 'videoNotFound' ? 'track' : reason?.startsWith('playlist') ? 'playlist' : 'other'
     return new NotFoundError(`YouTube resource not found (${detail})`, resourceType)
   }
+  if (reason === 'insufficientPermissions') {
+    // The token lacks the YouTube scope (e.g. its checkbox was left unticked at consent).
+    const scope = 'https://www.googleapis.com/auth/youtube'
+    return new AuthRequiredError(`Run "sple auth login" to grant ${scope}`, 'missing-scope', scope)
+  }
   if (res.status === 409) {
     return new YouTubeConflictError(`YouTube API request failed (${detail})`)
   }

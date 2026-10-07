@@ -87,6 +87,8 @@ export interface AuthStatus {
   user?: { id: string; displayName?: string }
   scopes: string[]
   expiresAt?: string
+  /** Set by login: requested scopes the user did not grant (e.g. an unticked consent checkbox). */
+  missingScopes?: string[]
 }
 
 export type LoginMode = 'loopback' | 'no-browser' | 'manual'
