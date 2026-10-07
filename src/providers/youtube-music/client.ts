@@ -2,6 +2,7 @@ import { HttpClient } from '../../core/http/client.js'
 import { PlaylistSummary, CanonicalTrack } from '../../core/provider/provider.js'
 import { NotFoundError, isFatalProviderError } from '../../core/provider/errors.js'
 import { YouTubeConflictError } from './errors.js'
+import { isTopicChannel, videoTrackMetadata } from './track-metadata.js'
 import * as YouTubeTypes from './types.js'
 import { parseYouTubePlaylistId, parseYouTubeTrackRef } from './playlist-ref.js'
 
@@ -104,11 +105,20 @@ export class YouTubeMusicHttpClient {
     }
   }
 
-  async searchTracks(q: { text: string }, page?: { limit?: number; cursor?: string }): Promise<{ items: CanonicalTrack[]; nextPageToken?: string; totalResults?: number }> {
+  /**
+   * `musicOnly` (matching, ADR-0002 R3) restricts the search to the Music
+   * category and ranks "Artist - Topic" uploads first, keeping API order otherwise.
+   */
+  async searchTracks(
+    q: { text: string },
+    page?: { limit?: number; cursor?: string },
+    options: { musicOnly?: boolean } = {}
+  ): Promise<{ items: CanonicalTrack[]; nextPageToken?: string; totalResults?: number }> {
     const maxResults = page?.limit ?? 50
     const url = new URL(this.baseUrl + '/search')
     url.searchParams.set('part', 'snippet')
     url.searchParams.set('type', 'video')
+    if (options.musicOnly) url.searchParams.set('videoCategoryId', '10')
     url.searchParams.set('q', q.text)
     url.searchParams.set('maxResults', String(maxResults))
     if (page?.cursor) {
@@ -124,7 +134,11 @@ export class YouTubeMusicHttpClient {
 
     if (videoIds.length === 0) return { items: [], nextPageToken: body.nextPageToken, totalResults: body.pageInfo.totalResults }
 
-    const videos = await this.getVideos(videoIds)
+    let videos = await this.getVideos(videoIds)
+    if (options.musicOnly) {
+      const topic = videos.filter(v => isTopicChannel(v.snippet.channelTitle))
+      videos = [...topic, ...videos.filter(v => !topic.includes(v))]
+    }
     const items = videos
       .map(v => this.youtubeVideoToCanonical(v))
       .filter((t): t is CanonicalTrack => t !== null)
@@ -262,9 +276,10 @@ export class YouTubeMusicHttpClient {
 
   private youtubeVideoToCanonical(video: YouTubeTypes.YouTubeVideo): CanonicalTrack | null {
     if (!video.id) return null
+    const { title, artists } = videoTrackMetadata(video.snippet.title, video.snippet.channelTitle)
     return {
-      title: video.snippet.title,
-      artists: [video.snippet.channelTitle],
+      title,
+      artists,
       album: undefined,
       durationMs: this.parseDuration(video.contentDetails?.duration),
       refs: {

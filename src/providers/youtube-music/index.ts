@@ -134,7 +134,8 @@ export function createYouTubeMusicProvider(
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
       const { items } = await client.searchTracks(
         { text: [query.title, ...query.artists].join(' ') },
-        { limit: opts.limit }
+        { limit: opts.limit },
+        { musicOnly: true }
       )
       return items.slice(0, opts.limit).map(track => ({ ref: track.refs['youtube-music'], track }))
     },
