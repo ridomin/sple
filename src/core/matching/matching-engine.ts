@@ -10,22 +10,29 @@ import type { CanonicalPlaylistFile } from '../export/format.js'
 import { KnownRefStrategy } from './strategies/known-ref-strategy.js'
 import { IsrcStrategy } from './strategies/isrc-strategy.js'
 import { MetadataStrategy } from './strategies/metadata-strategy.js'
+import { CacheStrategy } from './strategies/cache-strategy.js'
+import type { MatchCache } from './match-cache.js'
 import { isFatalProviderError } from '../provider/errors.js'
 
 /**
- * MatchingEngine orchestrates the three-strategy chain for track matching.
+ * MatchingEngine orchestrates the strategy chain for track matching.
  * Strategies are applied in priority order (1 = highest):
  * 1. Known-ref: Zero API calls, confidence 1.0
- * 2. ISRC: One API call if applicable, confidence 0.95
- * 3. Metadata: Title+artist normalization, confidence 0.4-1.0
+ * 2. Cache: Zero API calls, the cached confidence (only with a match cache)
+ * 3. ISRC: One API call if applicable, confidence 0.95
+ * 4. Metadata: Title+artist normalization, confidence 0.4-1.0
  */
 export class MatchingEngine {
   private strategies: MatchingStrategy[]
+  private readonly cache?: MatchCache
 
-  constructor() {
+  /** With `cache`, searched candidates are stored and reused (ADR 0009 Amendment 2). */
+  constructor(options: { cache?: MatchCache } = {}) {
+    this.cache = options.cache
     // Initialize strategies and sort by priority (lowest number = highest priority)
     this.strategies = [
       new KnownRefStrategy(),
+      ...(options.cache ? [new CacheStrategy(options.cache)] : []),
       new IsrcStrategy(),
       new MetadataStrategy(),
     ].sort((a, b) => a.priority - b.priority)
@@ -160,6 +167,8 @@ export class MatchingEngine {
       try {
         const candidate = await strategy.execute(request, provider)
         if (candidate) {
+          // Saved before the next track, so a later quota stop keeps the searches already spent.
+          this.cache?.put(provider.id, request.track, candidate)
           return {
             track: request.track,
             position: request.position,

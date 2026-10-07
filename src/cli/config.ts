@@ -13,6 +13,8 @@ export interface Config {
   spotifyClientId?: string
   youtubeMusicClientId?: string
   googleClientSecret?: string
+  /** Where sple keeps its files; the platform config directory when unset. Tests point it at a temp dir. */
+  configDir?: string
 }
 
 export interface GlobalFlags {

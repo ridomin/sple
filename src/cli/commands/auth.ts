@@ -75,7 +75,7 @@ export async function handleAuthCommand(
       const targets = ctx.all
         ? resolveAllTargets(ctx.registry, ctx.config)
         : [resolveTarget(ctx.registry, ctx.config, ctx.config.provider)]
-      return handleLogout(targets, ctx.quiet ? quietIO(io) : io)
+      return handleLogout(targets, ctx.quiet ? quietIO(io) : io, { configDir: ctx.config.configDir })
     }
   }
 }
