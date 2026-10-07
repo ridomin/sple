@@ -37,7 +37,8 @@ test('YouTube Music HTTP errors (#27)', async (t) => {
     }) as typeof fetch
   }
 
-  t.beforeEach(() => { calls = [] })
+  // Simulated quotaExceeded responses mark the ledger exhausted; each subtest starts a fresh quota day.
+  t.beforeEach(() => { calls = []; rmSync(join(dir, 'quota.json'), { force: true }) })
   t.afterEach(() => { globalThis.fetch = realFetch })
   t.after(() => rmSync(dir, { recursive: true, force: true }))
 

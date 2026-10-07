@@ -5,6 +5,9 @@ import { YouTubeMusicAuth } from './auth.js'
 import { YouTubeMusicHttpClient } from './client.js'
 import { mapYouTubeHttpError } from './errors.js'
 import { parseYouTubePlaylistId, parseYouTubeTrackRef } from './playlist-ref.js'
+import { YOUTUBE_QUOTA_MODEL, youTubeRequestCost } from './quota.js'
+import { QuotaLedger } from '../../core/quota/ledger.js'
+import { QuotaExhaustedError } from '../../core/provider/errors.js'
 
 const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
   official: true,
@@ -24,7 +27,7 @@ const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
   canDeletePlaylist: true,
   supportsCollaborative: false,
   maxTracksPerRequest: 1,
-  quotaModel: { kind: 'rate-limited' },
+  quotaModel: YOUTUBE_QUOTA_MODEL,
 }
 
 export function createYouTubeMusicProvider(
@@ -34,11 +37,27 @@ export function createYouTubeMusicProvider(
 ): Provider {
   const auth = new YouTubeMusicAuth(clientId, clientSecret, configDir)
 
+  const ledger = new QuotaLedger(
+    'youtube-music',
+    YOUTUBE_QUOTA_MODEL.kind === 'daily-buckets' ? YOUTUBE_QUOTA_MODEL.buckets : [],
+    { configDir }
+  )
+
   const http = new HttpClient({
     providerId: 'youtube-music',
     getToken: () => auth.getToken(),
     refresh: (token) => auth.refresh(token),
-    mapError: mapYouTubeHttpError,
+    // Charged before every attempt: failed calls cost quota too.
+    beforeAttempt: (req) => {
+      const cost = youTubeRequestCost(req)
+      ledger.charge(cost.bucket, cost.amount)
+    },
+    mapError: (res, req) => {
+      const error = mapYouTubeHttpError(res)
+      // YouTube says the quota is gone: stop charging calls that would fail until the reset.
+      if (error instanceof QuotaExhaustedError && req) ledger.markExhausted(youTubeRequestCost(req).bucket)
+      return error
+    },
   })
 
   const client = new YouTubeMusicHttpClient(http)

@@ -41,7 +41,12 @@ export interface HttpClientOptions {
    * client does not handle itself, and for the final response once refresh
    * (401) or retries (429, 5xx) are exhausted.
    */
-  mapError?: (res: HttpResponse) => ProviderError | undefined
+  mapError?: (res: HttpResponse, req?: HttpRequest) => ProviderError | undefined
+  /**
+   * Called before every attempt (retries and the post-refresh retry included).
+   * Throwing stops the request; used to charge a quota ledger (PRV-4).
+   */
+  beforeAttempt?: (req: HttpRequest) => void
   /** When set, refreshed tokens are saved here. Leave unset if `refresh` saves them itself. */
   configDir?: string
   maxRetries?: number
@@ -72,7 +77,8 @@ export class HttpClient {
   private providerId: ProviderId
   private getToken?: () => Promise<StoredToken | null>
   private refresh?: (token: StoredToken) => Promise<StoredToken>
-  private mapError?: (res: HttpResponse) => ProviderError | undefined
+  private mapError?: (res: HttpResponse, req?: HttpRequest) => ProviderError | undefined
+  private beforeAttempt?: (req: HttpRequest) => void
   private configDir?: string
   private maxRetries: number
   private maxWaitMs: number
@@ -87,6 +93,7 @@ export class HttpClient {
     this.getToken = options.getToken
     this.refresh = options.refresh
     this.mapError = options.mapError
+    this.beforeAttempt = options.beforeAttempt
     this.configDir = options.configDir
     this.maxRetries = options.maxRetries ?? 3
     this.maxWaitMs = options.maxWaitMs ?? 120000
@@ -167,6 +174,8 @@ export class HttpClient {
     attempt: number,
     hasRefreshed: boolean
   ): Promise<HttpResponse> {
+    // Outside the try: a refusal (e.g. quota) must not be retried.
+    this.beforeAttempt?.(req)
     try {
       const startTime = Date.now()
       let response: Response
@@ -210,7 +219,7 @@ export class HttpClient {
           }
         }
         logError('%s', 'Received 401 and cannot refresh token')
-        throw this.mapError?.(httpResponse) ?? new AuthRequiredError('Authentication required', 'no-token')
+        throw this.mapError?.(httpResponse, req) ?? new AuthRequiredError('Authentication required', 'no-token')
       }
 
       if (response.status === 429) {
@@ -233,7 +242,7 @@ export class HttpClient {
         throw new ServerError(httpResponse)
       }
 
-      const mapped = this.mapError?.(httpResponse)
+      const mapped = this.mapError?.(httpResponse, req)
       if (mapped) {
         logError('%s', `Mapped error ${response.status} to ${mapped.name}`)
         throw mapped
@@ -258,7 +267,7 @@ export class HttpClient {
       if (serverError) {
         logError('%s', `HTTP ${serverError.response.status} after ${attempt} retries`)
         throw (
-          this.mapError?.(serverError.response) ??
+          this.mapError?.(serverError.response, req) ??
           new ProviderError(`Service unavailable (HTTP ${serverError.response.status}) after ${attempt} retries`)
         )
       }

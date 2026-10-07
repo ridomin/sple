@@ -150,3 +150,8 @@ Each attempt produces one `HttpLogEntry`: method, path with query string (values
 | Refresh failures propagate | Getting a token for a request refreshes an expired access token, and any refresh error reaches the caller. It is never turned into "not logged in". No stored refresh token → `AuthRequiredError('token-expired')` (§3). |
 | Status stays offline | `auth status` reads `tokens.json` only and never refreshes (ADR 0007 A10). |
 
+## Amendment 2 (quota hook, #84)
+
+- **Date:** 2026-10-07
+
+The HTTP client takes an optional `beforeAttempt(req)` hook, called before every attempt (first try, 429/5xx retries, and the retry after a 401 refresh). If it throws, the request stops without being sent, and the error is not retried. `mapError` also receives the request that failed, so an adapter can attribute a quota error to a bucket. YouTube uses both for its quota ledger (ADR 0002 Amendment 2).
