@@ -32,7 +32,7 @@ One client per provider instance, internal to the adapter (ADR 0003 §2).
 
 1. Load the stored token. If it has a parseable `expiresAt` less than 60 s away and the adapter can refresh, refresh first (§3).
 2. Add `Authorization: Bearer <accessToken>` unless the request already has an `Authorization` header.
-3. Send. Every attempt, including retries and network failures, is reported to the `--debug` sink (§4).
+3. Send. Every attempt, including retries and network failures, is logged on the `sple:http` namespace (§5).
 4. Handle the response:
 
 | Response | Behavior |
@@ -121,7 +121,7 @@ The user registers exactly `http://127.0.0.1/callback` with the provider; Spotif
 
 ### 5. Debug and redaction
 
-Each attempt produces one `HttpLogEntry`: method, path with query string (values of `q` and `uris` cut to 20 characters plus `...`; host omitted), status or `ERR <code>` for a network error, duration in ms, and the number of earlier attempts. ADR 0007 §6 formats and redacts it. Headers and bodies are never logged; token-endpoint calls log method, path, status and duration only.
+Each attempt produces one `HttpLogEntry`: method, path with query string (values of `q` and `uris` cut to 20 characters plus `...`; host omitted), status or `ERR <code>` for a network error, duration in ms, and the number of earlier attempts. It is written to the `sple:http` `debug` namespace, formatted per ADR 0007 §6 and redacted by the output function from ADR 0007 A11; retries and mapped errors go to `sple:http:retry` and `sple:http:error`. Headers and bodies are never logged; token-endpoint calls log method, path, status and duration only.
 
 ## Alternatives considered
 

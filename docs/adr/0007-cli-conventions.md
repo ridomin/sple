@@ -275,7 +275,7 @@ Applies to commands that process several items: `export` with several playlists,
 ### 6. Logging (CLI-7)
 
 - All log output goes to stderr. With neither flag, only errors, warnings and summaries are printed.
-- `--verbose`: info logs, one line each, as `sple:<namespace> <message>` (namespaces such as `sple:auth`, `sple:export`, `sple:resolve`). Implemented in-house, no `debug` dependency.
+- `--verbose`: info logs, one line each, as `sple:<namespace> <message>` (namespaces such as `sple:auth`, `sple:export`, `sple:resolve`). Logs are written through the `debug` package so they can be filtered by namespace; see A11, which supersedes the original "in-house, no `debug` dependency" rule.
 - `--debug`: everything from `--verbose`, plus one line per HTTP request after it completes (and per retry):
   ```
   sple:http GET /v1/playlists/3cEY…/items?limit=100&offset=0 200 143ms
@@ -330,7 +330,7 @@ Applies to commands that process several items: `export` with several playlists,
 - **TSV with a header row:** rejected. Headers have to be stripped in every pipe (`tail -n +2`), and `--json` already serves self-describing output.
 - **Errors as JSON on stdout with `--json`:** rejected. stdout would carry two shapes, and `cmd --json | jq` would treat an error as data.
 - **Abort on first failure in multi-item commands:** rejected by NFR-4.
-- **Logging with the `debug` package:** rejected. A small in-house logger with mandatory redaction is less code than wrapping a dependency so it cannot bypass redaction.
+- **Logging with the `debug` package:** originally rejected because a dependency could bypass redaction. Reversed by A11: `debug` gives `DEBUG=<pattern>` namespace filtering for free, and replacing its single output function makes redaction mandatory.
 
 ## Amendment 1 (spec review for ports)
 
@@ -450,3 +450,20 @@ export interface ImportOutput {
 - `auth status [--json]`: human form per provider: `<Provider> (<id>): logged in` / `: not logged in`, then `  User: [<displayName> ](<id>)`, `  Scopes: <space-joined or (none)>`, `  Token expires: <ISO>`. A token that has already expired is reported as `expired` (stderr warning `<Provider> access token has expired; it will be refreshed on next use`); one expiring within 5 minutes gets `Warning: <Provider> access token expires in less than 5 minutes`. Status is read from `tokens.json` and makes no network call.
 - `auth logout [--provider X | --all]` (both → exit 2): stdout `Revoked access with <Provider>` or `Logged out from <Provider>`, then `Deleted: <items>` and the provider's notice. Every target is attempted; the exit code is that of the first failure.
 - `--no-browser`/`--manual` on other subcommands, `--all` outside logout, and `--json` outside status → exit 2.
+
+### A11. Logging through the `debug` package (§6)
+
+Supersedes the "implemented in-house, no `debug` dependency" rule in §6 and the matching rejected alternative.
+
+- **Library:** the TypeScript implementation logs through the [`debug`](https://www.npmjs.com/package/debug) package, one `createDebug('sple:<namespace>')` instance per namespace. Ports use their platform's equivalent and must support the same `DEBUG` filter syntax.
+- **Namespaces:** `sple:<area>[:<sub>]`. Defined so far: `sple:auth`, `sple:export`, `sple:resolve`, `sple:import`, `sple:<provider>:auth` (e.g. `sple:spotify:auth`), `sple:http` (one line per attempt, §6), `sple:http:retry`, `sple:http:error`.
+- **Selecting namespaces:** the enabled set is the comma-joined list of `DEBUG` (if set) and the flag pattern, passed to `debug.enable()` once at startup:
+  - `--verbose` → `sple:*,-sple:http*`
+  - `--debug` → `sple:*`
+  - neither flag → `DEBUG` alone
+  
+  `DEBUG` uses the `debug` syntax: comma- or space-separated names, `*` wildcards, and a leading `-` to exclude (exclusions win). Examples: `DEBUG=sple:http sple export …` shows only HTTP lines; `DEBUG=-sple:http:retry sple --debug …` hides retry lines. `DEBUG` patterns outside `sple:*` have no effect on `sple` output.
+- **Redaction is not optional:** at startup, before any namespace is enabled, the global output function (`createDebug.log`) is replaced with one that formats the arguments (`util.format`), passes the result through the §6 redaction function, and writes it to stderr. No code may set a per-instance `log` or write log lines any other way.
+- **Line format:** the stable part is `sple:<namespace> <message>`, with `<message>` as specified in §6 and ADR 0010 §5. The decoration `debug` adds (colors and a `+Nms` suffix on a TTY, an ISO timestamp prefix otherwise, controlled by `DEBUG_COLORS`, `DEBUG_HIDE_DATE` and `NO_COLOR`) is not part of the contract. Logs are for people; scripts use `--json`.
+- **Not logs:** errors (§4), warnings and summaries are always printed through the error writer, are redacted, and are not affected by `DEBUG`.
+- **Tests:** the §6 leak test enables `sple:*` and feeds known token strings through every namespace.

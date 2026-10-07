@@ -112,7 +112,7 @@ Command grammar, output modes, `--json` shapes, error output, stdin input, parti
 | CLI-4 | Meaningful exit codes: 0 success, 1 general error, 2 usage error, 3 auth required, 4 not found, 5 rate limit/quota exhausted. |
 | CLI-5 | Global `--provider` flag, defaulting to `SPLE_DEFAULT_PROVIDER`, else `spotify`. |
 | CLI-6 | Config is a `.env` file of `SPLE_*` variables in the platform's config dir (e.g. `~/.config/sple/.env`), in precedence flag > process environment > `.env` > default. Tokens are kept in a separate file (FR-AUTH-3). Paths, variables and file rules: [ADR-0004](adr/0004-token-store-and-config.md). |
-| CLI-7 | `--verbose` / `--debug` logging to stderr. Tokens and secrets are never logged. |
+| CLI-7 | `--verbose` / `--debug` logging to stderr, filterable by namespace with `DEBUG=<pattern>` (ADR-0007 A11). Tokens and secrets are never logged. |
 | CLI-8 | Progress indicators for long operations, shown only when attached to a TTY. |
 
 ## 7. Non-functional requirements (NFR)
@@ -271,4 +271,4 @@ The specification (this file and the ADRs) is the target. This section lists whe
 | D13 | `tokens.json` created with mode `0600`; `.env` readable only by the user (FR-AUTH-3, ADR-0004 A1) | `tokens.json` is written with the default mode, then `chmod 0600`; `.env` permissions are not checked | #47 |
 | D14 | `auth status` reports expired tokens as expired (ADR-0007 A10) | Reported as "expires in less than 5 minutes" | #31 |
 | D15 | `auth login`/`logout` honor `--quiet` (ADR-0007 §3.7) | `--quiet` is ignored | #48 |
-| D16 | Logging only through the redacting logger (ADR-0007 §6) | The HTTP client and Spotify auth also log through the `debug` package when `DEBUG=sple:*` is set (no token values, but not redacted) | #49 |
+| D16 | All logs go through `debug` namespaces with a redacting output function; `--verbose`/`--debug` map to namespace patterns combined with `DEBUG` (ADR-0007 A11) | `--verbose`/`--debug` use an in-house logger and the `onResponse` sink; only the HTTP client and Spotify auth use `debug`, which is enabled only by `DEBUG` and writes without redaction (no token values today) | #49 |
