@@ -10,9 +10,6 @@ import type { PlaylistFilter, PlaylistSummary, Provider } from '../../../core/pr
 
 const USAGE = 'Usage: sple playlist list [--owned | --followed] [--json | --quiet]'
 
-/** Page size for listing playlists (Spotify caps GET /me/playlists at 50). */
-export const PLAYLIST_LIST_PAGE_SIZE = 50
-
 export const name = 'list'
 export const summary = 'List playlists'
 export const usage = USAGE
@@ -36,7 +33,7 @@ export async function listAllPlaylists(
   onPage?: (pages: number, totalPages?: number) => void
 ): Promise<PlaylistSummary[]> {
   const { items } = await collectPages((page) => provider.listPlaylists(page), {
-    pageSize: PLAYLIST_LIST_PAGE_SIZE,
+    pageSize: provider.capabilities.readPageSize.playlists,
     model: provider.capabilities.paginationModel,
     onPage: (p) => onPage?.(p.pages, p.totalPages),
   })

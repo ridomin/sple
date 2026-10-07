@@ -15,6 +15,7 @@ const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
   supportsRevocation: true,
   paginationModel: 'cursor-forward',
   maxSearchPageSize: 50,
+  readPageSize: { playlists: 50, playlistItems: 50, liked: 50 },
   playlistItemsAccess: 'all',
   likedSongs: { read: 'approximate', write: false, readCap: 5000 },
   isrcSearchMode: 'none',

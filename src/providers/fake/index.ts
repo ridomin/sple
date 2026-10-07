@@ -89,6 +89,7 @@ export class FakeProvider implements Provider {
       paginationModel: config.capabilities?.paginationModel ?? 'offset',
       quotaModel: config.capabilities?.quotaModel ?? 'undocumented',
       maxSearchPageSize: config.capabilities?.maxSearchPageSize ?? 50,
+      readPageSize: config.capabilities?.readPageSize ?? { playlists: 50, playlistItems: 100, liked: 50 },
       maxTracksPerRequest: config.capabilities?.maxTracksPerRequest ?? 100,
       likedSongs: config.capabilities?.likedSongs ?? { read: 'exact', write: false },
       supportsRefreshToken: config.capabilities?.supportsRefreshToken ?? false,
