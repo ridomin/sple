@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import * as assert from 'node:assert'
-import { redact, createLogger, logHttpCall } from '../../src/cli/log.js'
+import createDebug from 'debug'
+import { redact, createLogger, setupLogging, formatHttpMessage } from '../../src/cli/log.js'
 import type { CommandContext } from '../../src/cli/cli.js'
 
 function createMockContext(verbose = false, debug = false): CommandContext {
@@ -98,151 +99,6 @@ test('redact returns unchanged text with no secrets', () => {
   assert.strictEqual(result, input)
 })
 
-test('logger info only outputs with verbose flag', () => {
-  const err: string[] = []
-  const ctx = createMockContext(true, false)
-  ctx.io.err = (m) => err.push(m)
-
-  const log = createLogger('test', ctx)
-  log.info('test message')
-
-  assert.strictEqual(err.length, 1)
-  assert.match(err[0], /sple:test/)
-  assert.match(err[0], /test message/)
-})
-
-test('logger info does not output without verbose flag', () => {
-  const err: string[] = []
-  const ctx = createMockContext(false, false)
-  ctx.io.err = (m) => err.push(m)
-
-  const log = createLogger('test', ctx)
-  log.info('test message')
-
-  assert.strictEqual(err.length, 0)
-})
-
-test('logger debug only outputs with debug flag', () => {
-  const err: string[] = []
-  const ctx = createMockContext(false, true)
-  ctx.io.err = (m) => err.push(m)
-
-  const log = createLogger('test', ctx)
-  log.debug('debug message')
-
-  assert.strictEqual(err.length, 1)
-  assert.match(err[0], /sple:test/)
-})
-
-test('logger error always outputs', () => {
-  const err: string[] = []
-  const ctx = createMockContext(false, false)
-  ctx.io.err = (m) => err.push(m)
-
-  const log = createLogger('test', ctx)
-  log.error('error message')
-
-  assert.strictEqual(err.length, 1)
-  assert.match(err[0], /sple:test/)
-})
-
-test('logger redacts tokens in messages', () => {
-  const err: string[] = []
-  const ctx = createMockContext(true, false)
-  ctx.io.err = (m) => err.push(m)
-
-  const log = createLogger('test', ctx)
-  log.info('Authorization: Bearer secret_token_123')
-
-  assert.strictEqual(err.length, 1)
-  assert.match(err[0], /Bearer \[REDACTED\]/)
-  assert.ok(!err[0].includes('secret_token_123'))
-})
-
-test('logger warn prefixes with warning', () => {
-  const err: string[] = []
-  const ctx = createMockContext(true, false)
-  ctx.io.err = (m) => err.push(m)
-
-  const log = createLogger('test', ctx)
-  log.warn('warning message')
-
-  assert.strictEqual(err.length, 1)
-  assert.match(err[0], /warning:/)
-})
-
-test('logHttpCall outputs only in debug mode', () => {
-  const err: string[] = []
-
-  // No debug
-  const ctx1 = createMockContext(false, false)
-  ctx1.io.err = (m) => err.push(m)
-  logHttpCall(ctx1, 'GET', '/v1/me', 200, 50)
-  assert.strictEqual(err.length, 0)
-
-  // With debug
-  const ctx2 = createMockContext(false, true)
-  ctx2.io.err = (m) => err.push(m)
-  logHttpCall(ctx2, 'GET', '/v1/me', 200, 50)
-  assert.strictEqual(err.length, 1)
-})
-
-test('logHttpCall formats HTTP call correctly', () => {
-  const err: string[] = []
-  const ctx = createMockContext(false, true)
-  ctx.io.err = (m) => err.push(m)
-
-  logHttpCall(ctx, 'GET', '/v1/playlists/123/items', 200, 145)
-
-  assert.strictEqual(err.length, 1)
-  assert.match(err[0], /sple:http GET \/v1\/playlists\/123\/items 200 145ms/)
-})
-
-test('logHttpCall includes retry count when provided', () => {
-  const err: string[] = []
-  const ctx = createMockContext(false, true)
-  ctx.io.err = (m) => err.push(m)
-
-  logHttpCall(ctx, 'POST', '/v1/token', 429, 200, 2)
-
-  assert.strictEqual(err.length, 1)
-  assert.match(err[0], /2 retries/)
-})
-
-test('logHttpCall omits retry count when zero', () => {
-  const err: string[] = []
-  const ctx = createMockContext(false, true)
-  ctx.io.err = (m) => err.push(m)
-
-  logHttpCall(ctx, 'GET', '/v1/me', 200, 50, 0)
-
-  assert.strictEqual(err.length, 1)
-  assert.ok(!err[0].includes('retries'))
-})
-
-test('logHttpCall handles network errors with error status', () => {
-  const err: string[] = []
-  const ctx = createMockContext(false, true)
-  ctx.io.err = (m) => err.push(m)
-
-  logHttpCall(ctx, 'GET', '/v1/me', 'ERR ECONNREFUSED', 1000)
-
-  assert.strictEqual(err.length, 1)
-  assert.match(err[0], /ERR ECONNREFUSED/)
-})
-
-test('logger debug also outputs with verbose flag', () => {
-  const err: string[] = []
-  const ctx = createMockContext(true, false)
-  ctx.io.err = (m) => err.push(m)
-
-  const log = createLogger('test', ctx)
-  log.debug('debug message')
-
-  // Debug is only for --debug flag, not --verbose
-  assert.strictEqual(err.length, 0)
-})
-
 test('redact handles complex JSON structures', () => {
   const input = JSON.stringify({
     user: 'test',
@@ -263,14 +119,97 @@ test('redact handles complex JSON structures', () => {
   assert.ok(result.includes('[REDACTED]'))
 })
 
-test('formatHttpLine: ADR 0007 §6 --debug line, redacted, retries only when > 0', async () => {
-  const { formatHttpLine } = await import('../../src/cli/log.js')
-  assert.equal(
-    formatHttpLine({ method: 'GET', path: '/v1/playlists/x/items?limit=100&offset=0', status: 200, durationMs: 143, retries: 0 }),
-    'sple:http GET /v1/playlists/x/items?limit=100&offset=0 200 143ms'
+// --- ADR-0007 A11: logging through debug namespaces --------------------------
+
+/** Configure logging as the CLI does, capturing what reaches stderr. */
+function capture(opts: { verbose?: boolean; debug?: boolean; DEBUG?: string }): string[] {
+  const lines: string[] = []
+  setupLogging({ verbose: opts.verbose ?? false, debug: opts.debug ?? false, debugEnv: opts.DEBUG, write: (l) => lines.push(l) })
+  return lines
+}
+
+/** Emit one line on each namespace. */
+function emitAll(message = 'hello') {
+  for (const ns of ['sple:import', 'sple:auth', 'sple:spotify:auth', 'sple:http', 'sple:http:retry', 'sple:http:error']) {
+    createDebug(ns)('%s', message)
+  }
+}
+
+const namespacesIn = (lines: string[]) => lines.map((l) => /(sple:[a-z:-]+) /.exec(l)?.[1])
+
+test('neither flag nor DEBUG: no log lines', () => {
+  const lines = capture({})
+  emitAll()
+  assert.deepStrictEqual(lines, [])
+})
+
+test('--verbose enables sple:* except sple:http*', () => {
+  const lines = capture({ verbose: true })
+  emitAll()
+  assert.deepStrictEqual(namespacesIn(lines), ['sple:import', 'sple:auth', 'sple:spotify:auth'])
+})
+
+test('--debug enables every sple namespace', () => {
+  const lines = capture({ debug: true })
+  emitAll()
+  assert.deepStrictEqual(namespacesIn(lines), ['sple:import', 'sple:auth', 'sple:spotify:auth', 'sple:http', 'sple:http:retry', 'sple:http:error'])
+})
+
+test('DEBUG alone selects namespaces; exclusions win when combined with a flag', () => {
+  const only = capture({ DEBUG: 'sple:http' })
+  emitAll()
+  assert.deepStrictEqual(namespacesIn(only), ['sple:http'])
+
+  const without = capture({ debug: true, DEBUG: '-sple:http:retry' })
+  emitAll()
+  assert.ok(!namespacesIn(without).includes('sple:http:retry'))
+  assert.ok(namespacesIn(without).includes('sple:http'))
+})
+
+test('the stable part of a line is "sple:<namespace> <message>"', () => {
+  const lines = capture({ debug: true })
+  createDebug('sple:import')('%s', 'Reading file: x.json')
+  assert.strictEqual(lines.length, 1)
+  assert.match(lines[0], /sple:import Reading file: x\.json/)
+})
+
+test('a % in a message is not treated as a format directive', () => {
+  const lines = capture({ debug: true })
+  createLogger('import', createMockContext()).info('GET /search?q=100%25%20off %s %o')
+  assert.match(lines[0], /GET \/search\?q=100%25%20off %s %o/)
+})
+
+test('createLogger: info is a debug log on sple:<namespace>; warn and error always print', () => {
+  const lines = capture({ verbose: true })
+  const err: string[] = []
+  const ctx = { ...createMockContext(), io: { out: () => {}, err: (m: string) => err.push(m) } }
+  const log = createLogger('export', ctx)
+  log.info('wrote 3 tracks')
+  log.warn('careful Bearer abc')
+  log.error('broke access_token=xyz')
+  assert.strictEqual(lines.length, 1)
+  assert.match(lines[0], /sple:export wrote 3 tracks/)
+  assert.deepStrictEqual(err, ['sple:export warning: careful Bearer [REDACTED]', 'sple:export broke access_token=[REDACTED]'])
+})
+
+test('formatHttpMessage: method, path, status, duration, retries only when > 0', () => {
+  assert.strictEqual(
+    formatHttpMessage({ method: 'GET', path: '/v1/playlists/x/items?limit=100&offset=0', status: 200, durationMs: 143, retries: 0 }),
+    'GET /v1/playlists/x/items?limit=100&offset=0 200 143ms'
   )
-  assert.equal(
-    formatHttpLine({ method: 'POST', path: '/api/token?code=SECRET', status: 'ERR ECONNRESET', durationMs: 5, retries: 2 }),
-    'sple:http POST /api/token?code=[REDACTED] ERR ECONNRESET 5ms 2 retries'
+  assert.strictEqual(
+    formatHttpMessage({ method: 'POST', path: '/api/token', status: 'ERR ECONNRESET', durationMs: 5, retries: 2 }),
+    'POST /api/token ERR ECONNRESET 5ms 2 retries'
   )
+})
+
+test('no token reaches stderr through any namespace (leak test)', () => {
+  const secrets = ['ya29.SECRET-ACCESS', 'AQD-SECRET-REFRESH', 'SECRET-CODE', 'SECRET-VERIFIER', 'SECRET-CLIENT']
+  const lines = capture({ DEBUG: 'sple:*' })
+  emitAll(
+    `Authorization: Bearer ${secrets[0]} refresh_token=${secrets[1]}&code=${secrets[2]}&code_verifier=${secrets[3]} ` +
+      `{"client_secret":"${secrets[4]}","access_token":"${secrets[0]}"}`
+  )
+  assert.strictEqual(lines.length, 6)
+  for (const line of lines) for (const secret of secrets) assert.ok(!line.includes(secret), `${secret} leaked: ${line}`)
 })

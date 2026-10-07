@@ -302,8 +302,17 @@ test('--debug after the command prints one redacted sple:http line per request (
       new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 })) as typeof fetch
     const r = await exec(['playlist', 'list', '--debug', '--quiet'], { SPLE_SPOTIFY_CLIENT_ID: 'cid' })
     assert.strictEqual(r.code, 0, r.err)
-    assert.match(r.err, /^sple:http GET \/v1\/me\/playlists\?limit=50&offset=0 200 \d+ms$/m)
+    // debug may add a timestamp before and +Nms after; only "sple:http <message>" is the contract (ADR-0007 A11).
+    assert.match(r.err, /sple:http GET \/v1\/me\/playlists\?limit=50&offset=0 200 \d+ms/)
     assert.ok(!r.err.includes('secret-access-token'))
+
+    // DEBUG selects namespaces without a flag; --verbose leaves out sple:http.
+    const viaEnv = await exec(['playlist', 'list', '--quiet'], { SPLE_SPOTIFY_CLIENT_ID: 'cid', DEBUG: 'sple:http' })
+    assert.match(viaEnv.err, /sple:http GET \/v1\/me\/playlists/)
+    const verbose = await exec(['playlist', 'list', '--verbose', '--quiet'], { SPLE_SPOTIFY_CLIENT_ID: 'cid' })
+    assert.ok(!verbose.err.includes('sple:http'), verbose.err)
+    const plain = await exec(['playlist', 'list', '--quiet'], { SPLE_SPOTIFY_CLIENT_ID: 'cid' })
+    assert.ok(!plain.err.includes('sple:'), plain.err)
   } finally {
     globalThis.fetch = realFetch
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME

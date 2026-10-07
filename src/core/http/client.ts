@@ -14,7 +14,7 @@ const log = createDebug('sple:http')
 const logRetry = createDebug('sple:http:retry')
 const logError = createDebug('sple:http:error')
 
-/** One completed HTTP attempt, for `--debug` request lines (ADR 0007 §6). */
+/** One completed HTTP attempt, logged on `sple:http` (ADR-0007 §6, ADR-0010 §5). */
 export interface HttpLogEntry {
   method: string
   /** Path and query string, with `q`/`uris` values truncated. Never contains headers or bodies. */
@@ -24,6 +24,12 @@ export interface HttpLogEntry {
   durationMs: number
   /** Number of earlier attempts for this request (0 on the first). */
   retries: number
+}
+
+/** The message of a `sple:http` line (ADR-0007 §6): `GET /v1/me/playlists?limit=50&offset=0 200 143ms[ 2 retries]`. */
+export function formatHttpMessage(entry: HttpLogEntry): string {
+  const retries = entry.retries > 0 ? ` ${entry.retries} retries` : ''
+  return `${entry.method} ${entry.path} ${entry.status} ${entry.durationMs}ms${retries}`
 }
 
 export interface HttpClientOptions {
@@ -40,8 +46,6 @@ export interface HttpClientOptions {
   configDir?: string
   maxRetries?: number
   maxWaitMs?: number
-  /** Called after every attempt (including retries). */
-  onResponse?: (entry: HttpLogEntry) => void
 }
 
 export interface HttpRequest {
@@ -72,7 +76,6 @@ export class HttpClient {
   private configDir?: string
   private maxRetries: number
   private maxWaitMs: number
-  private onResponse?: (entry: HttpLogEntry) => void
   private baseDelay = 100 // ms
   private maxDelay = 10000 // ms
   private refreshPromise: Promise<StoredToken> | null = null
@@ -87,7 +90,6 @@ export class HttpClient {
     this.configDir = options.configDir
     this.maxRetries = options.maxRetries ?? 3
     this.maxWaitMs = options.maxWaitMs ?? 120000
-    this.onResponse = options.onResponse
   }
 
   async request(req: HttpRequest): Promise<HttpResponse> {
@@ -207,23 +209,23 @@ export class HttpClient {
             )
           }
         }
-        logError('Received 401 and cannot refresh token')
+        logError('%s', 'Received 401 and cannot refresh token')
         throw this.mapError?.(httpResponse) ?? new AuthRequiredError('Authentication required', 'no-token')
       }
 
       if (response.status === 429) {
         const retryAfterMs = this.parseRetryAfter(headers)
-        logRetry(`Rate limited (429), retry after ${retryAfterMs}ms, max wait ${this.maxWaitMs}ms`)
+        logRetry('%s', `Rate limited (429), retry after ${retryAfterMs}ms, max wait ${this.maxWaitMs}ms`)
 
         if (retryAfterMs > this.maxWaitMs) {
-          logError(`Rate limited: retry-after ${retryAfterMs}ms exceeds maxWaitMs`)
+          logError('%s', `Rate limited: retry-after ${retryAfterMs}ms exceeds maxWaitMs`)
           throw new RateLimitError('Rate limited: retry-after exceeds max wait', retryAfterMs)
         }
         if (attempt < this.maxRetries) {
           await this.delay(retryAfterMs)
           return this.requestWithRetry(req, attempt + 1, hasRefreshed)
         }
-        logError(`Rate limited after ${attempt} retries`)
+        logError('%s', `Rate limited after ${attempt} retries`)
         throw new RateLimitError(`Rate limited after ${attempt} retries`, retryAfterMs)
       }
 
@@ -233,7 +235,7 @@ export class HttpClient {
 
       const mapped = this.mapError?.(httpResponse)
       if (mapped) {
-        logError(`Mapped error ${response.status} to ${mapped.name}`)
+        logError('%s', `Mapped error ${response.status} to ${mapped.name}`)
         throw mapped
       }
       if (response.status === 404) throw new NotFoundError('Resource not found', 'other')
@@ -248,28 +250,26 @@ export class HttpClient {
         const delay = serverError?.response.headers.has('retry-after')
           ? Math.min(this.parseRetryAfter(serverError.response.headers), this.maxWaitMs)
           : this.calculateBackoff(attempt)
-        logRetry(`Attempt ${attempt + 1}/${this.maxRetries} after ${delay}ms`)
+        logRetry('%s', `Attempt ${attempt + 1}/${this.maxRetries} after ${delay}ms`)
         await this.delay(delay)
         return this.requestWithRetry(req, attempt + 1, hasRefreshed)
       }
 
       if (serverError) {
-        logError(`HTTP ${serverError.response.status} after ${attempt} retries`)
+        logError('%s', `HTTP ${serverError.response.status} after ${attempt} retries`)
         throw (
           this.mapError?.(serverError.response) ??
           new ProviderError(`Service unavailable (HTTP ${serverError.response.status}) after ${attempt} retries`)
         )
       }
 
-      logError(`Failed after ${attempt} retries: ${(error as Error).message}`)
+      logError('%s', `Failed after ${attempt} retries: ${(error as Error).message}`)
       throw error
     }
   }
 
   private report(req: HttpRequest, status: number | string, durationMs: number, retries: number): void {
-    const path = this.displayPath(req.url)
-    log(`${req.method} ${path} → ${status} (${durationMs}ms)`)
-    this.onResponse?.({ method: req.method, path, status, durationMs, retries })
+    log('%s', formatHttpMessage({ method: req.method, path: this.displayPath(req.url), status, durationMs, retries }))
   }
 
   private calculateBackoff(attempt: number): number {

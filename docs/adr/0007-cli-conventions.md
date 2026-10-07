@@ -456,7 +456,7 @@ export interface ImportOutput {
 Supersedes the "implemented in-house, no `debug` dependency" rule in §6 and the matching rejected alternative.
 
 - **Library:** the TypeScript implementation logs through the [`debug`](https://www.npmjs.com/package/debug) package, one `createDebug('sple:<namespace>')` instance per namespace. Ports use their platform's equivalent and must support the same `DEBUG` filter syntax.
-- **Namespaces:** `sple:<area>[:<sub>]`. Defined so far: `sple:auth`, `sple:export`, `sple:resolve`, `sple:import`, `sple:<provider>:auth` (e.g. `sple:spotify:auth`), `sple:http` (one line per attempt, §6), `sple:http:retry`, `sple:http:error`.
+- **Namespaces:** `sple:<area>[:<sub>]`. Defined so far: `sple:cli` (the selected provider and command), `sple:auth`, `sple:export`, `sple:resolve`, `sple:import`, `sple:<provider>:auth` (e.g. `sple:spotify:auth`), `sple:http` (one line per attempt, §6), `sple:http:retry`, `sple:http:error`.
 - **Selecting namespaces:** the enabled set is the comma-joined list of `DEBUG` (if set) and the flag pattern, passed to `debug.enable()` once at startup:
   - `--verbose` → `sple:*,-sple:http*`
   - `--debug` → `sple:*`
