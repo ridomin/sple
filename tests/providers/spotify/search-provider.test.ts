@@ -124,8 +124,8 @@ test('Spotify search (M1-19)', async (t) => {
     assert.equal(first.ref, 'spotify:track:3AuzZHPlohKLpildLyORSM')
     assert.equal(first.url, 'https://open.spotify.com/track/3AuzZHPlohKLpildLyORSM')
     assert.equal(first.name, 'Hello')
-    // ADR-0005 maps Spotify ISRC to null even though S1 recorded external_ids.isrc.
-    assert.equal(first.track.isrc, null)
+    // Spike S1 recorded external_ids.isrc in search results; it is kept (FR-EXP-2).
+    assert.equal(first.track.isrc, 'GBBKS1500214')
     assert.equal(first.track.refs.spotify, 'spotify:track:3AuzZHPlohKLpildLyORSM')
     assert.equal(first.track.album, 'Hello')
     assert.equal(first.track.durationMs, 295502)
