@@ -45,7 +45,6 @@ export interface CommandGroupModule {
 }
 
 const MAIN_COMMANDS = ['auth', 'search', 'playlist', 'export', 'import', 'migrate'] as const
-const LEGACY_COMMANDS = ['migrate'] as const
 
 function rootHelpText(version: string, providers: readonly string[]): string {
   return `sple v${version}
@@ -58,7 +57,7 @@ Commands:
   playlist   Playlist management
   export     Export playlists to files
   import     Import playlists from files
-  migrate    Migrate playlists between providers (available in a later release)
+  migrate    Migrate playlists between providers
 
 Global Options:
   --provider <name>  Specify the provider (${providers.join(', ')}); default: spotify
@@ -129,12 +128,6 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
     if (!(MAIN_COMMANDS as readonly string[]).includes(command)) {
       throw new UsageError(
         `Unknown command: ${command}. Run "sple --help" for usage information`
-      )
-    }
-
-    if ((LEGACY_COMMANDS as readonly string[]).includes(command)) {
-      throw new UsageError(
-        `Command '${command}' is available in a later release`
       )
     }
 
@@ -215,6 +208,11 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
 
     if (command === 'import') {
       const mod = await import('./commands/import.js')
+      return await mod.run(ctx, commandArgs)
+    }
+
+    if (command === 'migrate') {
+      const mod = await import('./commands/migrate.js')
       return await mod.run(ctx, commandArgs)
     }
 
