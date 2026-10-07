@@ -79,6 +79,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
         user: { id: user.id, displayName: user.displayName },
         scopes: storedToken.scopes,
         expiresAt: storedToken.expiresAt,
+        missingScopes: config.scopes.filter((s) => !storedToken.scopes.includes(s)),
       }
     } finally {
       handler.cleanup()

@@ -142,13 +142,15 @@ test('YouTubeMusicAuth', async (t) => {
 
     assert.deepStrictEqual(status.scopes, [PROFILE])
     assert.deepStrictEqual(loadTokens('youtube-music', tempDir)?.scopes, [PROFILE])
+    assert.deepStrictEqual(status.missingScopes, [YOUTUBE])
   })
 
   await t.test('login falls back to the requested scopes when the response omits scope', async () => {
     const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret', tempDir)
-    await loginWith(auth, { access_token: 'a', refresh_token: 'r', expires_in: 3599 })
+    const status = await loginWith(auth, { access_token: 'a', refresh_token: 'r', expires_in: 3599 })
 
     assert.deepStrictEqual(loadTokens('youtube-music', tempDir)?.scopes, [YOUTUBE, PROFILE])
+    assert.deepStrictEqual(status.missingScopes, [])
   })
 
   await t.test('refresh replaces the stored scopes with the granted ones', async () => {
