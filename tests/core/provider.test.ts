@@ -92,6 +92,11 @@ test('error message formatting', async (t) => {
     assert.ok(msg.includes('playlist-modify'))
   })
 
+  await t.test('formats a revoked AuthRequiredError with its own message (#80)', () => {
+    const err = new AuthRequiredError('YouTube Music authorization expired or was revoked; run "sple auth login --provider youtube-music"', 'revoked')
+    assert.strictEqual(formatErrorMessage(err), err.message)
+  })
+
   await t.test('formats NotFoundError', () => {
     const err = new NotFoundError('Playlist xyz not found', 'playlist')
     const msg = formatErrorMessage(err)

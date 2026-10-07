@@ -103,5 +103,6 @@ export interface AuthStatusOutput {
     user?: { id: string; displayName?: string }
     scopes: string[] // granted scopes; empty when not logged in
     expiresAt?: string // access-token expiry, ISO 8601 UTC
+    refreshTokenExpiresAt?: string // refresh-token expiry when the provider limits it, ISO 8601 UTC
   }>
 }

@@ -15,6 +15,8 @@ export interface StoredToken {
   /** Optional, additive (schemaVersion stays 1). Lets `auth status` show a name offline. */
   displayName?: string
   grantedAt: string
+  /** Optional, additive. Refresh-token expiry when the provider sends one (Google apps in Testing status). */
+  refreshTokenExpiresAt?: string
 }
 
 export interface TokensFile {
@@ -172,5 +174,9 @@ function validateToken(token: unknown): asserts token is StoredToken {
 
   if (t.displayName !== undefined && typeof t.displayName !== 'string') {
     throw new Error('Token displayName must be a string if present')
+  }
+
+  if (t.refreshTokenExpiresAt !== undefined && typeof t.refreshTokenExpiresAt !== 'string') {
+    throw new Error('Token refreshTokenExpiresAt must be a string if present')
   }
 }

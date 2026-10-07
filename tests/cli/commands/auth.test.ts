@@ -227,6 +227,39 @@ test('status: no warning when expiry is far away; no expiry is fine', async () =
   assert.ok(!b.out.some((m) => m.includes('Token expires')))
 })
 
+test('status: shows the refresh-token expiry when the provider reports one (#80)', async () => {
+  const { io, out, err } = makeIO()
+  const far = new Date(Date.now() + 3_600_000).toISOString()
+  const week = new Date(Date.now() + 6 * 86_400_000).toISOString()
+  const p = providerWith({ status: async () => loggedIn({ expiresAt: far, refreshTokenExpiresAt: week }) })
+  assert.equal(await handleStatus([target(p)], io), 0)
+  assert.ok(out.includes(`  Refresh token expires: ${week}`), out.join('\n'))
+  assert.deepEqual(err, [])
+})
+
+test('status: an expired refresh token says to log in again, not that it will refresh (#80)', async () => {
+  const { io, out, err } = makeIO()
+  const past = new Date(Date.now() - 3_600_000).toISOString()
+  const p = providerWith({ status: async () => loggedIn({ expiresAt: past, refreshTokenExpiresAt: past }) })
+  assert.equal(await handleStatus([target(p)], io), 0)
+  assert.ok(out.includes(`  Refresh token expires: ${past} (expired)`), out.join('\n'))
+  assert.ok(
+    err.some((m) => m === `Warning: ${p.displayName} refresh token has expired; run "sple auth login --provider ${p.id}"`),
+    err.join('\n')
+  )
+  assert.ok(!err.some((m) => m.includes('will be refreshed on next use')), err.join('\n'))
+})
+
+test('status --json: includes refreshTokenExpiresAt when known (#80)', async () => {
+  const { io, out } = makeIO()
+  const p = providerWith({
+    status: async () => loggedIn({ expiresAt: '2030-01-01T00:00:00.000Z', refreshTokenExpiresAt: '2030-01-07T00:00:00.000Z' }),
+  })
+  assert.equal(await handleStatus([target(p)], io, { json: true }), 0)
+  const parsed = JSON.parse(out.join('\n')) as AuthStatusOutput
+  assert.equal(parsed.providers[0].refreshTokenExpiresAt, '2030-01-07T00:00:00.000Z')
+})
+
 test('status --json: ADR-0007 shape, optional fields omitted', async () => {
   const { io, out } = makeIO()
   const p1 = providerWith({ status: async () => loggedIn({ expiresAt: '2030-01-01T00:00:00.000Z' }) })

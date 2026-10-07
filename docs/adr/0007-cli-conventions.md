@@ -233,6 +233,7 @@ export interface AuthStatusOutput {
     user?: { id: string; displayName?: string }
     scopes: string[]                   // granted scopes; empty when not logged in
     expiresAt?: string                 // access-token expiry, ISO 8601 UTC
+    refreshTokenExpiresAt?: string     // refresh-token expiry when the provider limits it, ISO 8601 UTC (Amendment 2)
   }>
 }
 ```
@@ -467,3 +468,14 @@ Supersedes the "implemented in-house, no `debug` dependency" rule in §6 and the
 - **Line format:** the stable part is `sple:<namespace> <message>`, with `<message>` as specified in §6 and ADR 0010 §5. The decoration `debug` adds (colors and a `+Nms` suffix on a TTY, an ISO timestamp prefix otherwise, controlled by `DEBUG_COLORS`, `DEBUG_HIDE_DATE` and `NO_COLOR`) is not part of the contract. Logs are for people; scripts use `--json`.
 - **Not logs:** errors (§4), warnings and summaries are always printed through the error writer, are redacted, and are not affected by `DEBUG`.
 - **Tests:** the §6 leak test enables `sple:*` and feeds known token strings through every namespace.
+
+## Amendment 2 (refresh-token expiry, #80)
+
+- **Date:** 2026-10-07
+- **Why:** an expired Google refresh token (ADR 0010 Amendment 1) was reported as "not logged in" and as the generic auth message, so users could not tell an expired grant from a missing login.
+
+| Change | Rule |
+|---|---|
+| A2 error message | `AuthRequiredError` with reason `revoked` and no `scope` prints the error's own message, which names the provider and the login command. Other `AuthRequiredError`s are unchanged. |
+| §3.7 / A10 `auth status` | When the stored token has `refreshTokenExpiresAt`, the human form adds `  Refresh token expires: <ISO>` after `Token expires`. If it has passed, the line ends in ` (expired)` and stderr gets `Warning: <Provider> refresh token has expired; run "sple auth login --provider <id>"` instead of the "will be refreshed on next use" warning. `--json` adds `refreshTokenExpiresAt` (omitted when unknown). Status still makes no network call. |
+
