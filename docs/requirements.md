@@ -236,7 +236,7 @@ Command grammar, output modes, `--json` shapes, error output, stdin input, parti
 | S2 | M1 | Can a Development Mode app read the tracks of a playlist where the user is a collaborator but not the owner? Refines `playlistItemsAccess`. | **Resolved 2026-10-02:** yes; `'owned-or-collaborator'` (ADR-0003 Amendment 1). [Report](spikes/M1-spotify-spikes.md#s2-collaborator-access-to-playlist-items). |
 | S3 | M1 | Current maximum `limit` on `GET /playlists/{id}/items` and `GET /me/tracks` (NFR-5 assumes 50). | **Resolved 2026-10-02:** 50 / 50 / 100; NFR-5 feasible. [Report](spikes/M1-spotify-spikes.md#s3-page-size-limits). |
 | S4 | M1 | What error does a Spotify login or first call produce when the app owner has no Premium? Needed for the FR-AUTH-2 message. | **Unverified 2026-10-02** (no non-Premium app); fallback: 403 with message matching `/premium/i`. [Report](spikes/M1-spotify-spikes.md#s4-premium-detection-unverified). |
-| S5–S7 | M4a | YouTube spikes from ADR-0002 §6: `LM` playlist access, Desktop-client token exchange with PKCE and without the secret, daily playlist-creation cap. | Contradicting result → update requirements + ADR-0003 before coding. |
+| S5–S7 | M4a | YouTube spikes from ADR-0002 §6: `LM` playlist access, Desktop-client token exchange with PKCE and without the secret, daily playlist-creation cap. | **Resolved 2026-10-07:** S5 `LM` works, Liked export exact (ADR-0002 Amendment 3). S6 the secret is required (HTTP 400 without it); FR-AUTH-1 unchanged. S7 not run (owner decision); the cap stays unknown. [Report](spikes/M4a-youtube-spikes.md). |
 
 ## 11. Milestones
 
@@ -246,7 +246,7 @@ Command grammar, output modes, `--json` shapes, error output, stdin input, parti
 | **M1 — Spotify MVP** | Spikes S1–S4 first. FR-AUTH (M), FR-SEARCH (M), FR-PL (M), FR-EXP (M, including Liked Songs), CLI-1…8. |
 | **M2 — Spotify polish** | FR-PL-5 (edit), FR-SEARCH-3 (field filters), FR-EXP-5 (export all), FR-PL-1 `--filter` option. |
 | **M3 — Import + matching** | FR-EXP-7, matching engine (strategy chain, metadata matching as the core), match report (tested against the fake provider). **Done 2026-10-05**; playlist creation landed in M3.1 (#23). The spec review of 2026-10-07 changed parts of the contract; see §12. |
-| **M4a — YouTube Music, read-only** | A preview adapter already exists in the TypeScript code (§12); it does not yet meet this milestone. Spikes S5–S7 first. `docs/PRIVACY.md` (NFR-9) before any YouTube data is stored. Google auth (login/logout with revocation/status), search, `playlist list/show`, export, Liked export (the `LM` playlist, spike S5). Login requests `youtube` (owner decision 2026-10-07); reads also accept `youtube.readonly` (ADR-0003 Amendment 3). |
+| **M4a — YouTube Music, read-only** | A preview adapter already exists in the TypeScript code (§12); it does not yet meet this milestone. Spikes S5–S7 done ([report](spikes/M4a-youtube-spikes.md)). `docs/PRIVACY.md` (NFR-9) before any YouTube data is stored. Google auth (login/logout with revocation/status), search, `playlist list/show`, export, Liked export (the `LM` playlist, spike S5). Login requests `youtube` (owner decision 2026-10-07); reads also accept `youtube.readonly` (ADR-0003 Amendment 3). |
 | **M4b — YouTube Music, writes + migrate** | Create/remove playlists, populate-playlist, quota ledger and cost estimate, resumable `migrate` (FR-MIG). Enables Switcher persona. |
 | **Later** | Other providers, unscheduled. |
 
@@ -256,4 +256,4 @@ The specification (this file and the ADRs) is the target. This section lists whe
 
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
-| D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: spikes S6–S7 not reported | #65 |
+| — | — | None known | — |
