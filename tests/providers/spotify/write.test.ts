@@ -306,18 +306,6 @@ test('Spotify write operations (M1-21)', async (t) => {
     assert.strictEqual(calls.length, 0)
   })
 
-  await t.test('populatePlaylist throws UsageError with release message', async () => {
-    const provider = createSpotifyProvider('test-client', tempDir)
-
-    try {
-      await provider.populatePlaylist('pl123', ['spotify:track:1'], { skipExisting: false })
-      assert.fail('Should have thrown UsageError')
-    } catch (error) {
-      assert.ok(error instanceof UsageError)
-      assert.ok((error as Error).message.includes('not available'))
-    }
-  })
-
   await t.test('createPlaylist includes url in summary', async () => {
     calls = []
     const token: StoredToken = {

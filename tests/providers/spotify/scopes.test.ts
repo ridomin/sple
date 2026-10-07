@@ -84,6 +84,15 @@ const OPERATIONS: Array<{ name: string; call: (p: Provider) => Promise<unknown>;
     scopes: ['playlist-modify-public', 'playlist-modify-private'],
   },
   {
+    name: 'import (populatePlaylist)',
+    // Non-fatal request errors are recorded per track, so surface the first one.
+    call: async (p) => {
+      const { failed } = await p.populatePlaylist(PLAYLIST_ID, ['spotify:track:0000000000000000000000'], { skipExisting: false })
+      if (failed.length > 0) throw new Error(failed[0].error)
+    },
+    scopes: ['playlist-modify-public', 'playlist-modify-private'],
+  },
+  {
     name: 'playlist remove',
     call: (p) => p.removePlaylist('0000000000000000000000'),
     scopes: ['playlist-modify-public', 'playlist-modify-private'],
@@ -95,6 +104,7 @@ test('scope table covers exactly the M1 operations', () => {
     'createPlaylist',
     'getPlaylistItems',
     'listPlaylists',
+    'populatePlaylist',
     'readLiked',
     'removePlaylist',
     'search',

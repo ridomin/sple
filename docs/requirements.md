@@ -257,7 +257,6 @@ The specification (this file and the ADRs) is the target. This section lists whe
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
 | D1 | `readPageSize` capability for reads (ADR-0003 A2) | `playlist show` and `export` use `maxTracksPerRequest` as the page size (YouTube: 1 item per request); Liked Songs uses `min(50, maxTracksPerRequest)`; `playlist list` and the resolver hardcode 50 | #38 |
-| D3 | Spotify `populatePlaylist` works (ADR-0003 A2) | It rejects, so `import --provider spotify` creates an empty playlist and then fails | #40 |
 | D4 | `parseTrackRef`, canonical refs (ADR-0003 §3.1) | No `parseTrackRef`; YouTube track refs are `https://www.youtube.com/watch?v=<id>` and playlist refs are playlist URLs; fake track refs are bare IDs | #41 |
 | D5 | File reading for import (ADR-0008 A1) | Any extension other than `.json` is read as CSV; CSV refs are keyed `"source"` (known-ref never fires), `source.provider` is `fake`, the name is `Imported Playlist`; JSON files are checked only for `schemaVersion` and a `tracks` array | #42 |
 | D7 | Normalization and scoring (ADR-0009 A1 §3–4) | NFD without mark stripping, no punctuation folding, only parenthesized `feat./ft./remix/cover/acoustic/instrumental` stripped, list-based word overlap, missing duration counted as 0, no title/artist gate | #30, #25 |
