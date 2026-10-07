@@ -256,19 +256,19 @@ The specification (this file and the ADRs) is the target. This section lists whe
 
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
-| D1 | `readPageSize` capability for reads (ADR-0003 A2) | `playlist show` and `export` use `maxTracksPerRequest` as the page size (YouTube: 1 item per request); Liked Songs uses `min(50, maxTracksPerRequest)`; `playlist list` and the resolver hardcode 50 | — |
-| D2 | `searchTracks(TrackQuery)` and one `MatchCandidate` (ADR-0003 A2, ADR-0009 A1) | Strategies call `provider.search` with core-built `isrc:<code>` and `"<title> <artist>"` text; `resolveTrack` is unused; matching has its own `{ trackRef, confidence, metadata }` candidate | — |
-| D3 | Spotify `populatePlaylist` and `searchTracks` work (ADR-0003 A2) | Both reject, so `import --provider spotify` creates an empty playlist and then fails | — |
-| D4 | `parseTrackRef`, canonical refs (ADR-0003 §3.1) | No `parseTrackRef`; YouTube track refs are `https://www.youtube.com/watch?v=<id>` and playlist refs are playlist URLs; fake track refs are bare IDs | — |
-| D5 | File reading for import (ADR-0008 A1) | Any extension other than `.json` is read as CSV; CSV refs are keyed `"source"` (known-ref never fires), `source.provider` is `fake`, the name is `Imported Playlist`; JSON files are checked only for `schemaVersion` and a `tracks` array | — |
-| D6 | Fatal errors stop matching (ADR-0009 A1 §1) | Strategies return `null` on every error and the engine swallows the rest, so an expired login or quota hit marks the remaining tracks unmatched | — |
+| D1 | `readPageSize` capability for reads (ADR-0003 A2) | `playlist show` and `export` use `maxTracksPerRequest` as the page size (YouTube: 1 item per request); Liked Songs uses `min(50, maxTracksPerRequest)`; `playlist list` and the resolver hardcode 50 | #38 |
+| D2 | `searchTracks(TrackQuery)` and one `MatchCandidate` (ADR-0003 A2, ADR-0009 A1) | Strategies call `provider.search` with core-built `isrc:<code>` and `"<title> <artist>"` text; `resolveTrack` is unused; matching has its own `{ trackRef, confidence, metadata }` candidate | #39 |
+| D3 | Spotify `populatePlaylist` and `searchTracks` work (ADR-0003 A2) | Both reject, so `import --provider spotify` creates an empty playlist and then fails | #40 |
+| D4 | `parseTrackRef`, canonical refs (ADR-0003 §3.1) | No `parseTrackRef`; YouTube track refs are `https://www.youtube.com/watch?v=<id>` and playlist refs are playlist URLs; fake track refs are bare IDs | #41 |
+| D5 | File reading for import (ADR-0008 A1) | Any extension other than `.json` is read as CSV; CSV refs are keyed `"source"` (known-ref never fires), `source.provider` is `fake`, the name is `Imported Playlist`; JSON files are checked only for `schemaVersion` and a `tracks` array | #42 |
+| D6 | Fatal errors stop matching (ADR-0009 A1 §1) | Strategies return `null` on every error and the engine swallows the rest, so an expired login or quota hit marks the remaining tracks unmatched | #43 |
 | D7 | Normalization and scoring (ADR-0009 A1 §3–4) | NFD without mark stripping, no punctuation folding, only parenthesized `feat./ft./remix/cover/acoustic/instrumental` stripped, list-based word overlap, missing duration counted as 0, no title/artist gate | #30, #25 |
-| D8 | Match report v1 (ADR-0009 A1 §6) | No `schemaVersion` or `minConfidence`; `strategies` lists only the winning strategy on a match | — |
-| D9 | `import` output contract (ADR-0007 A9) | stdout is always the text report (`--json` and `--quiet` have no effect on stdout); short flags `-p`/`-n`; the non-TTY check happens after matching; declining exits 0 | — |
+| D8 | Match report v1 (ADR-0009 A1 §6) | No `schemaVersion` or `minConfidence`; `strategies` lists only the winning strategy on a match | #44 |
+| D9 | `import` output contract (ADR-0007 A9) | stdout is always the text report (`--json` and `--quiet` have no effect on stdout); short flags `-p`/`-n`; the non-TTY check happens after matching; declining exits 0 | #45 |
 | D10 | Spotify exports `external_ids.isrc` (FR-EXP-2) | `isrc` is hard-coded to `null` | #28 |
-| D11 | Fake provider opt-in (PRV-6) | Always registered, listed in help and `auth status` | — |
+| D11 | Fake provider opt-in (PRV-6) | Always registered, listed in help and `auth status` | #46 |
 | D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: scopes `youtube` + `userinfo.profile` from the first login; no scope checks; `quotaModel` is `rate-limited` (no daily ledger); `getLikedTracks` returns nothing; `search` ignores `--type`; `listPlaylists` ignores `--owned`/`--followed` and marks every playlist owned; `auth status` refreshes over the network; logout reports deleting a match cache and migration state that do not exist; no `docs/PRIVACY.md`; spikes S5–S7 not run | #27, #29 |
-| D13 | `tokens.json` created with mode `0600`; `.env` readable only by the user (FR-AUTH-3, ADR-0004 A1) | `tokens.json` is written with the default mode, then `chmod 0600`; `.env` permissions are not checked | — |
+| D13 | `tokens.json` created with mode `0600`; `.env` readable only by the user (FR-AUTH-3, ADR-0004 A1) | `tokens.json` is written with the default mode, then `chmod 0600`; `.env` permissions are not checked | #47 |
 | D14 | `auth status` reports expired tokens as expired (ADR-0007 A10) | Reported as "expires in less than 5 minutes" | #31 |
-| D15 | `auth login`/`logout` honor `--quiet` (ADR-0007 §3.7) | `--quiet` is ignored | — |
-| D16 | Logging only through the redacting logger (ADR-0007 §6) | The HTTP client and Spotify auth also log through the `debug` package when `DEBUG=sple:*` is set (no token values, but not redacted) | — |
+| D15 | `auth login`/`logout` honor `--quiet` (ADR-0007 §3.7) | `--quiet` is ignored | #48 |
+| D16 | Logging only through the redacting logger (ADR-0007 §6) | The HTTP client and Spotify auth also log through the `debug` package when `DEBUG=sple:*` is set (no token values, but not redacted) | #49 |
