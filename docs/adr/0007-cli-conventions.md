@@ -556,3 +556,13 @@ A run is resumable for **30 days** after `createdAt`. After that it is ignored a
 
 `auth logout` also deletes the runs whose `target` is the provider or whose snapshot's `source.provider` is the provider, and adds `runs` to the `Deleted:` line (Amendment 3).
 
+## Amendment 5 (quota estimate, #96)
+
+- **Date:** 2026-10-07
+- **Why:** FR-MIG-5. The rules are in ADR 0002 Amendment 5 ("CLI").
+
+| Change | Rule |
+|---|---|
+| A9 `import` | For a target with a daily quota, the estimate lines go to stderr before matching. A fresh run that needs more than today's quota asks `Start anyway? (y/n)` first, unless it is a dry run or has `--yes`. |
+| A9 `ImportOutput` | New optional `estimate: QuotaEstimate`. |
+

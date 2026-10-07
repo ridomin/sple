@@ -349,3 +349,36 @@ A **video decoration** is a `(…)` or `[…]` segment, with the whitespace befo
 **S6:** a Desktop client's token exchange with PKCE but without `client_secret` fails with HTTP 400 `invalid_request` ("client_secret is missing."). The auth design in §4 stands: the user's non-confidential secret is required and stored.
 
 **S7:** not run (owner decision); measuring the cap would mean creating playlists in the owner's account until YouTube refuses. The daily playlist-creation cap stays unknown, and R8's handling stands.
+
+## Amendment 5 (quota estimate, #96)
+
+- **Date:** 2026-10-07
+- **Why:** FR-MIG-5 asks for a cost estimate before a run starts. §4.1 sketches `core/quota/estimate.ts`; this pins it down for `import` (and later `migrate`), now that runs can be resumed (ADR 0007 Amendment 4) and matches cached (ADR 0009 Amendment 2).
+
+**Work** (`countImportWork`): for each run item not `done`, an upper bound on the remaining calls:
+
+| Count | Rule |
+|---|---|
+| `searchCalls` | Per track without a result yet (phase `matching`), unless the file has a ref for the target or the match cache has a fresh entry: +1 if it has an ISRC and the target's `isrcSearchMode` isn't `none`, +1 if it has a title |
+| `playlists` | +1 per item without a created playlist |
+| `inserts` | Phase `matching`: tracks matched so far + tracks not yet matched (every one may match). Otherwise `toAdd.length − cursor` |
+
+A dry run counts searches only.
+
+**Estimate** (`estimateQuota`), only for `quotaModel.kind: 'daily-buckets'`:
+
+- `need[bucket]` adds up the declared `costs`: `searchTracks` × `searchCalls`, `createPlaylist` × `playlists`, and `populatePlaylist` × `inserts` (a `per: 'call'` cost is charged once per batch of `maxTracksPerRequest`). `per: 'page'` costs (reads) aren't counted. The reconcile read on resume (1 unit) isn't counted either.
+- `remainingToday = max(0, dailyLimit − used today)` from the ledger (Amendment 2).
+- **Days, per bucket:** 0 when nothing is needed, 1 when `need ≤ remainingToday`, otherwise `1 + ceil((need − remainingToday) / dailyLimit)`. The estimate's `days` is the largest of these.
+- `resetAt` is the next reset (midnight in the buckets' zone).
+
+YouTube example: 120 tracks to search and add, with 96 searches left today, needs `search` 120 and `units` 120 + 50 + 6,000 = 6,170, which is 2 days.
+
+**CLI (`import`):** after reading the file (or loading the run on `--resume`) and before any request:
+
+1. When `days ≥ 1`, stderr gets `Quota estimate for <provider>: <bucket> up to <need> (<remainingToday> of <dailyLimit> left today)`, one part per bucket with a need, joined by `; `. When `days > 1`, a second line follows: `That needs about <days> days of quota. sple stops when today's quota runs out (it resets at <resetAt>) and prints how to resume.`
+2. A fresh, non-dry-run import with `days > 1` asks `Start anyway? (y/n)` (skipped with `--yes`). Declining prints `Aborted; nothing was changed.` and exits 1 before any request; no run is created. A dry run and a resume don't ask.
+3. `ImportOutput` gains `estimate?: QuotaEstimate` (`{ buckets: [{ bucket, need, remainingToday, dailyLimit }], days, resetAt }`), present for daily-buckets targets.
+
+`--max-days` (§4.1) isn't implemented: a run simply stops at the quota and is resumed.
+
