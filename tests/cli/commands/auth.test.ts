@@ -190,6 +190,16 @@ test('status: warns when token expires within 5 minutes', async () => {
   assert.ok(err.some((m) => m.includes('expires in less than 5 minutes')))
 })
 
+test('status: an already expired token is reported as expired, not as expiring soon (#31)', async () => {
+  const { io, out, err } = makeIO()
+  const past = new Date(Date.now() - 3.5 * 3600_000).toISOString()
+  const p = providerWith({ status: async () => loggedIn({ expiresAt: past }) })
+  assert.equal(await handleStatus([target(p)], io), 0)
+  assert.ok(out.includes(`  Token expires: ${past} (expired)`), out.join('\n'))
+  assert.ok(err.some((m) => /access token has expired; it will be refreshed on next use$/.test(m)), err.join('\n'))
+  assert.ok(!err.some((m) => m.includes('less than 5 minutes')), err.join('\n'))
+})
+
 test('status: no warning when expiry is far away; no expiry is fine', async () => {
   const a = makeIO()
   const far = new Date(Date.now() + 3_600_000).toISOString()

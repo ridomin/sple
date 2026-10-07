@@ -447,7 +447,7 @@ export interface ImportOutput {
 ### A10. `auth`
 
 - `auth login [--no-browser | --manual]` (both → exit 2); output per ADR 0010 §2. `--quiet` suppresses the stdout lines.
-- `auth status [--json]`: human form per provider: `<Provider> (<id>): logged in` / `: not logged in`, then `  User: [<displayName> ](<id>)`, `  Scopes: <space-joined or (none)>`, `  Token expires: <ISO>`. A token that has already expired is reported as `expired` (stderr warning `<Provider> access token has expired; it will be refreshed on next use`); one expiring within 5 minutes gets `Warning: <Provider> access token expires in less than 5 minutes`. Status is read from `tokens.json` and makes no network call.
+- `auth status [--json]`: human form per provider: `<Provider> (<id>): logged in` / `: not logged in`, then `  User: [<displayName> ](<id>)`, `  Scopes: <space-joined or (none)>`, `  Token expires: <ISO>`. A token that has already expired (`expiresAt <= now`) is printed as `  Token expires: <ISO> (expired)` with the stderr warning `Warning: <Provider> access token has expired; it will be refreshed on next use`; one expiring within 5 minutes gets `Warning: <Provider> access token expires in less than 5 minutes`. Status is read from `tokens.json` and makes no network call.
 - `auth logout [--provider X | --all]` (both → exit 2): stdout `Revoked access with <Provider>` or `Logged out from <Provider>`, then `Deleted: <items>` and the provider's notice. Every target is attempted; the exit code is that of the first failure.
 - `--no-browser`/`--manual` on other subcommands, `--all` outside logout, and `--json` outside status → exit 2.
 
