@@ -3,6 +3,7 @@ import type { ProviderCapabilities } from '../../core/provider/capabilities.js'
 import { HttpClient } from '../../core/http/client.js'
 import { YouTubeMusicAuth } from './auth.js'
 import { YouTubeMusicHttpClient } from './client.js'
+import { mapYouTubeHttpError } from './errors.js'
 import { parseYouTubePlaylistId } from './playlist-ref.js'
 
 const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
@@ -36,6 +37,7 @@ export function createYouTubeMusicProvider(
     providerId: 'youtube-music',
     getToken: () => auth.getToken(),
     refresh: (token) => auth.refresh(token),
+    mapError: mapYouTubeHttpError,
     onResponse: undefined,
   })
 
