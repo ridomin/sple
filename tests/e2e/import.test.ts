@@ -81,7 +81,7 @@ describe('Import E2E (with fake provider)', () => {
     assert.equal(report.summary.unmatched, 0)
     assert.equal(report.results[1].confidence, 1)
     assert.deepEqual(report.results[1].strategies, ['known-ref'])
-    assert.deepEqual(report.results[0].strategies, ['metadata'])
+    assert.deepEqual(report.results[0].strategies, ['known-ref', 'metadata'])
   })
 
   test('should handle mixed matched, unmatched, and unsupported items', async () => {

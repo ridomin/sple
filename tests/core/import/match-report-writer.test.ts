@@ -23,6 +23,9 @@ test('MatchReportWriter', async (t) => {
 
   // Mock report for testing
   const mockReport: MatchReport = {
+    schemaVersion: 1,
+    targetPlaylistName: 'My Playlist',
+    minConfidence: 0.5,
     importedAt: '2026-10-05T12:00:00Z',
     sourceFile: {
       path: '/path/to/export.json',
@@ -123,7 +126,10 @@ test('MatchReportWriter', async (t) => {
 
     await t.test('should handle empty report', async () => {
       const emptyReport: MatchReport = {
-        importedAt: '2026-10-05T12:00:00Z',
+        schemaVersion: 1,
+    targetPlaylistName: 'My Playlist',
+    minConfidence: 0.5,
+    importedAt: '2026-10-05T12:00:00Z',
         sourceFile: {
           path: '/path/to/export.json',
           provider: 'spotify',
@@ -139,6 +145,7 @@ test('MatchReportWriter', async (t) => {
           unmatched: 0,
           unsupported: 0,
         },
+        recommendations: [],
       }
 
       const text = await writer.writeText(emptyReport)
@@ -185,6 +192,7 @@ test('MatchReportWriter', async (t) => {
           unmatched: 25,
           unsupported: 0,
         },
+        recommendations: [],
       }
 
       const text = await writer.writeText(report)
@@ -224,6 +232,7 @@ test('MatchReportWriter', async (t) => {
           unmatched: 0,
           unsupported: 0,
         },
+        recommendations: [],
       }
 
       const text = await writer.writeText(report)
@@ -297,7 +306,10 @@ test('MatchReportWriter', async (t) => {
       const tmpDir = createTempDir()
       try {
         const emptyReport: MatchReport = {
-          importedAt: '2026-10-05T12:00:00Z',
+          schemaVersion: 1,
+    targetPlaylistName: 'My Playlist',
+    minConfidence: 0.5,
+    importedAt: '2026-10-05T12:00:00Z',
           sourceFile: {
             path: '/path/to/export.json',
             provider: 'spotify',
@@ -313,6 +325,7 @@ test('MatchReportWriter', async (t) => {
             unmatched: 0,
             unsupported: 0,
           },
+          recommendations: [],
         }
 
         const filePath = join(tmpDir, 'empty.json')
@@ -356,7 +369,10 @@ test('MatchReportWriter', async (t) => {
   await t.test('percentage formatting', async (t) => {
     await t.test('should handle zero total', async () => {
       const emptyReport: MatchReport = {
-        importedAt: '2026-10-05T12:00:00Z',
+        schemaVersion: 1,
+    targetPlaylistName: 'My Playlist',
+    minConfidence: 0.5,
+    importedAt: '2026-10-05T12:00:00Z',
         sourceFile: {
           path: '/path/to/export.json',
           provider: 'spotify',
@@ -372,6 +388,7 @@ test('MatchReportWriter', async (t) => {
           unmatched: 0,
           unsupported: 0,
         },
+        recommendations: [],
       }
 
       const text = await writer.writeText(emptyReport)
@@ -381,7 +398,10 @@ test('MatchReportWriter', async (t) => {
 
     await t.test('should calculate percentages correctly', async () => {
       const report: MatchReport = {
-        importedAt: '2026-10-05T12:00:00Z',
+        schemaVersion: 1,
+    targetPlaylistName: 'My Playlist',
+    minConfidence: 0.5,
+    importedAt: '2026-10-05T12:00:00Z',
         sourceFile: {
           path: '/path/to/export.json',
           provider: 'spotify',
@@ -397,6 +417,7 @@ test('MatchReportWriter', async (t) => {
           unmatched: 20,
           unsupported: 5,
         },
+        recommendations: [],
       }
 
       const text = await writer.writeText(report)
@@ -409,7 +430,10 @@ test('MatchReportWriter', async (t) => {
 
     await t.test('should round percentages', async () => {
       const report: MatchReport = {
-        importedAt: '2026-10-05T12:00:00Z',
+        schemaVersion: 1,
+    targetPlaylistName: 'My Playlist',
+    minConfidence: 0.5,
+    importedAt: '2026-10-05T12:00:00Z',
         sourceFile: {
           path: '/path/to/export.json',
           provider: 'spotify',
@@ -425,6 +449,7 @@ test('MatchReportWriter', async (t) => {
           unmatched: 1, // 33.33... should round to 33%
           unsupported: 0,
         },
+        recommendations: [],
       }
 
       const text = await writer.writeText(report)
@@ -433,4 +458,24 @@ test('MatchReportWriter', async (t) => {
       assert(text.includes('33%'))
     })
   })
+})
+
+test('MatchReportWriter: percentages are round(100 · value / total), halves up (ADR-0009 A1 §6)', async () => {
+  // (29 / 200) * 100 is 14.499999999999998 in floating point; 100 * 29 / 200 is exactly 14.5.
+  const report = {
+    schemaVersion: 1,
+    schemaVersion: 1,
+    targetPlaylistName: 'My Playlist',
+    minConfidence: 0.5,
+    importedAt: '2026-10-05T12:00:00Z',
+    sourceFile: { path: 'x.json', provider: 'spotify', playlistName: 'P', trackCount: 200 },
+    targetProvider: 'fake',
+    targetPlaylistName: 'P',
+    minConfidence: 0.5,
+    results: [],
+    summary: { total: 200, matched: 29, lowConfidence: 0, unmatched: 171, unsupported: 0 },
+    recommendations: [],
+  } as MatchReport
+  const text = await new MatchReportWriter().writeText(report)
+  assert.match(text, /^Matched: {9}29 \(15%\)$/m)
 })
