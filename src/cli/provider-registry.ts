@@ -1,9 +1,12 @@
 import type { Provider } from '../core/provider/provider.js'
 import type { ProviderId } from '../core/provider/capabilities.js'
 import { UsageError } from '../core/provider/errors.js'
-import { FakeProvider } from '../providers/fake/index.js'
+import { FakeProvider, parseFakeTrackRef } from '../providers/fake/index.js'
 import { createSpotifyProvider } from '../providers/spotify/index.js'
+import { parseSpotifyTrackRef } from '../providers/spotify/playlist-ref.js'
 import { createYouTubeMusicProvider } from '../providers/youtube-music/index.js'
+import { parseYouTubeTrackRef } from '../providers/youtube-music/playlist-ref.js'
+import type { TrackRefParser } from '../core/import/file-reader.js'
 import type { Config } from './config.js'
 import type { HttpLogEntry } from '../core/http/client.js'
 
@@ -11,10 +14,18 @@ export type ProviderFactory = (config: Config) => Provider
 
 export class ProviderRegistry {
   private factories = new Map<ProviderId, ProviderFactory>()
+  private parsers = new Map<ProviderId, TrackRefParser>()
 
-  register(id: ProviderId, factory: ProviderFactory): this {
+  /** `parseTrackRef` is the provider's pure ref parser, usable without creating the provider (no client ID needed). */
+  register(id: ProviderId, factory: ProviderFactory, parseTrackRef?: TrackRefParser): this {
     this.factories.set(id, factory)
+    if (parseTrackRef) this.parsers.set(id, parseTrackRef)
     return this
+  }
+
+  /** The registered providers' `parseTrackRef`, for CSV source inference (ADR-0008 A1). */
+  trackRefParsers(): Partial<Record<ProviderId, TrackRefParser>> {
+    return Object.fromEntries(this.parsers)
   }
 
   has(id: string): boolean {
@@ -55,13 +66,15 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Pro
         requireClientId(config.spotifyClientId, 'SPLE_SPOTIFY_CLIENT_ID', 'Spotify'),
         undefined,
         { onHttp: options.onHttp }
-      )
+      ),
+      parseSpotifyTrackRef
     )
     .register('youtube-music', (config) =>
       createYouTubeMusicProvider(
         requireClientId(config.youtubeMusicClientId, 'SPLE_YOUTUBE_MUSIC_CLIENT_ID', 'YouTube Music'),
         config.googleClientSecret ?? ''
-      )
+      ),
+      parseYouTubeTrackRef
     )
-    .register('fake', () => new FakeProvider())
+    .register('fake', () => new FakeProvider(), parseFakeTrackRef)
 }

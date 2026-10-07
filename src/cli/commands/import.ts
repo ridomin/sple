@@ -107,7 +107,10 @@ Examples:
 
   // Step 1: Read the export file
   log.info(`Reading file: ${filePath}`)
-  const reader = new CanonicalFileReader()
+  const reader = new CanonicalFileReader({
+    trackRefParsers: ctx.registry.trackRefParsers(),
+    onWarning: (message) => ctx.io.err(message),
+  })
   let canonicalFile
   try {
     canonicalFile = await reader.readFile(filePath)

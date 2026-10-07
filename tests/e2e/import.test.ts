@@ -60,14 +60,14 @@ describe('Import E2E (with fake provider)', () => {
             artists: ['Artist A'],
             album: 'Album A',
             durationMs: 180000,
-            refs: {},
+            refs: { spotify: 'spotify:track:0000000000000000000001' },
           },
           {
             position: 2,
             title: 'Imagine',
             artists: ['John Lennon'],
             durationMs: 183000,
-            refs: { fake: 'f2' },
+            refs: { fake: 'fake:track:f2' },
           },
         ])
       )

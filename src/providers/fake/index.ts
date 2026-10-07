@@ -55,6 +55,12 @@ const FAKE_PLAYLIST_ID = /^[0-9]+$/
 const FAKE_TRACK_URI = /^fake:track:([A-Za-z0-9_-]+)$/
 const trackRef = (id: string) => `fake:track:${id}`
 
+/** Canonical fake track ref is `fake:track:<id>`, the only accepted form (ADR-0003 §3.1). Pure. */
+export function parseFakeTrackRef(input: string): string | null {
+  const m = FAKE_TRACK_URI.exec(input.trim())
+  return m ? trackRef(m[1]) : null
+}
+
 export class FakeProvider implements Provider {
   readonly id: ProviderId = 'fake'
   readonly displayName = 'Fake Provider'
@@ -162,10 +168,8 @@ export class FakeProvider implements Provider {
     return null
   }
 
-  /** Canonical fake track ref is `fake:track:<id>`, the only accepted form (ADR-0003 §3.1). */
   parseTrackRef(input: string): string | null {
-    const m = FAKE_TRACK_URI.exec(input.trim())
-    return m ? trackRef(m[1]) : null
+    return parseFakeTrackRef(input)
   }
 
   async search(
