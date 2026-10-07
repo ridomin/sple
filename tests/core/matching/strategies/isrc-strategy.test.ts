@@ -50,8 +50,8 @@ describe('IsrcStrategy', () => {
     strategy = new IsrcStrategy()
   })
 
-  test('should have priority 2 (medium)', () => {
-    assert.strictEqual(strategy.priority, 2)
+  test('should have priority 3 (after known-ref and cache)', () => {
+    assert.strictEqual(strategy.priority, 3)
   })
 
   test('should have name "isrc"', () => {

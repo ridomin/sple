@@ -3,7 +3,7 @@
 `sple import` reads a playlist file, matches each track on the target provider, prints a match report, and, after you confirm, creates a new **private** playlist with the matched tracks. The full contract is [ADR 0007](../adr/0007-cli-conventions.md) A9.
 
 ```
-sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--dry-run] [--yes]
+sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--no-cache] [--dry-run] [--yes]
 ```
 
 The target is the global `--provider` (default `spotify`, or `SPLE_DEFAULT_PROVIDER`). There are no short flags.
@@ -35,12 +35,17 @@ Tracks are matched one at a time, in order. For each track, the first strategy t
 | # | Strategy | When | Confidence |
 |---|---|---|---|
 | 1 | **Known ref** | The file already has a ref for the target provider | 100%, no request |
-| 2 | **ISRC** | The track has an ISRC and the target can search by ISRC (Spotify can, YouTube can't) | 95% |
-| 3 | **Metadata** | The track has a title | 50% title + 35% artist + 15% duration (within 5 s) |
+| 2 | **Match cache** | An earlier import (or dry run) in the last 30 days found this track by searching | The confidence it had then, no request |
+| 3 | **ISRC** | The track has an ISRC and the target can search by ISRC (Spotify can, YouTube can't) | 95% |
+| 4 | **Metadata** | The track has a title | 50% title + 35% artist + 15% duration (within 5 s) |
 
 A metadata candidate counts only if at least half the title words match and at least one artist matches. Titles are compared after normalization: case, accents, typographic punctuation, `feat.` credits, and tags such as `Remastered 2009` or `Radio Edit` are ignored. Tags that change the recording, such as `Live` or `Remix`, are kept.
 
 On YouTube Music, matching searches only the Music category and prefers official "Artist - Topic" uploads, so you get the song rather than a music video.
+
+### The match cache
+
+Every match found by searching (ISRC or metadata, including low-confidence ones) is saved in `match-cache.json` in sple's config directory, keyed by the source track. The next import of the same track on the same target reuses it without a request. So a `--dry-run` followed by the real import searches only once, and re-running an interrupted YouTube import doesn't spend the daily searches again. Entries expire after 30 days ([privacy policy](../PRIVACY.md)). Unmatched tracks aren't cached, so they're searched for again next time. `--no-cache` turns the cache off for one run, for example to look for better matches.
 
 Candidates below `--min-confidence` (default `0.5`) are **low-confidence**: they're reported but not added. Authentication errors (exit 3) and quota or rate-limit errors (exit 5) stop the whole import before anything is created.
 
@@ -93,6 +98,7 @@ Created private playlist "Road trip" (PLxxxx) https://www.youtube.com/playlist?l
 | `--name <name>` | Playlist name (default: the file's playlist name) |
 | `--report <path>` | Also write the report: JSON ([match report v1](../adr/0009-matching-strategy.md), §6 of Amendment 1) when the path ends in `.json`, text otherwise. Overwrites an existing file. |
 | `--min-confidence <0..1>` | Threshold for adding a match (default `0.5`) |
+| `--no-cache` | Neither reuse nor store matches in the match cache |
 | `--dry-run` | Match and report only. Prints `[dry-run] Would create private playlist "<name>" with <n> tracks`. |
 | `--yes` | Don't ask. **Required** when stdin isn't a terminal (unless `--dry-run`); otherwise sple exits 2 before any request. |
 | `--json` | stdout gets one `ImportOutput` document instead of the report: `{ dryRun, report, playlist?, added, failed }` |

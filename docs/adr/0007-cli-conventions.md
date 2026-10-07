@@ -479,3 +479,13 @@ Supersedes the "implemented in-house, no `debug` dependency" rule in §6 and the
 | A2 error message | `AuthRequiredError` with reason `revoked` and no `scope` prints the error's own message, which names the provider and the login command. Other `AuthRequiredError`s are unchanged. |
 | §3.7 / A10 `auth status` | When the stored token has `refreshTokenExpiresAt`, the human form adds `  Refresh token expires: <ISO>` after `Token expires`. If it has passed, the line ends in ` (expired)` and stderr gets `Warning: <Provider> refresh token has expired; run "sple auth login --provider <id>"` instead of the "will be refreshed on next use" warning. `--json` adds `refreshTokenExpiresAt` (omitted when unknown). Status still makes no network call. |
 
+## Amendment 3 (match cache, #94)
+
+- **Date:** 2026-10-07
+- **Why:** the match cache (ADR 0009 Amendment 2) needs a switch on `import` and a cleanup on logout (NFR-9).
+
+| Change | Rule |
+|---|---|
+| A9 `import` | Usage gains `[--no-cache]`: neither reuse nor store matches. Step 3 runs the chain with the `cache` strategy unless `--no-cache` is given. |
+| A10 `auth logout` | After each provider's logout, the match-cache entries involving it are deleted. If any were, `match_cache` is added to the `Deleted: …` line (printed as `Deleted: match_cache` when the provider reported nothing else). |
+

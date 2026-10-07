@@ -146,7 +146,7 @@ export type TrackQuery =
 export interface TrackHit { ref: string; track: CanonicalTrack }
 
 /** The single candidate type, used by the matching engine and the match report (ADR 0009). */
-export interface MatchCandidate { ref: string; track: CanonicalTrack; confidence: number; strategy: 'known-ref' | 'isrc' | 'metadata' }
+export interface MatchCandidate { ref: string; track: CanonicalTrack; confidence: number; strategy: 'known-ref' | 'cache' | 'isrc' | 'metadata' }  // 'cache': ADR 0009 Amendment 2
 
 export interface AuthStatus { loggedIn: boolean; user?: { id: string; displayName?: string }; scopes: string[]; expiresAt?: string }
 

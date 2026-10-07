@@ -298,3 +298,62 @@ Low-Confidence Matches     (only if any; first 10, then "... and <k> more")
 ```
 
 Each section ends with an empty line. The annotations in parentheses are not printed.
+
+## Amendment 2 (match cache, #94)
+
+- **Date:** 2026-10-07
+- **Why:** FR-MIG-2 lists "a known ref for the target provider, from the file **or the match cache**", but nothing stored matches, so every import searched again for every track. On YouTube that spends the 100-searches-per-day bucket (ADR 0002 §2.1.2) and a `--dry-run` followed by the real import cost twice.
+
+### 1. Strategy order
+
+| # | Strategy | Applicable when | Call | Candidate |
+|---|---|---|---|---|
+| 1 | `known-ref` | always | none | unchanged (§2) |
+| 2 | `cache` | a match cache is in use (not with `--no-cache`) | none | the cached entry for the track (below), with its **stored** `confidence`, `strategy: 'cache'` |
+| 3 | `isrc` | unchanged | unchanged | unchanged |
+| 4 | `metadata` | unchanged | unchanged | unchanged |
+
+`MatchCandidate.strategy` (ADR 0003 §3) gains `'cache'`. `minConfidence` is applied to a cached candidate as to any other, so a cached low-confidence match stays low-confidence unless the threshold is lowered.
+
+### 2. File
+
+`match-cache.json` in the config directory, next to `tokens.json` and `quota.json`, written like `quota.json` (temp file with mode `0600`, then rename):
+
+```json
+{
+  "schemaVersion": 1,
+  "targets": {
+    "<target provider id>": {
+      "<source provider id>|<source ref>": {
+        "ref": "<target track ref>",
+        "title": "…", "artists": ["…"], "durationMs": 201000,
+        "confidence": 0.85,
+        "strategy": "metadata",
+        "fetchedAt": "2026-10-07T12:00:00.000Z"
+      }
+    }
+  }
+}
+```
+
+- **Keys:** one per entry of the source track's `refs` whose provider is not the target (a CSV may carry refs of several providers). A track with no such ref is never cached. A lookup tries the track's keys in `refs` order and takes the first fresh, well-formed entry.
+- **Entry:** the candidate's ref, title, artists and duration (enough to print the report), its confidence and the strategy that found it (`isrc` or `metadata`). No source metadata is stored.
+- **Missing, unparsable or other-version file:** an empty cache. A malformed entry is ignored.
+
+### 3. Writing
+
+- After each track whose candidate came from `isrc` or `metadata` (matched **or** low-confidence), the entry is written under every key of the track, and the file is saved at once, so a quota stop later in the run keeps the searches already spent.
+- Unmatched tracks are not cached, so a later run searches for them again.
+- `known-ref` and `cache` candidates are not written: the first is free anyway, and re-writing the second would extend its lifetime.
+- `--dry-run` reads and writes the cache like a real import.
+
+### 4. Expiry (30-day rule)
+
+An entry is fresh while `now − fetchedAt < 30 days` (YouTube API Developer Policies III.E.4; ADR 0002 §4.1). The limit applies to every provider. Stale entries are ignored on read and removed whenever the file is written. Reusing an entry never extends it.
+
+### 5. CLI
+
+- `sple import --no-cache`: the run neither reads nor writes the cache.
+- `sple auth logout --provider X` (and `--all`) deletes every entry that targets `X` or whose key starts with `X|`, whether or not tokens were stored. When any were deleted, `match_cache` is appended to the `Deleted:` line (ADR 0007 Amendment 3).
+- Concurrent sple processes are not locked against; the last write wins.
+
