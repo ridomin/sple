@@ -20,3 +20,14 @@ export function assertScopes(granted: readonly string[], required: readonly stri
     throw new AuthRequiredError(`Run "sple auth login" to grant ${missing}`, 'missing-scope', missing)
   }
 }
+
+/**
+ * Throw `AuthRequiredError('missing-scope')` unless at least one of
+ * `alternatives` was granted. The error names the first alternative.
+ */
+export function assertAnyScope(granted: readonly string[], alternatives: readonly string[]): void {
+  if (alternatives.length > 0 && !alternatives.some((s) => granted.includes(s))) {
+    const scope = alternatives[0]
+    throw new AuthRequiredError(`Run "sple auth login" to grant ${scope}`, 'missing-scope', scope)
+  }
+}

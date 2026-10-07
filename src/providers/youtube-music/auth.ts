@@ -3,7 +3,8 @@ import { loadTokens, saveTokens, deleteTokens, type StoredToken } from '../../co
 import { OAuthHandler } from '../../core/auth/oauth-handler.js'
 import type { OAuthConfig } from '../../core/auth/auth.js'
 import { AuthRequiredError, ProviderError } from '../../core/provider/errors.js'
-import { assertScopes, grantedScopes, missingScopes } from '../../core/auth/scopes.js'
+import { assertAnyScope, assertScopes, grantedScopes, missingScopes } from '../../core/auth/scopes.js'
+import { YOUTUBE_LOGIN_SCOPES, YOUTUBE_OPERATION_SCOPES, type YouTubeOperation } from './scopes.js'
 import { parseOAuthErrorCode } from '../../core/auth/oauth-errors.js'
 
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
@@ -36,10 +37,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
     this.config = {
       clientId,
       clientSecret,
-      scopes: [
-        'https://www.googleapis.com/auth/youtube',
-        'https://www.googleapis.com/auth/userinfo.profile'
-      ],
+      scopes: [...YOUTUBE_LOGIN_SCOPES],
     }
   }
 
@@ -115,23 +113,23 @@ export class YouTubeMusicAuth implements ProviderAuth {
   }
 
   async logout(): Promise<{ revoked: boolean; deletedData: string[] }> {
-    const token = await loadTokens('youtube-music', this.configDir)
+    const token = loadTokens('youtube-music', this.configDir)
 
+    let revoked = false
     if (token?.accessToken) {
       try {
         await this.revokeToken(token.accessToken)
+        revoked = true
       } catch {
-        // Revocation might fail; proceed with deletion
+        // Local tokens are deleted even if revocation fails (ADR-0010 §4)
       }
     }
 
-    await deleteTokens('youtube-music', this.configDir)
+    deleteTokens('youtube-music', this.configDir)
     this.token = undefined
 
-    return {
-      revoked: true,
-      deletedData: ['access_token', 'refresh_token', 'match_cache', 'migration_state'],
-    }
+    // sple keeps no other YouTube data (no match cache or migration state yet).
+    return { revoked, deletedData: ['access_token', 'refresh_token'] }
   }
 
   /**
@@ -178,6 +176,16 @@ export class YouTubeMusicAuth implements ProviderAuth {
       throw new AuthRequiredError('Not logged in', 'no-token')
     }
     assertScopes(token.scopes, scopes)
+    return token
+  }
+
+  /** Check, before an API call, that the token has a scope that allows `op` (YOUTUBE_OPERATION_SCOPES). */
+  async requireOperation(op: YouTubeOperation): Promise<StoredToken> {
+    const token = await this.getToken()
+    if (!token) {
+      throw new AuthRequiredError('Not logged in', 'no-token')
+    }
+    assertAnyScope(token.scopes, YOUTUBE_OPERATION_SCOPES[op])
     return token
   }
 
