@@ -10,6 +10,7 @@ import type { CanonicalPlaylistFile } from '../export/format.js'
 import { KnownRefStrategy } from './strategies/known-ref-strategy.js'
 import { IsrcStrategy } from './strategies/isrc-strategy.js'
 import { MetadataStrategy } from './strategies/metadata-strategy.js'
+import { AuthRequiredError, QuotaExhaustedError, RateLimitError } from '../provider/errors.js'
 
 /**
  * MatchingEngine orchestrates the three-strategy chain for track matching.
@@ -147,6 +148,7 @@ export class MatchingEngine {
     }
 
     // Try each strategy in priority order
+    let lastError: string | undefined
     for (const strategy of applicableStrategies) {
       try {
         const candidate = await strategy.execute(request, provider)
@@ -161,9 +163,10 @@ export class MatchingEngine {
           }
         }
       } catch (error) {
-        // Strategy failed; continue to next strategy
-        // Log error in production, but don't abort
-        continue
+        // ADR-0009 A1 §1.4: these stop the whole run; anything else is recorded
+        // and the next strategy runs.
+        if (isFatalMatchError(error)) throw error
+        lastError = error instanceof Error ? error.message : String(error)
       }
     }
 
@@ -173,6 +176,7 @@ export class MatchingEngine {
       position: request.position,
       status: 'unmatched',
       strategies: applicableStrategies.map((s) => s.name),
+      ...(lastError !== undefined && { error: lastError }),
     }
   }
 
@@ -186,4 +190,13 @@ export class MatchingEngine {
       refs: {},
     }
   }
+}
+
+/** Errors that stop matching and propagate with their exit code (ADR-0009 A1 §1.4). */
+export function isFatalMatchError(error: unknown): boolean {
+  return (
+    error instanceof AuthRequiredError ||
+    error instanceof QuotaExhaustedError ||
+    error instanceof RateLimitError
+  )
 }

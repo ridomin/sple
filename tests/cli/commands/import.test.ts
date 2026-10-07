@@ -555,3 +555,22 @@ test('import command: auth errors from playlist creation are not turned into usa
     await assert.rejects(() => run(ctx, [filePath, '--yes']), AuthRequiredError)
   })
 })
+
+test('import command: an auth error during matching stops the import before any playlist is created', async () => {
+  const provider = makeCreationProvider()
+  let created = false
+  provider.search = async () => {
+    throw new AuthRequiredError('expired', 'token-expired')
+  }
+  const createPlaylist = provider.createPlaylist.bind(provider)
+  provider.createPlaylist = async (...args) => {
+    created = true
+    return createPlaylist(...args)
+  }
+  const isrcTrack = { position: 1, title: 'Song 2', artists: ['A'], durationMs: 180000, isrc: 'USRC10000002', refs: {} } as any
+  await withImportFile([isrcTrack, knownRefTrack(2, 't1')], async (filePath) => {
+    const ctx = createTestContext({ registry: { has: () => true, create: () => provider } as any })
+    await assert.rejects(() => run(ctx, [filePath, '--yes']), AuthRequiredError)
+    assert.equal(created, false)
+  })
+})

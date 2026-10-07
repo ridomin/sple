@@ -306,7 +306,7 @@ describe('IsrcStrategy', () => {
       assert.strictEqual(result, null)
     })
 
-    test('should return null when search throws an error', async () => {
+    test('should propagate search errors to the engine (ADR-0009 A1 §1.4)', async () => {
       const track: CanonicalTrack = {
         title: 'Song',
         artists: ['Artist'],
@@ -343,8 +343,7 @@ describe('IsrcStrategy', () => {
         throw new Error('Quota exceeded')
       }
 
-      const result = await strategy.execute(request, mockProvider as Provider)
-      assert.strictEqual(result, null)
+      await assert.rejects(() => strategy.execute(request, mockProvider as Provider), /Quota exceeded/)
     })
 
     test('should include track metadata in the result', async () => {

@@ -89,6 +89,8 @@ This avoids unnecessary API calls and keeps the report honest ("tried metadata, 
 
 ### Error Handling
 
+> Superseded by Amendment 1 §1.4: auth, quota and rate-limit errors stop the run; other strategy errors are recorded and the next strategy runs.
+
 Strategies **return null** to mean "no match found" and **throw only on fatal errors**:
 
 - Transient errors (network, 5xx, quota) → return null (fall through)
