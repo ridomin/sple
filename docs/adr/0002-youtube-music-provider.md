@@ -289,3 +289,19 @@ How this serves FR-MIG-4/5:
    - Does a Desktop client token exchange with PKCE succeed *without* `client_secret`?
    - Does `youtubei.js` read Liked Songs (`getPlaylist('LM')`)?
    - What is the actual daily cap on playlist creation?
+
+## Amendment 1 (R3 matching heuristics, #29)
+
+- **Date:** 2026-10-07
+- **Why:** metadata matching against YouTube missed well-known songs, because the search returned music videos and the uploader's channel name was used as the artist. These rules implement the R3 mitigation and apply to every port.
+
+**Search for matching** (`searchTracks` with a metadata query): `search.list` with `type=video` **and `videoCategoryId=10`** (Music), `q=<title> <artists joined by spaces>`. Hits from channels whose name ends in ` - Topic` (auto-generated "Art Track" channels) are moved to the front; the API order is kept otherwise. The `search` command does not restrict the category.
+
+**Track metadata from a video** (search hits, playlist items, exports):
+
+1. Topic channel (`<artist> - Topic`): artists = `[<artist>]`; title = the video title with video decorations removed. The title is not split at dashes (Art Track titles contain ` - Remastered 2009` and similar).
+2. Otherwise, if the title (decorations removed) has the form `<artists> <dash> <title>` (dash = `-`, `–` or `—` with whitespace around it, split at the **first** dash): title = `<title>`; artists = `<artists>` split on ` feat. `, ` feat `, ` ft. `, ` ft `, ` featuring ` (case-insensitive), ` & ` and `,`, each trimmed, empties dropped.
+3. Otherwise: title = the title with decorations removed; artists = `[<channel name without a trailing "VEVO">]` (`Unknown Artist` if empty).
+
+A **video decoration** is a `(…)` or `[…]` segment, with the whitespace before it, whose content is (case-insensitive, optional `official ` and `music ` prefixes) `video`, `audio`, `lyric`, `lyrics`, `lyric video`, `visualizer`/`visualiser`, `hd`, `hq` or `4k`. Segments such as `(Live)` or `(Remix)` are kept: they change the recording.
+
