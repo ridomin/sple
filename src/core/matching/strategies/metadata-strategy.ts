@@ -22,68 +22,62 @@ export class MetadataStrategy implements MatchingStrategy {
   async execute(request: MatchRequest, provider: Provider): Promise<MatchCandidate | null> {
     const { track } = request
 
-    try {
-      // Build search query: "Title Artist"
-      const query = this.buildSearchQuery(track)
+    // Build search query: "Title Artist"
+    const query = this.buildSearchQuery(track)
 
-      // Search with limit of 10 candidates to score
-      const results = await provider.search({ text: query, type: 'track' }, { limit: 10 })
+    // Search with limit of 10 candidates to score
+    const results = await provider.search({ text: query, type: 'track' }, { limit: 10 })
 
-      if (!results.items || results.items.length === 0) {
-        return null
-      }
-
-      // Filter for track items only
-      const trackItems = results.items.filter((item) => item.type === 'track')
-      if (trackItems.length === 0) {
-        return null
-      }
-
-      // Score each result and return the best match
-      let bestCandidate: MatchCandidate | null = null
-      let bestScore = 0
-
-      for (const item of trackItems) {
-        if (item.type !== 'track') {
-          continue
-        }
-
-        const score = TrackNormalizer.calculateMetadataConfidence(
-          track.title,
-          track.artists,
-          track.durationMs ?? 0,
-          item.track.title,
-          item.track.artists,
-          item.track.durationMs ?? 0
-        )
-
-        if (score > bestScore) {
-          bestScore = score
-          bestCandidate = {
-            trackRef: item.ref,
-            confidence: score,
-            metadata: {
-              title: item.track.title,
-              artists: item.track.artists,
-              album: item.track.album,
-              duration: item.track.durationMs,
-            },
-          }
-        }
-      }
-
-      // Only return if confidence is above threshold (0.4)
-      // Below 0.4 is too risky for automatic matching
-      if (bestCandidate && bestScore >= 0.4) {
-        return bestCandidate
-      }
-
-      return null
-    } catch (error) {
-      // Search might fail due to quota, permission, network issues, etc.
-      // Return null to fall through to next strategy
+    if (!results.items || results.items.length === 0) {
       return null
     }
+
+    // Filter for track items only
+    const trackItems = results.items.filter((item) => item.type === 'track')
+    if (trackItems.length === 0) {
+      return null
+    }
+
+    // Score each result and return the best match
+    let bestCandidate: MatchCandidate | null = null
+    let bestScore = 0
+
+    for (const item of trackItems) {
+      if (item.type !== 'track') {
+        continue
+      }
+
+      const score = TrackNormalizer.calculateMetadataConfidence(
+        track.title,
+        track.artists,
+        track.durationMs ?? 0,
+        item.track.title,
+        item.track.artists,
+        item.track.durationMs ?? 0
+      )
+
+      if (score > bestScore) {
+        bestScore = score
+        bestCandidate = {
+          trackRef: item.ref,
+          confidence: score,
+          metadata: {
+            title: item.track.title,
+            artists: item.track.artists,
+            album: item.track.album,
+            duration: item.track.durationMs,
+          },
+        }
+      }
+    }
+
+    // Only return if confidence is above threshold (0.4)
+    // Below 0.4 is too risky for automatic matching
+    if (bestCandidate && bestScore >= 0.4) {
+      return bestCandidate
+    }
+
+    return null
   }
 
   private buildSearchQuery(track: { title: string; artists: string[] }): string {

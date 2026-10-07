@@ -29,40 +29,34 @@ export class IsrcStrategy implements MatchingStrategy {
       return null
     }
 
-    try {
-      // Search by ISRC
-      // Most providers accept ISRC in search queries
-      const results = await provider.search(
-        { text: `isrc:${track.isrc}`, type: 'track' },
-        { limit: 5 }
-      )
+    // Search by ISRC
+    // Most providers accept ISRC in search queries
+    const results = await provider.search(
+      { text: `isrc:${track.isrc}`, type: 'track' },
+      { limit: 5 }
+    )
 
-      if (!results.items || results.items.length === 0) {
-        return null
-      }
-
-      // Find the first track item (filter out non-track search results)
-      const trackItem = results.items.find((item) => item.type === 'track')
-      if (!trackItem || trackItem.type !== 'track') {
-        return null
-      }
-
-      // Return the first (best) result with high confidence
-      // ISRC is unambiguous when it's in the file and found by the provider
-      return {
-        trackRef: trackItem.ref,
-        confidence: 0.95, // Near-perfect, but not 1.0 (ISRC lookup is highly reliable but not infallible)
-        metadata: {
-          title: trackItem.track.title,
-          artists: trackItem.track.artists,
-          album: trackItem.track.album,
-          duration: trackItem.track.durationMs,
-        },
-      }
-    } catch (error) {
-      // Search might fail due to quota, permission, network issues, etc.
-      // Return null to fall through to next strategy
+    if (!results.items || results.items.length === 0) {
       return null
+    }
+
+    // Find the first track item (filter out non-track search results)
+    const trackItem = results.items.find((item) => item.type === 'track')
+    if (!trackItem || trackItem.type !== 'track') {
+      return null
+    }
+
+    // Return the first (best) result with high confidence
+    // ISRC is unambiguous when it's in the file and found by the provider
+    return {
+      trackRef: trackItem.ref,
+      confidence: 0.95, // Near-perfect, but not 1.0 (ISRC lookup is highly reliable but not infallible)
+      metadata: {
+        title: trackItem.track.title,
+        artists: trackItem.track.artists,
+        album: trackItem.track.album,
+        duration: trackItem.track.durationMs,
+      },
     }
   }
 }
