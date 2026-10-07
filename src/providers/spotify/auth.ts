@@ -5,7 +5,8 @@ import { OAuthHandler } from '../../core/auth/oauth-handler.js'
 import type { OAuthConfig } from '../../core/auth/auth.js'
 import { AuthRequiredError, ProviderError, UsageError } from '../../core/provider/errors.js'
 import { mapApiError, mapTokenEndpointError, type TokenGrant } from './errors.js'
-import { SPOTIFY_LOGIN_SCOPES, assertScopes } from './scopes.js'
+import { SPOTIFY_LOGIN_SCOPES } from './scopes.js'
+import { assertScopes, grantedScopes, missingScopes } from '../../core/auth/scopes.js'
 
 export const SPOTIFY_AUTHORIZE_URL = 'https://accounts.spotify.com/authorize'
 export const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
@@ -50,10 +51,6 @@ function parseTokenResponse(body: string): TokenResponse {
     refresh_token: typeof r.refresh_token === 'string' && r.refresh_token ? r.refresh_token : undefined,
     scope: typeof r.scope === 'string' ? r.scope : undefined,
   }
-}
-
-function parseScopes(scope: string): string[] {
-  return scope.split(/\s+/).filter((s) => s.length > 0)
 }
 
 function expiresAtFrom(expiresIn: number | undefined): string | undefined {
@@ -115,7 +112,7 @@ export class SpotifyAuth implements ProviderAuth {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
       expiresAt: expiresAtFrom(tokens.expires_in),
-      scopes: tokens.scope !== undefined ? parseScopes(tokens.scope) : [],
+      scopes: grantedScopes(tokens.scope, scopes),
       userId: me.id,
       displayName: me.display_name ?? undefined,
       grantedAt,
@@ -127,6 +124,7 @@ export class SpotifyAuth implements ProviderAuth {
       user: { id: stored.userId, displayName: stored.displayName },
       scopes: stored.scopes,
       expiresAt: stored.expiresAt,
+      missingScopes: missingScopes(scopes, stored.scopes),
     }
   }
 
@@ -157,7 +155,7 @@ export class SpotifyAuth implements ProviderAuth {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token ?? token.refreshToken,
       expiresAt: expiresAtFrom(tokens.expires_in),
-      scopes: tokens.scope !== undefined ? parseScopes(tokens.scope) : token.scopes,
+      scopes: grantedScopes(tokens.scope, token.scopes),
     }
     saveTokens('spotify', refreshed, this.configDir)
     return refreshed

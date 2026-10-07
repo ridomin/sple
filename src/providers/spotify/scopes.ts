@@ -1,5 +1,4 @@
 import type { ProviderOperation } from '../../core/provider/capabilities.js'
-import { AuthRequiredError } from '../../core/provider/errors.js'
 
 /** Spotify operations used by M1 commands. Later operations add their scopes here. */
 export type SpotifyM1Operation = Extract<
@@ -55,12 +54,4 @@ export function requiredScopes(op: SpotifyM1Operation, visibility?: PlaylistVisi
     return [visibility.public ? 'playlist-modify-public' : 'playlist-modify-private']
   }
   return [...SPOTIFY_OPERATION_SCOPES[op]]
-}
-
-/** Throw `AuthRequiredError('missing-scope')` naming the first required scope not granted. */
-export function assertScopes(granted: readonly string[], required: readonly string[]): void {
-  const missing = required.find((s) => !granted.includes(s))
-  if (missing !== undefined) {
-    throw new AuthRequiredError(`Run "sple auth login" to grant ${missing}`, 'missing-scope', missing)
-  }
 }
