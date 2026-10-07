@@ -4,6 +4,7 @@ import { ProviderError } from '../provider/errors.js'
 import { PlaylistCreationError, PlaylistAddTracksError } from './playlist-errors.js'
 
 export interface PlaylistCreationResult {
+  playlist: { id: string; ref: string; name: string; url?: string }
   playlistId: string
   playlistUrl?: string
   tracksAdded: number
@@ -24,6 +25,7 @@ export class PlaylistCreator {
     // Create the playlist
     let playlistId: string
     let playlistUrl: string | undefined
+    let created: PlaylistCreationResult['playlist']
 
     try {
       const playlist = await provider.createPlaylist({
@@ -32,6 +34,7 @@ export class PlaylistCreator {
       })
       playlistId = playlist.ref
       playlistUrl = playlist.url
+      created = { id: playlist.id, ref: playlist.ref, name: playlist.name, ...(playlist.url && { url: playlist.url }) }
     } catch (error) {
       // Provider errors carry the exit code and hint the CLI reports (e.g. "run sple auth login")
       if (error instanceof ProviderError) throw error
@@ -49,7 +52,7 @@ export class PlaylistCreator {
     }
 
     if (tracksToAdd.length === 0) {
-      return { playlistId, playlistUrl, tracksAdded: 0, tracksFailed: 0, failures: [] }
+      return { playlist: created, playlistId, playlistUrl, tracksAdded: 0, tracksFailed: 0, failures: [] }
     }
 
     // Add tracks to playlist
@@ -58,6 +61,7 @@ export class PlaylistCreator {
         skipExisting: false
       })
       return {
+        playlist: created,
         playlistId,
         playlistUrl,
         tracksAdded: result.added.length,

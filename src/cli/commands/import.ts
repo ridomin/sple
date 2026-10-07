@@ -9,14 +9,33 @@ import { MatchingEngine } from '../../core/matching/matching-engine.js'
 import { MatchReportWriter } from '../../core/import/match-report-writer.js'
 import { PlaylistCreator } from '../../core/import/playlist-creator.js'
 import { PlaylistAddTracksError } from '../../core/import/playlist-errors.js'
+import type { MatchReport } from '../../core/matching/types.js'
 
-const USAGE = 'Usage: sple import <file> [--provider <name>] [--name <name>] [--report <path>] [--min-confidence <score>] [--dry-run] [--yes]'
+const USAGE = 'Usage: sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--dry-run] [--yes]'
 
 export const name = 'import'
 export const summary = 'Import playlists from files'
 export const usage = USAGE
 
-export async function run(ctx: CommandContext, args: string[]): Promise<number> {
+export interface ImportOutput {
+  dryRun: boolean
+  report: MatchReport
+  /** Absent on a dry run. */
+  playlist?: { id: string; ref: string; name: string; url?: string }
+  added: number
+  failed: Array<{ ref: string; error: string }>
+}
+
+export interface ImportDeps {
+  stdinIsTTY?: boolean
+  prompt?: (question: string) => Promise<boolean>
+}
+
+/** `round(100 · value / total)`, halves up; 0 when total is 0. */
+const percent = (value: number, total: number) => (total === 0 ? 0 : Math.round((100 * value) / total))
+
+/** `sple import` (ADR-0007 Amendment 1, A9). */
+export async function run(ctx: CommandContext, args: string[], deps: ImportDeps = {}): Promise<number> {
   if (args.includes('--help') || args.includes('-h')) {
     ctx.io.out(`${USAGE}
 
@@ -28,14 +47,14 @@ Arguments:
   file  Path to canonical export file (.json or .csv)
 
 Options:
-  -p, --provider <name>      Target provider (spotify, youtube-music; default: ${ctx.config.provider})
-  -n, --name <name>          Name for the imported playlist (default: use source name)
-  --report <path>            Save match report to file (detected format: .json or .txt)
+  --name <name>              Name for the imported playlist (default: the file's playlist name)
+  --report <path>            Also write the match report to a file (.json → JSON, else text)
   --min-confidence <score>   Minimum confidence for auto-matching (0-1; default: 0.5)
   --dry-run                  Show what would be imported without creating the playlist
   --yes                      Skip confirmation prompt
-  --provider <name>          Override global provider for this command
-  --json                     With --report: output machine-readable JSON
+  --provider <name>          Target provider (default: ${ctx.config.provider})
+  --json                     Print one ImportOutput JSON document
+  --quiet                    Print the created playlist ID only
   --help, -h                 Show this help message
 
 Examples:
@@ -47,7 +66,6 @@ Examples:
     return EXIT_CODES.SUCCESS
   }
 
-  // Parse arguments
   let parsed
   try {
     parsed = parseArgs({
@@ -55,57 +73,53 @@ Examples:
       allowPositionals: true,
       strict: true,
       options: {
-        provider: { type: 'string', short: 'p' },
-        name: { type: 'string', short: 'n' },
+        name: { type: 'string' },
         report: { type: 'string' },
         'min-confidence': { type: 'string' },
         'dry-run': { type: 'boolean' },
         yes: { type: 'boolean' },
-        help: { type: 'boolean', short: 'h' },
       },
     })
   } catch (e) {
     throw new UsageError(e instanceof Error ? e.message : String(e))
   }
 
-  // Extract positionals (file path)
+  // 1. Validate flags, and the confirmation rule, before any file read or request.
   if (parsed.positionals.length === 0) {
     throw new UsageError(`${USAGE}\n\nNo file provided`)
   }
   if (parsed.positionals.length > 1) {
     throw new UsageError('Only one file can be imported at a time')
   }
-
   const filePath = parsed.positionals[0]
-  const targetProvider = parsed.values.provider || ctx.config.provider
-  const playlistName = parsed.values.name
-  const reportPath = parsed.values.report
-  const dryRun = parsed.values['dry-run'] === true
-  const userConfirmedYes = parsed.values.yes === true || ctx.yes
+  if (filePath.trim() === '') {
+    throw new UsageError('File path cannot be empty')
+  }
 
-  // Validate min-confidence
   let minConfidence = 0.5
-  if (parsed.values['min-confidence']) {
-    const score = parseFloat(parsed.values['min-confidence'])
-    if (Number.isNaN(score) || score < 0 || score > 1) {
+  if (parsed.values['min-confidence'] !== undefined) {
+    const score = Number(parsed.values['min-confidence'])
+    if (parsed.values['min-confidence'].trim() === '' || Number.isNaN(score) || score < 0 || score > 1) {
       throw new UsageError('--min-confidence must be a number between 0 and 1')
     }
     minConfidence = score
   }
 
-  // Validate file path
-  if (filePath.trim() === '') {
-    throw new UsageError('File path cannot be empty')
+  const dryRun = parsed.values['dry-run'] === true
+  const yes = parsed.values.yes === true || ctx.yes
+  const stdinIsTTY = deps.stdinIsTTY ?? process.stdin.isTTY === true
+  if (!dryRun && !yes && !stdinIsTTY) {
+    throw new UsageError('Confirmation required but stdin is not a terminal. Use --yes to skip confirmation.')
   }
 
-  // Verify target provider is valid
+  const targetProvider = ctx.config.provider
   if (!ctx.registry.has(targetProvider)) {
     throw new UsageError(`Unknown provider '${targetProvider}'`)
   }
 
   const log = createLogger('import', ctx)
 
-  // Step 1: Read the export file
+  // 2. Read the file.
   log.info(`Reading file: ${filePath}`)
   const reader = new CanonicalFileReader({
     trackRefParsers: ctx.registry.trackRefParsers(),
@@ -120,78 +134,55 @@ Examples:
     )
   }
 
-  // Step 2: Get the target provider
-  log.info(`Target provider: ${targetProvider}`)
+  // 3. Match. Auth, quota and rate-limit errors propagate; nothing is created.
   const provider = ctx.registry.create(targetProvider, ctx.config)
-
-  // Step 3: Run matching engine
-  log.info(`Matching ${canonicalFile.tracks.length} tracks...`)
-  const engine = new MatchingEngine()
-  const report = await engine.match(canonicalFile, provider, provider.capabilities, {
+  log.info(`Matching ${canonicalFile.tracks.length} tracks on ${targetProvider}`)
+  const report = await new MatchingEngine().match(canonicalFile, provider, provider.capabilities, {
     minConfidence,
     sourceFilePath: filePath,
-    targetPlaylistName: playlistName,
+    targetPlaylistName: parsed.values.name,
   })
 
-  // Step 4: Output match report
-  log.info(`Match results: ${report.summary.matched} matched, ${report.summary.lowConfidence} low-confidence, ${report.summary.unmatched} unmatched`)
-
+  // 4. --report: JSON when the path ends in .json, otherwise text.
   const writer = new MatchReportWriter()
-
+  const reportPath = parsed.values.report
   if (reportPath) {
-    // Write report to file
-    const isJsonReport = reportPath.toLowerCase().endsWith('.json')
-    if (isJsonReport) {
-      await writer.writeJson(report, reportPath)
-    } else {
-      await writer.writeText(report, reportPath)
-    }
-    ctx.io.out(`Match report saved to: ${reportPath}`)
-  } else {
-    // Output report to stdout
-    const reportText = await writer.writeText(report)
-    ctx.io.out(reportText)
+    if (reportPath.toLowerCase().endsWith('.json')) await writer.writeJson(report, reportPath)
+    else await writer.writeText(report, reportPath)
+    log.info(`Match report written to ${reportPath}`)
   }
 
-  // Step 5: Check if we should create the playlist.
-  // Only `matched` tracks are added; low-confidence ones are below --min-confidence.
-  const readyCount = report.summary.matched
-  const successRate = canonicalFile.tracks.length > 0
-    ? (readyCount / canonicalFile.tracks.length) * 100
-    : 0
-
-  ctx.io.err(`\n${readyCount}/${canonicalFile.tracks.length} tracks ready to import (${Math.round(successRate)}%)`)
-  if (report.summary.lowConfidence > 0) {
-    ctx.io.err(`${report.summary.lowConfidence} low-confidence match(es) skipped (below --min-confidence ${minConfidence})`)
+  // 5. Result so far: the text report on stdout (table/TSV), counts on stderr.
+  const textMode = !ctx.json && !ctx.quiet
+  if (textMode) ctx.io.out(await writer.writeText(report))
+  const { matched, total, lowConfidence } = report.summary
+  ctx.io.err(`${matched}/${total} tracks ready to import (${percent(matched, total)}%)`)
+  if (lowConfidence > 0) {
+    ctx.io.err(`${lowConfidence} low-confidence match(es) skipped (below --min-confidence ${minConfidence})`)
   }
 
-  // Prompt for confirmation unless --yes or --dry-run
-  let shouldCreatePlaylist = false
+  const name = report.targetPlaylistName
+  const output: ImportOutput = { dryRun, report, added: 0, failed: [] }
+
   if (dryRun) {
-    ctx.io.err('(Dry run mode: playlist was not created)')
-  } else {
-    const promptText = `Create playlist "${report.targetPlaylistName}" with ${readyCount} matched track(s)?`
-    try {
-      shouldCreatePlaylist = await confirm(promptText, userConfirmedYes)
-    } catch (error) {
-      // If confirmation is required but stdin is not a terminal, treat it as cancellation
-      if (error instanceof UsageError) {
-        ctx.io.err(`Cancelled: ${error.message}`)
-        return EXIT_CODES.USAGE_ERROR
-      }
-      throw error
-    }
-  }
-
-  if (!shouldCreatePlaylist) {
+    if (textMode) ctx.io.out(`[dry-run] Would create private playlist "${name}" with ${matched} tracks`)
+    if (ctx.json) ctx.io.out(JSON.stringify(output))
     return EXIT_CODES.SUCCESS
   }
 
-  ctx.io.err(`\nCreating playlist: "${report.targetPlaylistName}"`)
+  // 6. Confirm (skipped with --yes).
+  if (!yes) {
+    const prompt = deps.prompt ?? ((q: string) => confirm(q, false))
+    if (!(await prompt(`Create playlist "${name}" with ${matched} matched track(s)?`))) {
+      ctx.io.err('Aborted; nothing was changed.')
+      return EXIT_CODES.ERROR
+    }
+  }
 
+  // 7. Create the private playlist and add the matched tracks in position order.
   let result
   try {
-    result = await new PlaylistCreator().createPlaylistFromMatches(provider, report, report.targetPlaylistName)
+    result = await new PlaylistCreator().createPlaylistFromMatches(provider, report, name)
   } catch (error) {
     if (error instanceof PlaylistAddTracksError) {
       // The playlist exists; say where, then let the CLI report the provider error and its exit code.
@@ -201,17 +192,25 @@ Examples:
     throw error
   }
 
-  ctx.io.err(`✓ Playlist created: ${result.playlistUrl || result.playlistId}`)
-  ctx.io.err(`  Tracks added: ${result.tracksAdded}`)
-  if (result.tracksFailed === 0) {
-    return EXIT_CODES.SUCCESS
+  const requested = result.tracksAdded + result.tracksFailed
+  output.playlist = result.playlist
+  output.added = result.tracksAdded
+  output.failed = result.failures
+
+  if (ctx.json) ctx.io.out(JSON.stringify(output))
+  else if (ctx.quiet) ctx.io.out(result.playlist.id)
+  else {
+    const url = result.playlist.url ? ` ${result.playlist.url}` : ''
+    ctx.io.out(`Created private playlist "${result.playlist.name}" (${result.playlist.id})${url} with ${result.tracksAdded} of ${requested} tracks`)
   }
 
-  // ADR 0007 §5: report each failed item, then a summary, and exit non-zero.
+  if (result.tracksFailed === 0) return EXIT_CODES.SUCCESS
+
+  // ADR-0007 §5: each failed item, then a summary, and exit 1.
   for (const failure of result.failures) {
-    ctx.io.err(`  ✗ ${failure.ref}: ${failure.error}`)
+    ctx.io.err(`sple: failed to add ${failure.ref}: ${failure.error}`)
   }
-  const summaryLine = `added ${result.tracksAdded} of ${result.tracksAdded + result.tracksFailed} tracks; ${result.tracksFailed} failed (see above)`
+  const summaryLine = `added ${result.tracksAdded} of ${requested} tracks; ${result.tracksFailed} failed (see above)`
   ctx.io.err(`sple: ${summaryLine}`)
   if (ctx.json) ctx.io.err(formatErrorOutput(new Error(summaryLine), EXIT_CODES.ERROR, 'PartialFailure'))
   return EXIT_CODES.ERROR

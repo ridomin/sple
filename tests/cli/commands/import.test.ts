@@ -8,7 +8,7 @@ import type { CommandContext } from '../../../src/cli/cli.js'
 import type { CanonicalPlaylistFile } from '../../../src/core/export/format.js'
 import { EXIT_CODES } from '../../../src/cli/exit-codes.js'
 import { FakeProvider, parseFakeTrackRef } from '../../../src/providers/fake/index.js'
-import { AuthRequiredError, QuotaExhaustedError } from '../../../src/core/provider/errors.js'
+import { AuthRequiredError, QuotaExhaustedError, UsageError } from '../../../src/core/provider/errors.js'
 
 class MockIO {
   out: string[] = []
@@ -127,36 +127,6 @@ test('import command: error when multiple files provided', async () => {
   }
 })
 
-test('import command: --provider option', async () => {
-  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
-  try {
-    const filePath = join(tmpDir, 'test.json')
-    const file = createTestFile()
-    writeFileSync(filePath, JSON.stringify(file))
-
-    const ctx = createTestContext({ yes: true })
-    const result = await run(ctx, [filePath, '--provider', 'spotify', '--dry-run'])
-    assert.equal(result, EXIT_CODES.SUCCESS)
-  } finally {
-    rmSync(tmpDir, { recursive: true })
-  }
-})
-
-test('import command: -p short option', async () => {
-  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
-  try {
-    const filePath = join(tmpDir, 'test.json')
-    const file = createTestFile()
-    writeFileSync(filePath, JSON.stringify(file))
-
-    const ctx = createTestContext({ yes: true })
-    const result = await run(ctx, [filePath, '-p', 'spotify', '--dry-run'])
-    assert.equal(result, EXIT_CODES.SUCCESS)
-  } finally {
-    rmSync(tmpDir, { recursive: true })
-  }
-})
-
 test('import command: --name option', async () => {
   const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
   try {
@@ -174,21 +144,6 @@ test('import command: --name option', async () => {
   }
 })
 
-test('import command: -n short option', async () => {
-  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
-  try {
-    const filePath = join(tmpDir, 'test.json')
-    const file = createTestFile()
-    writeFileSync(filePath, JSON.stringify(file))
-
-    const ctx = createTestContext({ yes: true })
-    const result = await run(ctx, [filePath, '-n', 'Custom Name', '--dry-run'])
-    assert.equal(result, EXIT_CODES.SUCCESS)
-  } finally {
-    rmSync(tmpDir, { recursive: true })
-  }
-})
-
 test('import command: --report option (text)', async () => {
   const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
   try {
@@ -200,7 +155,7 @@ test('import command: --report option (text)', async () => {
     const ctx = createTestContext({ yes: true })
     const result = await run(ctx, [filePath, '--report', reportPath, '--dry-run'])
     assert.equal(result, EXIT_CODES.SUCCESS)
-    assert(ctx.mockIO.out.some((msg) => msg.includes('saved to')))
+    assert(ctx.mockIO.out.some((msg) => msg.includes('Match Report')), 'stdout still gets the text report')
 
     const reportContent = readFileSync(reportPath, 'utf-8')
     assert(reportContent.includes('Match Report'))
@@ -240,7 +195,7 @@ test('import command: --dry-run flag', async () => {
     const ctx = createTestContext({ yes: true })
     const result = await run(ctx, [filePath, '--dry-run'])
     assert.equal(result, EXIT_CODES.SUCCESS)
-    assert(ctx.mockIO.err.some((msg) => msg.includes('Dry run')))
+    assert(ctx.mockIO.out.some((msg) => msg.startsWith('[dry-run] Would create private playlist')), ctx.mockIO.out.join('\n'))
   } finally {
     rmSync(tmpDir, { recursive: true })
   }
@@ -425,7 +380,7 @@ test('import command: error on unknown provider', async () => {
     })
 
     try {
-      await run(ctx, [filePath, '--provider', 'unknown-provider', '--dry-run'])
+      await run({ ...ctx, config: { ...ctx.config, provider: 'unknown-provider' as any } }, [filePath, '--dry-run'])
       assert.fail('Should have thrown UsageError')
     } catch (error: any) {
       assert(error.message.includes('Unknown provider'))
@@ -460,7 +415,7 @@ test('import command: dry-run does not create playlist', async () => {
     const ctx = createTestContext()
     const result = await run(ctx, [filePath, '--dry-run'])
     assert.equal(result, EXIT_CODES.SUCCESS)
-    assert(ctx.mockIO.err.some((msg) => msg.includes('Dry run')))
+    assert(ctx.mockIO.out.some((msg) => msg.startsWith('[dry-run] Would create private playlist')), ctx.mockIO.out.join('\n'))
   } finally {
     rmSync(tmpDir, { recursive: true })
   }
@@ -611,4 +566,108 @@ test('import command: an unsupported extension is a usage error', async () => {
   } finally {
     rmSync(tmpDir, { recursive: true })
   }
+})
+
+// --- ADR-0007 Amendment 1, A9: output contract -------------------------------
+
+const TTY = { stdinIsTTY: true }
+
+test('import command: short flags -p and -n are not accepted', async () => {
+  await withImportFile([knownRefTrack(1, 't1')], async (filePath) => {
+    await assert.rejects(() => run(createTestContext(), [filePath, '-n', 'X', '--dry-run']), UsageError)
+    await assert.rejects(() => run(createTestContext(), [filePath, '-p', 'fake', '--dry-run']), UsageError)
+  })
+})
+
+test('import command: without --yes or --dry-run, a non-TTY stdin is rejected before the file is read', async () => {
+  await assert.rejects(
+    () => run(createTestContext(), ['/does/not/exist.json'], { stdinIsTTY: false }),
+    (e: Error) => e instanceof UsageError && /stdin is not a terminal\. Use --yes/.test(e.message)
+  )
+})
+
+test('import command: declining the confirmation exits 1 and creates nothing', async () => {
+  const provider = makeCreationProvider()
+  await withImportFile([knownRefTrack(1, 't1')], async (filePath) => {
+    const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({}) } as any })
+    const prompts: string[] = []
+    const code = await run(ctx, [filePath], { ...TTY, prompt: async (q) => { prompts.push(q); return false } })
+    assert.equal(code, EXIT_CODES.ERROR)
+    assert.deepEqual(prompts, ['Create playlist "Test Playlist" with 1 matched track(s)?'])
+    assert(ctx.mockIO.err.includes('Aborted; nothing was changed.'), ctx.mockIO.err.join('\n'))
+    assert.equal((await provider.listPlaylists({ limit: 50 })).items.length, 0)
+  })
+})
+
+test('import command: table/TSV mode prints the text report, then the created-playlist sentence', async () => {
+  const provider = makeCreationProvider()
+  await withImportFile([knownRefTrack(1, 't1')], async (filePath) => {
+    const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({}) } as any })
+    assert.equal(await run(ctx, [filePath, '--yes', '--name', 'Mine']), EXIT_CODES.SUCCESS)
+    const out = ctx.mockIO.out.join('\n')
+    assert.match(out, /^Match Report: Test Playlist$/m)
+    assert.match(ctx.mockIO.out[ctx.mockIO.out.length - 1], /^Created private playlist "Mine" \(1\) with 1 of 1 tracks$/)
+    assert(ctx.mockIO.err.some((m) => m === '1/1 tracks ready to import (100%)'), ctx.mockIO.err.join('\n'))
+  })
+})
+
+test('import command: a dry run says what it would create and changes nothing', async () => {
+  const provider = makeCreationProvider()
+  await withImportFile([knownRefTrack(1, 't1')], async (filePath) => {
+    const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({}) } as any })
+    assert.equal(await run(ctx, [filePath, '--dry-run']), EXIT_CODES.SUCCESS)
+    assert.equal(ctx.mockIO.out[ctx.mockIO.out.length - 1], '[dry-run] Would create private playlist "Test Playlist" with 1 tracks')
+    assert.equal((await provider.listPlaylists({ limit: 50 })).items.length, 0)
+  })
+})
+
+test('import command: --quiet prints only the created playlist ID, and nothing on a dry run', async () => {
+  const provider = makeCreationProvider()
+  await withImportFile([knownRefTrack(1, 't1')], async (filePath) => {
+    const reg = { has: () => true, create: () => provider, trackRefParsers: () => ({}) } as any
+    const ctx = createTestContext({ quiet: true, registry: reg })
+    assert.equal(await run(ctx, [filePath, '--yes']), EXIT_CODES.SUCCESS)
+    assert.deepEqual(ctx.mockIO.out, ['1'])
+
+    const dry = createTestContext({ quiet: true, registry: reg })
+    assert.equal(await run(dry, [filePath, '--dry-run']), EXIT_CODES.SUCCESS)
+    assert.deepEqual(dry.mockIO.out, [])
+  })
+})
+
+test('import command: --json prints one ImportOutput document', async () => {
+  const provider = makeCreationProvider()
+  await withImportFile([knownRefTrack(1, 't1')], async (filePath) => {
+    const reg = { has: () => true, create: () => provider, trackRefParsers: () => ({}) } as any
+    const ctx = createTestContext({ json: true, registry: reg })
+    assert.equal(await run(ctx, [filePath, '--yes']), EXIT_CODES.SUCCESS)
+    assert.equal(ctx.mockIO.out.length, 1)
+    const output = JSON.parse(ctx.mockIO.out[0])
+    assert.equal(output.dryRun, false)
+    assert.equal(output.report.schemaVersion, 1)
+    assert.deepEqual(output.playlist, { id: '1', ref: '1', name: 'Test Playlist' })
+    assert.equal(output.added, 1)
+    assert.deepEqual(output.failed, [])
+
+    const dry = createTestContext({ json: true, registry: reg })
+    await run(dry, [filePath, '--dry-run'])
+    const dryOutput = JSON.parse(dry.mockIO.out[0])
+    assert.equal(dryOutput.dryRun, true)
+    assert.equal('playlist' in dryOutput, false)
+    assert.equal(dryOutput.added, 0)
+    assert.deepEqual(dryOutput.failed, [])
+  })
+})
+
+test('import command: per-track failures are listed on stderr; --json stdout still has ImportOutput', async () => {
+  const provider = makeCreationProvider()
+  await withImportFile([knownRefTrack(1, 't1'), knownRefTrack(2, 'gone')], async (filePath) => {
+    const ctx = createTestContext({ json: true, registry: { has: () => true, create: () => provider, trackRefParsers: () => ({}) } as any })
+    assert.equal(await run(ctx, [filePath, '--yes']), EXIT_CODES.ERROR)
+    assert(ctx.mockIO.err.includes('sple: failed to add fake:track:gone: Track not found'), ctx.mockIO.err.join('\n'))
+    assert(ctx.mockIO.err.includes('sple: added 1 of 2 tracks; 1 failed (see above)'), ctx.mockIO.err.join('\n'))
+    const output = JSON.parse(ctx.mockIO.out[0])
+    assert.deepEqual(output.failed, [{ ref: 'fake:track:gone', error: 'Track not found' }])
+    assert.equal(output.added, 1)
+  })
 })
