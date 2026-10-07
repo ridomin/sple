@@ -187,12 +187,13 @@ Token refresh is transparent to the `Provider` interface and CLI.
 - One `KEY=value` per line; blank lines and lines starting with `#` are ignored.
 - The value may be wrapped in single or double quotes, which are removed.
 - No variable expansion, no multi-line values.
+- **Permissions:** `sple` never writes `.env`. On POSIX, after loading it, the CLI checks its mode; if any group or other bit is set it prints `Warning: <path> is readable by other users. Run: chmod 600 "<path>"` to stderr and continues.
 
 ### `tokens.json` rules
 
 - **Shape:** `{ "schemaVersion": 1, "providers": { "<providerId>": { "accounts": [StoredToken] } } }`. Only `accounts[0]` is read or written (one account per provider).
 - **`StoredToken`:** `accessToken` (non-empty string), `refreshToken?` (string), `expiresAt?` (ISO 8601 UTC), `scopes` (string array, may be empty), `userId` (non-empty string), `displayName?` (string), `grantedAt` (non-empty ISO 8601 string). A token that breaks these rules is rejected on load and on save.
 - **Read:** a missing file means "not logged in" for every provider. `schemaVersion` other than 1 is an error. A missing provider entry or an empty `accounts` array means "not logged in".
-- **Write:** create the config directory if needed, read the current file (or start a new v1 document), replace `accounts[0]` for the provider, and write the whole file as UTF-8 JSON with 2-space indentation. On POSIX the file must be created with mode `0600` (never readable by others, even briefly).
+- **Write:** create the config directory if needed, read the current file (or start a new v1 document), replace `accounts[0]` for the provider, and write the whole file as UTF-8 JSON with 2-space indentation. On POSIX the file must be created with mode `0600` (never readable by others, even briefly): write a temp file in the same directory with mode `0600`, then rename it over `tokens.json`. Delete rewrites the file the same way.
 - **Delete (logout):** remove the provider's entry entirely; other providers are untouched. A missing file is not an error.
 - Concurrent writers are not locked against; the last write wins.
