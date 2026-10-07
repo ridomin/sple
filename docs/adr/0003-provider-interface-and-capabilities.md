@@ -315,7 +315,7 @@ Implemented in code: `'owned-or-collaborator'` in `src/core/provider/capabilitie
 | Error fields in §4 | Needed to reproduce messages and exit-code priority. |
 | Spotify readability: a non-owned playlist is readable when `GET /playlists/{id}` includes an `items` key; a later 403/404 on `/items` turns it into `AccessRestrictedError('not-owned')` | Spike S2 recorded both signals; the `items` key avoids one extra request per playlist and works for whole `listPlaylists` pages. The `collaborative` flag is still not used. |
 | Fake provider registration | The fake provider (`id: 'fake'`) is required for tests but is registered in the CLI only when `SPLE_ENABLE_FAKE_PROVIDER=1` (ADR 0004 Amendment 1). It does not appear in help, `auth status`, or "valid providers" messages otherwise. |
-| YouTube values unchanged | The TypeScript YouTube adapter is an unfinished M4 preview; its differences from §5 are listed in requirements §12. |
+| YouTube values unchanged | The TypeScript YouTube adapter is an unfinished M4 preview; its differences from §5 are listed in requirements §12. *Closed 2026-10-07 (#65): see Amendment 3 and ADR 0002 Amendments 2–4.* |
 
 ### Spotify scope table (FR-AUTH-5)
 
