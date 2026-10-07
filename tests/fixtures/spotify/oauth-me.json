@@ -1,0 +1,16 @@
+{
+  "account_id": "testaccount",
+  "display_name": "Test User",
+  "external_urls": {
+    "spotify": "https://open.spotify.com/user/testuser0000000000000"
+  },
+  "followers": {
+    "href": null,
+    "total": 0
+  },
+  "href": "https://api.spotify.com/v1/users/testuser0000000000000",
+  "id": "testuser0000000000000",
+  "images": [],
+  "type": "user",
+  "uri": "spotify:user:testuser0000000000000"
+}
