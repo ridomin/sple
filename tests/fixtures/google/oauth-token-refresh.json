@@ -1,0 +1,7 @@
+{
+  "access_token": "REDACTED_ACCESS_TOKEN",
+  "expires_in": 3599,
+  "scope": "https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/youtube",
+  "token_type": "Bearer",
+  "refresh_token_expires_in": 604414
+}

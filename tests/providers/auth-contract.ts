@@ -27,19 +27,19 @@ export interface AuthContractSubject {
   requestedScopes: readonly string[]
   tokenUrl: string
   identityUrl: string
-  /** Identity endpoint body for a successful login. */
+  /** Recorded token endpoint body (tests/fixtures); each case swaps in its own `scope`. */
+  tokenBody: Record<string, unknown>
+  /** Recorded identity endpoint body for a successful login. */
   identityBody: Record<string, unknown>
 }
 
 const freshDir = () => mkdtempSync(join(tmpdir(), 'sple-auth-contract-'))
 
-const tokenResponse = (scope?: string) => ({
-  access_token: 'access-1',
-  token_type: 'Bearer',
-  expires_in: 3600,
-  refresh_token: 'refresh-1',
-  ...(scope === undefined ? {} : { scope }),
-})
+/** The subject's recorded token response with `scope` replaced, or removed when undefined. */
+function tokenResponse(s: AuthContractSubject, scope?: string): Record<string, unknown> {
+  const { scope: _recorded, ...rest } = s.tokenBody
+  return scope === undefined ? rest : { ...rest, scope }
+}
 
 /** Run `fn` with fetch answering only the subject's token and identity endpoints. */
 async function withFetch<T>(
@@ -96,7 +96,7 @@ export function runAuthContract(s: AuthContractSubject): void {
 
     await t.test('login stores and reports the granted scopes, listing the declined ones as missing', async () => {
       const dir = freshDir()
-      const status = await login(s, s.create(dir), tokenResponse(granted.join(' ')))
+      const status = await login(s, s.create(dir), tokenResponse(s, granted.join(' ')))
 
       assert.deepStrictEqual(status.scopes, granted)
       assert.deepStrictEqual(status.missingScopes, [declined])
@@ -104,15 +104,22 @@ export function runAuthContract(s: AuthContractSubject): void {
     })
 
     await t.test('login with every scope granted reports none missing', async () => {
-      const status = await login(s, s.create(freshDir()), tokenResponse(requested.join(' ')))
+      const status = await login(s, s.create(freshDir()), tokenResponse(s, requested.join(' ')))
 
       assert.deepStrictEqual(status.scopes, requested)
       assert.deepStrictEqual(status.missingScopes, [])
     })
 
+    await t.test('login with every scope granted in a different order reports none missing', async () => {
+      // Google returns granted scopes in its own order (tests/fixtures/google).
+      const status = await login(s, s.create(freshDir()), tokenResponse(s, [...requested].reverse().join(' ')))
+
+      assert.deepStrictEqual(status.missingScopes, [])
+    })
+
     await t.test('login treats an absent scope field as the requested scopes (RFC 6749 §5.1)', async () => {
       const dir = freshDir()
-      const status = await login(s, s.create(dir), tokenResponse())
+      const status = await login(s, s.create(dir), tokenResponse(s))
 
       assert.deepStrictEqual(loadTokens(s.providerId, dir)?.scopes, requested)
       assert.deepStrictEqual(status.missingScopes, [])
@@ -120,7 +127,7 @@ export function runAuthContract(s: AuthContractSubject): void {
 
     await t.test('refresh replaces the stored scopes with the granted ones', async () => {
       const dir = freshDir()
-      const updated = await withFetch(s, tokenResponse(granted.join(' ')), () =>
+      const updated = await withFetch(s, tokenResponse(s, granted.join(' ')), () =>
         s.create(dir).refresh(storedToken(requested))
       )
 
@@ -129,7 +136,7 @@ export function runAuthContract(s: AuthContractSubject): void {
     })
 
     await t.test('refresh without a scope field keeps the stored scopes', async () => {
-      const updated = await withFetch(s, tokenResponse(), () =>
+      const updated = await withFetch(s, tokenResponse(s), () =>
         s.create(freshDir()).refresh(storedToken(granted))
       )
 
