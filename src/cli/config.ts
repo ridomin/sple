@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
+import { platform } from 'node:os'
 import { getConfigFilePath } from '../core/config/paths.js'
 import type { ProviderId } from '../core/provider/capabilities.js'
 import { UsageError } from '../core/provider/errors.js'
@@ -32,6 +33,17 @@ export function loadEnvFile(path: string = getConfigFilePath('.env')): boolean {
   if (!existsSync(path)) return false
   process.loadEnvFile(path)
   return true
+}
+
+/**
+ * FR-AUTH-3: `.env` may hold the Google client secret, so on POSIX it must be
+ * readable only by the user. Returns a warning when group or other bits are
+ * set, or null (also for a missing file and on Windows).
+ */
+export function envFilePermissionWarning(path: string = getConfigFilePath('.env')): string | null {
+  if (platform() === 'win32' || !existsSync(path)) return null
+  if ((statSync(path).mode & 0o077) === 0) return null
+  return `Warning: ${path} is readable by other users. Run: chmod 600 "${path}"`
 }
 
 function nonEmpty(v: string | undefined): string | undefined {

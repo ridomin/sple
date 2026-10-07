@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import * as assert from 'node:assert'
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync, statSync, chmodSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { tmpdir, platform } from 'node:os'
 import { loadTokens, saveTokens, deleteTokens, StoredToken } from '../../../src/core/config/token-store.js'
 
 test('token store', async (t) => {
@@ -122,5 +122,50 @@ test('token store', async (t) => {
     saveTokens('spotify', token2, tempDir)
 
     assert.strictEqual(loadTokens('spotify', tempDir)?.accessToken, 'new')
+  })
+
+  const posix = platform() !== 'win32'
+  const modeOf = (p: string) => statSync(p).mode & 0o777
+
+  await t.test('saveTokens writes a new tokens.json with mode 0600 even with umask 0', { skip: !posix }, () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sple-tokens-mode-'))
+    const oldUmask = process.umask(0)
+    try {
+      saveTokens('spotify', mockToken, dir)
+      assert.strictEqual(modeOf(join(dir, 'tokens.json')), 0o600)
+    } finally {
+      process.umask(oldUmask)
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  await t.test('saveTokens replaces tokens.json atomically instead of rewriting it in place', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sple-tokens-atomic-'))
+    try {
+      const filePath = join(dir, 'tokens.json')
+      saveTokens('spotify', mockToken, dir)
+      const before = statSync(filePath).ino
+      saveTokens('spotify', { ...mockToken, accessToken: 'new' }, dir)
+      assert.notStrictEqual(statSync(filePath).ino, before)
+      assert.deepStrictEqual(readdirSync(dir), ['tokens.json'])
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  await t.test('deleteTokens rewrites tokens.json with mode 0600', { skip: !posix }, () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sple-tokens-del-'))
+    try {
+      const filePath = join(dir, 'tokens.json')
+      saveTokens('spotify', mockToken, dir)
+      saveTokens('youtube-music', mockToken, dir)
+      chmodSync(filePath, 0o644)
+      deleteTokens('spotify', dir)
+      assert.strictEqual(modeOf(filePath), 0o600)
+      assert.deepStrictEqual(readdirSync(dir), ['tokens.json'])
+      assert.strictEqual(loadTokens('youtube-music', dir)?.userId, mockToken.userId)
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
   })
 })

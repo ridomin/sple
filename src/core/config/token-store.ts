@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { platform } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import type { ProviderId } from '../provider/capabilities.js'
 import { getConfigDir, getConfigFilePath } from './paths.js'
 
@@ -91,13 +91,7 @@ export function saveTokens(providerId: ProviderId, token: StoredToken, configDir
   // Replace first account (or add if none exists)
   data.providers[providerId].accounts[0] = token
 
-  // Write to file
-  writeFileSync(filePath, JSON.stringify(data, null, 2), { encoding: 'utf-8' })
-
-  // Set permissions to user-only (0600) on POSIX
-  if (platform() !== 'win32') {
-    chmodSync(filePath, 0o600)
-  }
+  writeTokensFile(filePath, data)
 }
 
 /**
@@ -115,13 +109,28 @@ export function deleteTokens(providerId: ProviderId, configDir?: string): void {
       delete data.providers[providerId]
     }
 
-    // Write back
-    writeFileSync(filePath, JSON.stringify(data, null, 2), { encoding: 'utf-8' })
+    writeTokensFile(filePath, data)
   } catch (error) {
     // File doesn't exist - that's OK
     if (error instanceof Error && error.message.includes('ENOENT')) {
       return
     }
+    throw error
+  }
+}
+
+/**
+ * Write tokens.json atomically: a temp file in the same directory is created
+ * with mode 0600 (POSIX; ignored on Windows), then renamed over the target, so
+ * the file is never readable by others, even briefly (ADR-0004 A1).
+ */
+function writeTokensFile(filePath: string, data: TokensFile): void {
+  const tmpPath = `${filePath}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
+  try {
+    writeFileSync(tmpPath, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600, flag: 'wx' })
+    renameSync(tmpPath, filePath)
+  } catch (error) {
+    rmSync(tmpPath, { force: true })
     throw error
   }
 }

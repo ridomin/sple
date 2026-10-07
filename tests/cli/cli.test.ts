@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import * as assert from 'node:assert'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, rmSync, chmodSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { tmpdir, platform } from 'node:os'
 import { run } from '../../src/cli/cli.js'
-import { loadConfig, loadEnvFile } from '../../src/cli/config.js'
+import { loadConfig, loadEnvFile, envFilePermissionWarning } from '../../src/cli/config.js'
 import { createDefaultRegistry } from '../../src/cli/provider-registry.js'
 import { EXIT_CODES, getExitCode } from '../../src/cli/exit-codes.js'
 import { readPackageVersion } from '../../src/cli/version.js'
@@ -83,6 +83,26 @@ test('loadEnvFile handles missing and present files', () => {
     assert.strictEqual(process.env.SPLE_TEST_ENV_VAR, 'hello')
   } finally {
     delete process.env.SPLE_TEST_ENV_VAR
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('envFilePermissionWarning warns when .env is readable by others', { skip: platform() === 'win32' }, () => {
+  assert.strictEqual(envFilePermissionWarning('/nonexistent/sple/.env'), null)
+  const dir = mkdtempSync(join(tmpdir(), 'sple-env-mode-'))
+  try {
+    const p = join(dir, '.env')
+    writeFileSync(p, 'SPLE_X=1\n')
+    chmodSync(p, 0o600)
+    assert.strictEqual(envFilePermissionWarning(p), null)
+    chmodSync(p, 0o640)
+    assert.strictEqual(
+      envFilePermissionWarning(p),
+      `Warning: ${p} is readable by other users. Run: chmod 600 "${p}"`
+    )
+    chmodSync(p, 0o604)
+    assert.match(envFilePermissionWarning(p) ?? '', /readable by other users/)
+  } finally {
     rmSync(dir, { recursive: true, force: true })
   }
 })

@@ -3,7 +3,7 @@
 import { parseArgs } from 'node:util'
 import { pathToFileURL } from 'node:url'
 import { realpathSync } from 'node:fs'
-import { loadConfig, loadEnvFile, PROVIDER_IDS } from './config.js'
+import { loadConfig, loadEnvFile, envFilePermissionWarning, PROVIDER_IDS } from './config.js'
 import { EXIT_CODES, getExitCode, formatErrorMessage, formatErrorOutput } from './exit-codes.js'
 import { createDefaultRegistry, type ProviderRegistry } from './provider-registry.js'
 import { readPackageVersion } from './version.js'
@@ -313,7 +313,10 @@ function isMain(): boolean {
 
 if (isMain()) {
   try {
-    loadEnvFile()
+    if (loadEnvFile()) {
+      const warning = envFilePermissionWarning()
+      if (warning) console.error(warning)
+    }
   } catch (e) {
     console.error(`Failed to load .env: ${formatErrorMessage(e)}`)
   }
