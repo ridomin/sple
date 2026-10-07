@@ -15,6 +15,7 @@ export interface AuthStatusOutput {
     user?: { id: string; displayName?: string }
     scopes: string[]
     expiresAt?: string
+    refreshTokenExpiresAt?: string
   }>
 }
 
@@ -31,6 +32,7 @@ function statusFromTokenStore(id: ProviderId): AuthStatus {
     user: { id: token.userId, displayName: token.displayName },
     scopes: token.scopes,
     expiresAt: token.expiresAt,
+    refreshTokenExpiresAt: token.refreshTokenExpiresAt,
   }
 }
 
@@ -44,6 +46,7 @@ function toEntry(id: ProviderId, s: AuthStatus): AuthStatusOutput['providers'][n
       : {}),
     scopes: s.loggedIn ? s.scopes : [],
     ...(s.loggedIn && s.expiresAt ? { expiresAt: s.expiresAt } : {}),
+    ...(s.loggedIn && s.refreshTokenExpiresAt ? { refreshTokenExpiresAt: s.refreshTokenExpiresAt } : {}),
   }
 }
 
@@ -59,16 +62,29 @@ function printHuman(target: AuthTarget, s: AuthStatus, io: CliIO): void {
     io.out(`  User: ${name}(${s.user.id})`)
   }
   io.out(`  Scopes: ${s.scopes.join(' ') || '(none)'}`)
+  const refreshExpired =
+    s.refreshTokenExpiresAt !== undefined && new Date(s.refreshTokenExpiresAt).getTime() <= Date.now()
   if (s.expiresAt) {
     const remaining = new Date(s.expiresAt).getTime() - Date.now()
     if (remaining <= 0) {
       io.out(`  Token expires: ${s.expiresAt} (expired)`)
-      io.err(`Warning: ${target.displayName} access token has expired; it will be refreshed on next use`)
+      // With an expired refresh token it cannot be refreshed; that warning follows below.
+      if (!refreshExpired) {
+        io.err(`Warning: ${target.displayName} access token has expired; it will be refreshed on next use`)
+      }
     } else {
       io.out(`  Token expires: ${s.expiresAt}`)
       if (remaining < EXPIRY_WARN_MS) {
         io.err(`Warning: ${target.displayName} access token expires in less than 5 minutes`)
       }
+    }
+  }
+  if (s.refreshTokenExpiresAt) {
+    if (refreshExpired) {
+      io.out(`  Refresh token expires: ${s.refreshTokenExpiresAt} (expired)`)
+      io.err(`Warning: ${target.displayName} refresh token has expired; run "sple auth login --provider ${target.id}"`)
+    } else {
+      io.out(`  Refresh token expires: ${s.refreshTokenExpiresAt}`)
     }
   }
 }

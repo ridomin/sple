@@ -87,6 +87,8 @@ export interface AuthStatus {
   user?: { id: string; displayName?: string }
   scopes: string[]
   expiresAt?: string
+  /** Refresh-token expiry, when the provider limits it (Google apps in Testing status). */
+  refreshTokenExpiresAt?: string
   /** Set by login: requested scopes the user did not grant (e.g. an unticked consent checkbox). */
   missingScopes?: string[]
 }

@@ -4,11 +4,24 @@ import { OAuthHandler } from '../../core/auth/oauth-handler.js'
 import type { OAuthConfig } from '../../core/auth/auth.js'
 import { AuthRequiredError, ProviderError } from '../../core/provider/errors.js'
 import { assertScopes, grantedScopes, missingScopes } from '../../core/auth/scopes.js'
+import { parseOAuthErrorCode } from '../../core/auth/oauth-errors.js'
 
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 // Google only returns a refresh_token for offline access, and on repeat consent only with prompt=consent
 const GOOGLE_AUTH_PARAMS = { access_type: 'offline', prompt: 'consent' }
+
+/** Google token response, as far as sple reads it. */
+interface GoogleTokens {
+  accessToken: string
+  refreshToken?: string
+  expiresIn?: number
+  scope?: string
+  /** Only sent while the OAuth app is in Testing status (refresh tokens then last 7 days). */
+  refreshTokenExpiresIn?: number
+}
+
+const isoIn = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString()
 
 export class YouTubeMusicAuth implements ProviderAuth {
   private config: OAuthConfig
@@ -65,6 +78,9 @@ export class YouTubeMusicAuth implements ProviderAuth {
         userId: user.id,
         displayName: user.displayName,
         grantedAt: new Date().toISOString(),
+        ...(tokenResult.refreshTokenExpiresIn !== undefined
+          ? { refreshTokenExpiresAt: isoIn(tokenResult.refreshTokenExpiresIn) }
+          : {}),
       }
 
       await saveTokens('youtube-music', storedToken, this.configDir)
@@ -75,6 +91,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
         user: { id: user.id, displayName: user.displayName },
         scopes: storedToken.scopes,
         expiresAt: storedToken.expiresAt,
+        refreshTokenExpiresAt: storedToken.refreshTokenExpiresAt,
         missingScopes: missingScopes(config.scopes, storedToken.scopes),
       }
     } finally {
@@ -82,40 +99,18 @@ export class YouTubeMusicAuth implements ProviderAuth {
     }
   }
 
+  /** Read from tokens.json only; never refreshes or calls the network (ADR-0007 A3). */
   async status(): Promise<AuthStatus> {
-    let token = this.token || (await loadTokens('youtube-music', this.configDir))
-
+    const token = loadTokens('youtube-music', this.configDir)
     if (!token) {
       return { loggedIn: false, scopes: [] }
     }
-
-    // Check if expired
-    if (token.expiresAt && new Date(token.expiresAt).getTime() < Date.now()) {
-      if (token.refreshToken) {
-        try {
-          const newToken = await this.refreshToken(token.refreshToken)
-          const updated: StoredToken = {
-            ...token,
-            accessToken: newToken.accessToken,
-            expiresAt: new Date(Date.now() + (newToken.expiresIn ?? 3600) * 1000).toISOString(),
-            scopes: grantedScopes(newToken.scope, token.scopes),
-          }
-          await saveTokens('youtube-music', updated, this.configDir)
-          this.token = updated
-          token = updated
-        } catch {
-          return { loggedIn: false, scopes: [] }
-        }
-      } else {
-        return { loggedIn: false, scopes: [] }
-      }
-    }
-
     return {
       loggedIn: true,
-      user: { id: token.userId || '', displayName: token.displayName ?? token.userId },
+      user: { id: token.userId, displayName: token.displayName ?? token.userId },
       scopes: token.scopes,
       expiresAt: token.expiresAt,
+      refreshTokenExpiresAt: token.refreshTokenExpiresAt,
     }
   }
 
@@ -139,52 +134,40 @@ export class YouTubeMusicAuth implements ProviderAuth {
     }
   }
 
+  /**
+   * The stored token, refreshed first when the access token has expired.
+   * Refresh failures propagate (e.g. AuthRequiredError('revoked')), so an
+   * expired grant is never reported as "not logged in".
+   */
   async getToken(): Promise<StoredToken | null> {
-    let token = this.token || (await loadTokens('youtube-music', this.configDir))
-
+    const token = this.token ?? loadTokens('youtube-music', this.configDir)
     if (!token) {
       return null
     }
-
-    // Refresh if expired
     if (token.expiresAt && new Date(token.expiresAt).getTime() < Date.now()) {
-      if (token.refreshToken) {
-        try {
-          const newToken = await this.refreshToken(token.refreshToken)
-          const updated: StoredToken = {
-            ...token,
-            accessToken: newToken.accessToken,
-            expiresAt: new Date(Date.now() + (newToken.expiresIn ?? 3600) * 1000).toISOString(),
-            scopes: grantedScopes(newToken.scope, token.scopes),
-          }
-          await saveTokens('youtube-music', updated, this.configDir)
-          this.token = updated
-          return updated
-        } catch {
-          return null
-        }
-      } else {
-        return null
-      }
+      return this.refresh(token)
     }
-
     return token
   }
 
   async refresh(token: StoredToken): Promise<StoredToken> {
     if (!token.refreshToken) {
-      throw new AuthRequiredError('No refresh token available', 'no-token')
+      throw new AuthRequiredError('No YouTube Music refresh token stored; run "sple auth login --provider youtube-music"', 'token-expired')
     }
 
-    const newToken = await this.refreshToken(token.refreshToken)
+    const tokens = await this.refreshToken(token.refreshToken)
+    // Keep every stored field; replace scopes and the refresh-token expiry only when sent (ADR-0010 §3).
     const updated: StoredToken = {
       ...token,
-      accessToken: newToken.accessToken,
-      expiresAt: new Date(Date.now() + (newToken.expiresIn ?? 3600) * 1000).toISOString(),
-      scopes: grantedScopes(newToken.scope, token.scopes),
+      accessToken: tokens.accessToken,
+      expiresAt: isoIn(tokens.expiresIn ?? 3600),
+      scopes: grantedScopes(tokens.scope, token.scopes),
+      ...(tokens.refreshTokenExpiresIn !== undefined
+        ? { refreshTokenExpiresAt: isoIn(tokens.refreshTokenExpiresIn) }
+        : {}),
     }
 
-    await saveTokens('youtube-music', updated, this.configDir)
+    saveTokens('youtube-music', updated, this.configDir)
     this.token = updated
     return updated
   }
@@ -206,7 +189,7 @@ export class YouTubeMusicAuth implements ProviderAuth {
     code: string,
     codeVerifier: string,
     redirectUri: string
-  ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number; scope?: string }> {
+  ): Promise<GoogleTokens> {
     const body = new URLSearchParams()
     body.set('grant_type', 'authorization_code')
     body.set('code', code)
@@ -226,20 +209,10 @@ export class YouTubeMusicAuth implements ProviderAuth {
       throw new ProviderError(`Google token exchange failed: ${error}`)
     }
 
-    const data = (await response.json()) as Record<string, unknown>
-    if (typeof data.access_token !== 'string') {
-      throw new ProviderError('No access token in response')
-    }
-
-    return {
-      accessToken: data.access_token,
-      refreshToken: typeof data.refresh_token === 'string' ? data.refresh_token : undefined,
-      expiresIn: typeof data.expires_in === 'number' ? data.expires_in : 3600,
-      scope: typeof data.scope === 'string' ? data.scope : undefined,
-    }
+    return parseGoogleTokens((await response.json()) as Record<string, unknown>)
   }
 
-  private async refreshToken(refreshToken: string): Promise<{ accessToken: string; expiresIn?: number; scope?: string }> {
+  private async refreshToken(refreshToken: string): Promise<GoogleTokens> {
     const body = new URLSearchParams()
     body.set('grant_type', 'refresh_token')
     body.set('refresh_token', refreshToken)
@@ -253,19 +226,18 @@ export class YouTubeMusicAuth implements ProviderAuth {
     })
 
     if (!response.ok) {
-      throw new ProviderError('Token refresh failed')
+      const code = parseOAuthErrorCode(await response.text().catch(() => ''))
+      if (code === 'invalid_grant') {
+        throw new AuthRequiredError(
+          'YouTube Music authorization expired or was revoked (Google expires refresh tokens after 7 days ' +
+            'while the OAuth app is in Testing status); run "sple auth login --provider youtube-music"',
+          'revoked'
+        )
+      }
+      throw new ProviderError(`Google token refresh failed (HTTP ${response.status}${code ? `, ${code}` : ''})`)
     }
 
-    const data = (await response.json()) as Record<string, unknown>
-    if (typeof data.access_token !== 'string') {
-      throw new ProviderError('No access token in refresh response')
-    }
-
-    return {
-      accessToken: data.access_token,
-      expiresIn: typeof data.expires_in === 'number' ? data.expires_in : 3600,
-      scope: typeof data.scope === 'string' ? data.scope : undefined,
-    }
+    return parseGoogleTokens((await response.json()) as Record<string, unknown>)
   }
 
   private async revokeToken(accessToken: string): Promise<void> {
@@ -296,5 +268,18 @@ export class YouTubeMusicAuth implements ProviderAuth {
       id: typeof data.id === 'string' ? data.id : '',
       displayName: typeof data.name === 'string' ? data.name : typeof data.id === 'string' ? (data.id as string) : 'User',
     }
+  }
+}
+
+function parseGoogleTokens(data: Record<string, unknown>): GoogleTokens {
+  if (typeof data.access_token !== 'string' || !data.access_token) {
+    throw new ProviderError('Google token endpoint returned no access token')
+  }
+  return {
+    accessToken: data.access_token,
+    refreshToken: typeof data.refresh_token === 'string' ? data.refresh_token : undefined,
+    expiresIn: typeof data.expires_in === 'number' ? data.expires_in : 3600,
+    scope: typeof data.scope === 'string' ? data.scope : undefined,
+    refreshTokenExpiresIn: typeof data.refresh_token_expires_in === 'number' ? data.refresh_token_expires_in : undefined,
   }
 }

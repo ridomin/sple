@@ -56,6 +56,10 @@ export function formatErrorMessage(error: unknown): string {
     if (error.scope) {
       return `Missing scope '${error.scope}'. Run "sple auth login" to grant ${error.scope}`
     }
+    // A revoked or expired grant says why, so it is not mistaken for "never logged in".
+    if (error.reason === 'revoked') {
+      return error.message
+    }
     return 'Authentication required. Run "sple auth login" to log in.'
   }
 

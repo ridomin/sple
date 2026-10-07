@@ -6,26 +6,12 @@ import {
   RateLimitError,
 } from '../../core/provider/errors.js'
 import type { HttpResponse } from '../../core/http/client.js'
+import { parseOAuthErrorCode } from '../../core/auth/oauth-errors.js'
 
 /** Which token-endpoint grant failed; decides how `invalid_grant` is reported. */
 export type TokenGrant = 'authorization_code' | 'refresh_token'
 
-/**
- * Extract the OAuth `error` code from a token-endpoint error body.
- * Only a short `[a-z_]` code is returned; descriptions and any other body
- * content are discarded so nothing from the body reaches messages or logs.
- */
-export function parseOAuthErrorCode(body: string): string | undefined {
-  try {
-    const parsed = JSON.parse(body) as { error?: unknown }
-    if (typeof parsed.error === 'string' && /^[a-z_]{1,64}$/.test(parsed.error)) {
-      return parsed.error
-    }
-  } catch {
-    // Not JSON: no usable code
-  }
-  return undefined
-}
+export { parseOAuthErrorCode }
 
 function parseRetryAfterMs(value: string | null): number | undefined {
   if (!value) return undefined

@@ -137,3 +137,16 @@ Each attempt produces one `HttpLogEntry`: method, path with query string (values
 - Ports get a deterministic retry budget: at most 4 attempts, at most 120 s of sleeping on one `Retry-After`.
 - Tests can assert exact retry counts and refresh behavior against recorded fixtures.
 - Changing a constant or a mapping needs an amendment to this ADR.
+
+## Amendment 1 (refresh-token expiry, #80)
+
+- **Date:** 2026-10-07
+- **Why:** a Google OAuth app in Testing status gets refresh tokens that expire after 7 days (ADR 0002 §2.1.1). The adapter swallowed the resulting refresh failure, so `auth status` and every command reported "not logged in" with no reason.
+
+| Change | Rule |
+|---|---|
+| Refresh-token expiry is stored | When a token response (authorization code or refresh) has a numeric `refresh_token_expires_in`, store `refreshTokenExpiresAt = now + refresh_token_expires_in` (ADR 0004 `tokens.json` rules). A refresh response without the field keeps the stored value (§3). Google sends it only while the app is in Testing status. |
+| Google token-endpoint errors | Only the OAuth `error` code is read, as for Spotify. `invalid_grant` on `refresh_token` → `AuthRequiredError('revoked')` with the message `YouTube Music authorization expired or was revoked (Google expires refresh tokens after 7 days while the OAuth app is in Testing status); run "sple auth login --provider youtube-music"`. Any other failure → `ProviderError("Google token refresh failed (HTTP <status>[, <code>])")`. |
+| Refresh failures propagate | Getting a token for a request refreshes an expired access token, and any refresh error reaches the caller. It is never turned into "not logged in". No stored refresh token → `AuthRequiredError('token-expired')` (§3). |
+| Status stays offline | `auth status` reads `tokens.json` only and never refreshes (ADR 0007 A10). |
+

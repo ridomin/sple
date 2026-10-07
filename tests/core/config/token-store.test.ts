@@ -33,6 +33,18 @@ test('token store', async (t) => {
     assert.deepStrictEqual(loaded, mockToken)
   })
 
+  await t.test('round-trips refreshTokenExpiresAt and rejects a non-string value (#80)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sple-tokens-refresh-expiry-'))
+    try {
+      const withExpiry = { ...mockToken, refreshTokenExpiresAt: '2026-10-08T00:00:00Z' }
+      saveTokens('youtube-music', withExpiry, dir)
+      assert.strictEqual(loadTokens('youtube-music', dir)?.refreshTokenExpiresAt, '2026-10-08T00:00:00Z')
+      assert.throws(() => saveTokens('youtube-music', { ...mockToken, refreshTokenExpiresAt: 7 } as unknown as StoredToken, dir), /refreshTokenExpiresAt/)
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
   await t.test('loadTokens returns null if provider not found', () => {
     const loaded = loadTokens('youtube-music', tempDir)
     assert.strictEqual(loaded, null)
