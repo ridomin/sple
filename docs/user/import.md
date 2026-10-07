@@ -50,6 +50,21 @@ Every match found by searching (ISRC or metadata, including low-confidence ones)
 
 Candidates below `--min-confidence` (default `0.5`) are **low-confidence**: they're reported but not added. Authentication errors (exit 3) and quota or rate-limit errors (exit 5) stop the whole import before anything is created.
 
+## Quota estimate (YouTube)
+
+For a provider with a daily quota, sple prints what the import will need before it sends anything:
+
+```
+Quota estimate for youtube-music: units up to 6170 (9976 of 10000 left today); search up to 120 (96 of 100 left today)
+That needs about 2 days of quota. sple stops when today's quota runs out (it resets at 2026-10-08T07:00:00.000Z) and prints how to resume.
+Start anyway? (y/n):
+```
+
+- **Upper bound:** the numbers assume every track needs a search (unless the file or the [match cache](#the-match-cache) already has a match) and every track gets added.
+- **Question:** it's asked only when the import needs more than what's left today. `--yes` skips it, and a dry run prints the estimate without asking (a dry run counts searches only).
+- **Over several days:** start the import, let it stop at the quota, and [resume](#resuming-an-interrupted-import) it after the reset.
+- **`--json`:** the output's `estimate` field holds the same numbers.
+
 ## What gets printed
 
 On a terminal (and in TSV mode) stdout gets the text report:

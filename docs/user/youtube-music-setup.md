@@ -53,7 +53,7 @@ To stop this, open **Google Auth Platform → Audience** and choose **Publish ap
 
 ## Quota
 
-The default quota is 10,000 units per day, plus 100 searches per day, and it resets at midnight Pacific Time. Reads cost 1 unit per page. Creating a playlist or adding one track costs 50 units each. When the quota is used up, sple exits with code 5. Matches that `sple import` finds by searching are cached for 30 days, so a dry run followed by the real import, or a re-run, doesn't search for the same tracks again ([import guide](import.md#the-match-cache)). A larger import stops when the quota runs out and can be [resumed](import.md#resuming-an-interrupted-import) after the reset.
+The default quota is 10,000 units per day, plus 100 searches per day, and it resets at midnight Pacific Time. Reads cost 1 unit per page. Creating a playlist or adding one track costs 50 units each. When the quota is used up, sple exits with code 5. Matches that `sple import` finds by searching are cached for 30 days, so a dry run followed by the real import, or a re-run, doesn't search for the same tracks again ([import guide](import.md#the-match-cache)). `sple import` prints a [quota estimate](import.md#quota-estimate-youtube) before it starts. A larger import stops when the quota runs out and can be [resumed](import.md#resuming-an-interrupted-import) after the reset.
 
 ## Troubleshooting
 
