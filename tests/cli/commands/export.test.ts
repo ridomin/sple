@@ -254,6 +254,28 @@ test('sple export (M1-26, FR-EXP-1/2/3/6)', async (t) => {
     }
   })
 
+  await t.test('reads playlist items and Liked Songs in pages of readPageSize, not maxTracksPerRequest', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'sple-export-pages-'))
+    try {
+      const p = fake([playlist('1', { trackIds: ['t1', 't2', 't3', 't4', 't5'] })], tracks(5), {
+        readPageSize: { playlists: 50, playlistItems: 2, liked: 3 },
+        maxTracksPerRequest: 1,
+      })
+      const itemLimits: number[] = []
+      const likedLimits: number[] = []
+      const items = p.getPlaylistTracks.bind(p)
+      const liked = p.getLikedTracks.bind(p)
+      p.getPlaylistTracks = async (ref, page) => (itemLimits.push(page.limit), items(ref, page))
+      p.getLikedTracks = async (page) => (likedLimits.push(page.limit), liked(page))
+      assert.equal((await run(p, ['1', '-o', `${root}/`])).code, 0)
+      assert.equal((await run(p, ['--liked', '-o', `${root}/`])).code, 0)
+      assert.deepEqual(itemLimits, [2, 2, 2])
+      assert.ok(likedLimits.length > 0 && likedLimits.every((l) => l === 3), String(likedLimits))
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   await t.test('--liked writes liked-songs.<ext> with source.kind "liked"', async () => {
     const root = tempDir()
     try {

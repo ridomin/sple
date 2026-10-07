@@ -129,17 +129,20 @@ test('playlist show (M1-23, FR-PL-2)', async (t) => {
     assert.match(r.err, /"Shared" is owned by alice; readable via collaborator access/)
   })
 
-  await t.test('reads every page of tracks at maxTracksPerRequest, in order', async () => {
+  await t.test('reads every page of tracks at readPageSize.playlistItems (not the write batch size), in order', async () => {
     const all = tracks(250)
-    const p = fake([playlist('1', { trackIds: all.map((x) => x.id) })], all)
+    const p = fake([playlist('1', { trackIds: all.map((x) => x.id) })], all, {
+      readPageSize: { playlists: 50, playlistItems: 120, liked: 50 },
+      maxTracksPerRequest: 1,
+    })
     const requests = spyTracks(p)
     const r = await run(p, ['1', '--quiet'])
     assert.equal(r.code, 0)
     assert.deepEqual(r.out.split('\n'), all.map((x) => `fake:track:${x.id}`))
     assert.deepEqual(requests, [
-      { limit: 100, offset: 0 },
-      { limit: 100, offset: 100 },
-      { limit: 100, offset: 200 },
+      { limit: 120, offset: 0 },
+      { limit: 120, offset: 120 },
+      { limit: 120, offset: 240 },
     ])
   })
 

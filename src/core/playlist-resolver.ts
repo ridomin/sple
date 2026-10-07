@@ -28,7 +28,8 @@ async function getAllPlaylists(provider: Provider): Promise<PlaylistSummary[]> {
   }
 
   const allPlaylists: PlaylistSummary[] = []
-  let cursor: PageRequest = { limit: 50 }
+  const limit = provider.capabilities.readPageSize.playlists
+  let cursor: PageRequest = { limit }
 
   // Fetch all pages
   while (true) {
@@ -36,7 +37,7 @@ async function getAllPlaylists(provider: Provider): Promise<PlaylistSummary[]> {
     allPlaylists.push(...page.items)
 
     if (!page.next) break
-    cursor = { limit: 50, ...page.next }
+    cursor = { limit, ...page.next }
   }
 
   // Cache the result

@@ -144,7 +144,7 @@ Examples:
     ;({ items: tracks, total } = await collectPages(
       (page) => provider.getPlaylistTracks(playlist.ref, page),
       {
-        pageSize: provider.capabilities.maxTracksPerRequest,
+        pageSize: provider.capabilities.readPageSize.playlistItems,
         model: provider.capabilities.paginationModel,
         onPage: (p) => progress.update(p.items, p.total),
       }

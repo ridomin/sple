@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import * as listCmd from '../../../../src/cli/commands/playlist/list.js'
 import type { PlaylistListOutput } from '../../../../src/cli/output/types.js'
 import { EXIT_CODES } from '../../../../src/cli/exit-codes.js'
+import type { ProviderCapabilities } from '../../../../src/core/provider/capabilities.js'
 import { FakeProvider, type FakePlaylist } from '../../../../src/providers/fake/index.js'
 import { createSpotifyProvider } from '../../../../src/providers/spotify/index.js'
 import { saveTokens } from '../../../../src/core/config/token-store.js'
@@ -27,8 +28,8 @@ function playlist(id: number, owner = ME, extra: Partial<FakePlaylist> = {}): Fa
   }
 }
 
-function fake(playlists: FakePlaylist[]): FakeProvider {
-  return new FakeProvider({ initialPlaylists: playlists })
+function fake(playlists: FakePlaylist[], capabilities: Partial<ProviderCapabilities> = {}): FakeProvider {
+  return new FakeProvider({ initialPlaylists: playlists, capabilities })
 }
 
 /** Records every listPlaylists page request; calls still reach the provider. */
@@ -73,6 +74,14 @@ test('playlist list (M1-23, FR-PL-1)', async (t) => {
       { limit: 50, offset: 50 },
       { limit: 50, offset: 100 },
     ])
+  })
+
+  await t.test('pages are readPageSize.playlists long', async () => {
+    const all = Array.from({ length: 25 }, (_, i) => playlist(i + 1))
+    const p = fake(all, { readPageSize: { playlists: 10, playlistItems: 100, liked: 50 } })
+    const requests = spyList(p)
+    assert.equal((await run(p, ['--quiet'])).code, 0)
+    assert.deepEqual(requests.map((r) => r.limit), [10, 10, 10])
   })
 
   await t.test('fetches the remaining pages concurrently when the provider reports a total', async () => {

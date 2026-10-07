@@ -256,7 +256,6 @@ The specification (this file and the ADRs) is the target. This section lists whe
 
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
-| D1 | `readPageSize` capability for reads (ADR-0003 A2) | `playlist show` and `export` use `maxTracksPerRequest` as the page size (YouTube: 1 item per request); Liked Songs uses `min(50, maxTracksPerRequest)`; `playlist list` and the resolver hardcode 50 | #38 |
 | D10 | Spotify exports `external_ids.isrc` (FR-EXP-2) | `isrc` is hard-coded to `null` | #28 |
 | D11 | Fake provider opt-in (PRV-6) | Always registered, listed in help and `auth status` | #46 |
 | D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: scopes `youtube` + `userinfo.profile` from the first login; no scope checks; `quotaModel` is `rate-limited` (no daily ledger); `getLikedTracks` returns nothing; `search` ignores `--type`; `listPlaylists` ignores `--owned`/`--followed` and marks every playlist owned; `auth status` refreshes over the network; logout reports deleting a match cache and migration state that do not exist; no `docs/PRIVACY.md`; spikes S5–S7 not run | #29 |

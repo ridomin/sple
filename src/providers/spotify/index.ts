@@ -34,6 +34,7 @@ const SPOTIFY_CAPABILITIES: ProviderCapabilities = {
   supportsRevocation: false,
   paginationModel: 'offset',
   maxSearchPageSize: 10,
+  readPageSize: { playlists: 50, playlistItems: 100, liked: 50 },
   playlistItemsAccess: 'owned-or-collaborator',
   likedSongs: { read: 'exact', write: false },
   isrcSearchMode: 'filter',
@@ -44,10 +45,6 @@ const SPOTIFY_CAPABILITIES: ProviderCapabilities = {
   maxTracksPerRequest: 100,
   quotaModel: { kind: 'rate-limited' },
 }
-
-
-/** S3 page-size limit for GET /me/tracks. */
-const LIKED_TRACKS_MAX_LIMIT = 50
 
 const NOT_READABLE_MESSAGE =
   'Spotify only returns the tracks of playlists you own or collaborate on, and this playlist is neither. ' +
@@ -144,7 +141,7 @@ export function createSpotifyProvider(
   /** Every track URI already in a playlist (for populatePlaylist's skipExisting). */
   const playlistTrackUris = async (id: string): Promise<Set<string>> => {
     const uris = new Set<string>()
-    const limit = SPOTIFY_CAPABILITIES.maxTracksPerRequest
+    const limit = SPOTIFY_CAPABILITIES.readPageSize.playlistItems
     for (let offset: number | undefined = 0; offset !== undefined; ) {
       const response: SpotifyPage = await getJson(`/playlists/${id}/items?limit=${limit}&offset=${offset}`, (x) =>
         validateSpotifyPage(x, 'playlist items')
@@ -210,7 +207,7 @@ export function createSpotifyProvider(
     async listPlaylists(page: PageRequest, filter?: PlaylistFilter) {
       const token = await guard('listPlaylists')
 
-      const limit = Math.min(page.limit, 50)
+      const limit = Math.min(page.limit, SPOTIFY_CAPABILITIES.readPageSize.playlists)
       const offset = page.offset || 0
       // Spotify has no server-side owner filter on GET /me/playlists, so the
       // filter is applied to each page after mapping (owner.id === me.id).
@@ -253,7 +250,7 @@ export function createSpotifyProvider(
         throw new AccessRestrictedError(NOT_READABLE_MESSAGE, 'not-owned')
       }
 
-      const limit = Math.min(page.limit, SPOTIFY_CAPABILITIES.maxTracksPerRequest)
+      const limit = Math.min(page.limit, SPOTIFY_CAPABILITIES.readPageSize.playlistItems)
       const offset = page.offset || 0
 
       let response: SpotifyPage
@@ -287,7 +284,7 @@ export function createSpotifyProvider(
       await guard('readLiked')
 
       // S3: GET /me/tracks accepts at most 50 per page
-      const limit = Math.min(page.limit, LIKED_TRACKS_MAX_LIMIT)
+      const limit = Math.min(page.limit, SPOTIFY_CAPABILITIES.readPageSize.liked)
       const offset = page.offset || 0
       const response = await getJson(`/me/tracks?limit=${limit}&offset=${offset}`, (x) =>
         validateSpotifyPage(x, 'saved tracks')

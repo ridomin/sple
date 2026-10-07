@@ -44,6 +44,8 @@ export interface ProviderCapabilities {
 
   paginationModel: 'offset' | 'cursor-forward'
   maxSearchPageSize: number
+  /** Page size of list/items/liked reads (ADR-0003 A2). */
+  readPageSize: { playlists: number; playlistItems: number; liked: number }
   playlistItemsAccess: 'all' | 'owned-only' | 'owned-or-collaborator'
   likedSongs: { read: 'exact' | 'approximate' | 'none'; write: false; readCap?: number }
 
@@ -53,6 +55,7 @@ export interface ProviderCapabilities {
 
   canDeletePlaylist: boolean
   supportsCollaborative: boolean
+  /** populatePlaylist batch size; writes only, never a read page size. */
   maxTracksPerRequest: number
   maxPlaylistSize?: number
 

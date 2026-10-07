@@ -40,8 +40,6 @@ export type ExportFormat = 'json' | 'csv'
 const FORMATS: readonly ExportFormat[] = ['json', 'csv']
 
 /** Liked Songs page size: Spotify's GET /me/tracks caps at 50 (S3). */
-const LIKED_PAGE_SIZE = 50
-
 /** Exit-code priority among failed items (ADR 0007 §5): 3 > 5 > 4 > 1. */
 const EXIT_PRIORITY: readonly number[] = [
   EXIT_CODES.AUTH_REQUIRED,
@@ -172,9 +170,7 @@ async function readTracks(
         : (page: { limit: number; offset?: number; cursor?: string }) =>
             provider.getPlaylistTracks(source.playlist.ref, page)
     const pageSize =
-      source.kind === 'liked'
-        ? Math.min(LIKED_PAGE_SIZE, provider.capabilities.maxTracksPerRequest)
-        : provider.capabilities.maxTracksPerRequest
+      source.kind === 'liked' ? provider.capabilities.readPageSize.liked : provider.capabilities.readPageSize.playlistItems
     const { items, total } = await collectPages(fetchPage, {
       pageSize,
       model: provider.capabilities.paginationModel,
