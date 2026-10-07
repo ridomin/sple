@@ -53,7 +53,7 @@ export function createYouTubeMusicProvider(
     parseTrackRef: parseYouTubeTrackRef,
 
     async search(q, page: PageRequest) {
-      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      await auth.requireOperation('search')
       const { items: tracks, nextPageToken, totalResults } = await client.searchTracks(
         { text: q.text },
         { limit: page.limit, cursor: page.cursor as string | undefined }
@@ -76,7 +76,7 @@ export function createYouTubeMusicProvider(
     },
 
     async listPlaylists(page: PageRequest) {
-      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      await auth.requireOperation('listPlaylists')
       const { items: playlists, nextPageToken, totalResults } = await client.listPlaylists({
         limit: page.limit,
         cursor: page.cursor as string | undefined
@@ -89,12 +89,12 @@ export function createYouTubeMusicProvider(
     },
 
     async getPlaylist(ref: string) {
-      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      await auth.requireOperation('getPlaylist')
       return await client.getPlaylist(ref)
     },
 
     async getPlaylistTracks(ref: string, page: PageRequest) {
-      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      await auth.requireOperation('getPlaylistTracks')
       const { items, nextPageToken, totalResults } = await client.getPlaylistTracks(
         ref,
         { limit: page.limit, cursor: page.cursor as string | undefined }
@@ -107,14 +107,14 @@ export function createYouTubeMusicProvider(
     },
 
     async getLikedTracks(_page: PageRequest) {
-      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      await auth.requireOperation('getLikedTracks')
       // YouTube API doesn't expose liked songs directly; return empty for now
       // TODO: Implement via favorites or watch history (M4a spike S5)
       return { items: [] }
     },
 
     async createPlaylist(input) {
-      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      await auth.requireOperation('createPlaylist')
       return await client.createPlaylist({
         name: input.name,
         description: input.description,
@@ -123,14 +123,14 @@ export function createYouTubeMusicProvider(
     },
 
     async removePlaylist(ref: string) {
-      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      await auth.requireOperation('removePlaylist')
       return await client.removePlaylist(ref)
     },
 
     async searchTracks(query, opts) {
       // isrcSearchMode is 'none': the engine never sends an ISRC query here.
       if (query.kind === 'isrc') return []
-      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      await auth.requireOperation('searchTracks')
       const { items } = await client.searchTracks(
         { text: [query.title, ...query.artists].join(' ') },
         { limit: opts.limit },
@@ -140,7 +140,7 @@ export function createYouTubeMusicProvider(
     },
 
     async populatePlaylist(ref: string, trackRefs: string[], opts) {
-      await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
+      await auth.requireOperation('populatePlaylist')
       return await client.populatePlaylist(ref, trackRefs, opts)
     },
   }

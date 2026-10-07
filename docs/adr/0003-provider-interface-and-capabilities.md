@@ -347,3 +347,22 @@ Login requests the union of the table: `playlist-read-private playlist-read-coll
 | `populatePlaylist` | `POST /v1/playlists/{id}/items` with body `{ "uris": [...] }` (201 + `snapshot_id`), at most 100 per request, in order. Refs that are not `spotify:track:<id>` go to `failed` (`Not a Spotify track URI`) without a request. Auth, quota and rate-limit errors propagate; any other error marks every ref in that batch failed with the error message and the next batch runs. `skipExisting` first pages through `GET /v1/playlists/{id}/items` and leaves out refs already present (neither added nor failed). |
 
 Track mapping: `title` = `name` (`"(untitled)"` if empty), `artists` = artist names (`["Unknown Artist"]` if none), `album` = `album.name`, `durationMs` = `duration_ms`, `isrc` = `external_ids.isrc` when present, otherwise `null`, `refs.spotify` = `uri`.
+
+## Amendment 3 (YouTube scope table, #83)
+
+- **Date:** 2026-10-07
+- **Why:** the YouTube adapter checked one hard-coded scope for every call (D12). Owner decision: login keeps requesting `youtube`, which covers reads and writes, and each operation declares the scopes it accepts, like the Spotify table.
+
+### YouTube scope table (FR-AUTH-5)
+
+Login requests `https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.profile`. Before each call the adapter checks that a token is stored (else `AuthRequiredError('no-token')`) and that **at least one** of the operation's scopes was granted. Otherwise it throws `AuthRequiredError('missing-scope', scope)` naming the first scope listed, which is the one login requests.
+
+| Operation | Any one of |
+|---|---|
+| `search`, `searchTracks`, `listPlaylists`, `getPlaylist`, `getPlaylistTracks`, `getLikedTracks` | `youtube`, `youtube.readonly` |
+| `createPlaylist`, `removePlaylist`, `populatePlaylist` | `youtube` |
+
+`youtube.readonly` is accepted for reads so that a token granted only that scope (by a port, or by a future read-only login) works for list, show and export. ADR 0010 §4 "Scopes requested" now reads: `youtube` + `userinfo.profile`.
+
+**Logout** reports `revoked: true` only when Google's revoke endpoint accepted the token, and `deletedData: ['access_token', 'refresh_token']`. sple keeps no other YouTube data yet.
+

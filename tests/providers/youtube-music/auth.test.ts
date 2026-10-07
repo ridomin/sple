@@ -48,11 +48,32 @@ test('YouTubeMusicAuth', async (t) => {
       grantedAt: new Date().toISOString(),
     }, tempDir)
 
-    const result = await auth.logout()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response(null, { status: 200 })) as unknown as typeof fetch
+    try {
+      const result = await auth.logout()
+      assert.equal(result.revoked, true)
+      assert.ok(result.deletedData.includes('access_token'))
+      assert.ok(result.deletedData.includes('refresh_token'))
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 
-    assert.equal(result.revoked, true)
-    assert.ok(result.deletedData.includes('access_token'))
-    assert.ok(result.deletedData.includes('refresh_token'))
+  await t.test('logout reports revoked: false when Google rejects the revocation, and still deletes tokens', async () => {
+    const auth = new YouTubeMusicAuth('test-client-id', 'test-client-secret', tempDir)
+    saveTokens('youtube-music', {
+      accessToken: 'test-token', userId: 'test-user', scopes: [], grantedAt: new Date().toISOString(),
+    }, tempDir)
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => new Response('{"error":"invalid_token"}', { status: 400 })) as unknown as typeof fetch
+    try {
+      const result = await auth.logout()
+      assert.equal(result.revoked, false)
+      assert.equal(loadTokens('youtube-music', tempDir), null)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 
   await t.test('provides correct scopes configured', async () => {

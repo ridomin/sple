@@ -246,7 +246,7 @@ Command grammar, output modes, `--json` shapes, error output, stdin input, parti
 | **M1 — Spotify MVP** | Spikes S1–S4 first. FR-AUTH (M), FR-SEARCH (M), FR-PL (M), FR-EXP (M, including Liked Songs), CLI-1…8. |
 | **M2 — Spotify polish** | FR-PL-5 (edit), FR-SEARCH-3 (field filters), FR-EXP-5 (export all), FR-PL-1 `--filter` option. |
 | **M3 — Import + matching** | FR-EXP-7, matching engine (strategy chain, metadata matching as the core), match report (tested against the fake provider). **Done 2026-10-05**; playlist creation landed in M3.1 (#23). The spec review of 2026-10-07 changed parts of the contract; see §12. |
-| **M4a — YouTube Music, read-only** | A preview adapter already exists in the TypeScript code (§12); it does not yet meet this milestone. Spikes S5–S7 first. `docs/PRIVACY.md` (NFR-9) before any YouTube data is stored. Google auth (login/logout with revocation/status), search, `playlist list/show`, export, approximate Liked export. Uses `youtube.readonly` only. |
+| **M4a — YouTube Music, read-only** | A preview adapter already exists in the TypeScript code (§12); it does not yet meet this milestone. Spikes S5–S7 first. `docs/PRIVACY.md` (NFR-9) before any YouTube data is stored. Google auth (login/logout with revocation/status), search, `playlist list/show`, export, approximate Liked export. Login requests `youtube` (owner decision 2026-10-07); reads also accept `youtube.readonly` (ADR-0003 Amendment 3). |
 | **M4b — YouTube Music, writes + migrate** | Create/remove playlists, populate-playlist, quota ledger and cost estimate, resumable `migrate` (FR-MIG). Enables Switcher persona. |
 | **Later** | Other providers, unscheduled. |
 
@@ -256,4 +256,4 @@ The specification (this file and the ADRs) is the target. This section lists whe
 
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
-| D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: scopes `youtube` + `userinfo.profile` from the first login; no scope checks; `quotaModel` is `rate-limited` (no daily ledger); `getLikedTracks` returns nothing; `search` ignores `--type`; `listPlaylists` ignores `--owned`/`--followed` and marks every playlist owned; logout reports deleting a match cache and migration state that do not exist; no `docs/PRIVACY.md`; spikes S5–S7 not run | #65 |
+| D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: `quotaModel` is `rate-limited` (no daily ledger); `getLikedTracks` returns nothing; `search` ignores `--type`; `listPlaylists` ignores `--owned`/`--followed` and marks every playlist owned; no `docs/PRIVACY.md`; spikes S5–S7 not run | #65 |

@@ -103,7 +103,7 @@ The user registers exactly `http://127.0.0.1/callback` with the provider; Spotif
 | Token | `https://accounts.spotify.com/api/token` | `https://oauth2.googleapis.com/token` |
 | Extra authorize params | none | `access_type=offline`, `prompt=consent` (needed to get a refresh token on every login) |
 | Client secret | never | user's Desktop-client secret (`SPLE_GOOGLE_CLIENT_SECRET`) |
-| Scopes requested | ADR 0003 Amendment 2 table | M4a: `youtube.readonly`; M4b: `youtube`; plus `userinfo.profile` for identity |
+| Scopes requested | ADR 0003 Amendment 2 table | `youtube` + `userinfo.profile` (ADR 0003 Amendment 3 table) |
 | Revoke on logout | none: delete local tokens, `revoked: false`, notice pointing to `https://www.spotify.com/account/apps/` | `POST https://oauth2.googleapis.com/revoke` `token=<access token>`; local tokens are deleted even if revocation fails |
 
 **Spotify token-endpoint errors** (only the OAuth `error` code, `[a-z_]{1,64}`, is read from the body):
