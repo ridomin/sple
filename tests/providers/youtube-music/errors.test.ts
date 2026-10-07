@@ -56,6 +56,14 @@ test('409 → YouTubeConflictError with the reason', () => {
   assert.equal(e.message, 'YouTube API request failed (HTTP 409, SERVICE_UNAVAILABLE)')
 })
 
+test('403 insufficientPermissions → AuthRequiredError naming the missing youtube scope', () => {
+  const e = mapYouTubeHttpError(res(403, 'insufficientPermissions'))
+  assert.ok(e instanceof AuthRequiredError)
+  assert.equal(e.reason, 'missing-scope')
+  assert.equal(e.scope, 'https://www.googleapis.com/auth/youtube')
+  assert.equal(getExitCode(e), EXIT_CODES.AUTH_REQUIRED)
+})
+
 test('other 403 → AccessRestrictedError naming the reason', () => {
   const e = mapYouTubeHttpError(res(403, 'playlistItemsNotAccessible'))
   assert.ok(e instanceof AccessRestrictedError)
