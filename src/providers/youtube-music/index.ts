@@ -39,7 +39,6 @@ export function createYouTubeMusicProvider(
     getToken: () => auth.getToken(),
     refresh: (token) => auth.refresh(token),
     mapError: mapYouTubeHttpError,
-    onResponse: undefined,
   })
 
   const client = new YouTubeMusicHttpClient(http)

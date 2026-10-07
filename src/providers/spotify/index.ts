@@ -7,7 +7,7 @@ import {
   ProviderError,
   isFatalProviderError,
 } from '../../core/provider/errors.js'
-import { HttpClient, type HttpLogEntry } from '../../core/http/client.js'
+import { HttpClient } from '../../core/http/client.js'
 import { SpotifyAuth } from './auth.js'
 import { parseSpotifyPlaylistRef, parseSpotifyTrackRef } from './playlist-ref.js'
 import { requiredScopes, type PlaylistVisibility, type SpotifyM1Operation } from './scopes.js'
@@ -98,16 +98,7 @@ function nextOffset(page: SpotifyPage, offset: number, limit: number): { offset:
   return offset + limit < page.total ? { offset: offset + limit } : undefined
 }
 
-export interface SpotifyProviderOptions {
-  /** Receives one entry per HTTP attempt, for `--debug` logging (ADR 0007 §6). */
-  onHttp?: (entry: HttpLogEntry) => void
-}
-
-export function createSpotifyProvider(
-  clientId: string,
-  configDir?: string,
-  options: SpotifyProviderOptions = {}
-): Provider {
+export function createSpotifyProvider(clientId: string, configDir?: string): Provider {
   const auth = new SpotifyAuth(clientId, configDir)
 
   // One HTTP client per provider instance: bearer injection, proactive and
@@ -119,7 +110,6 @@ export function createSpotifyProvider(
     getToken: () => auth.getToken(),
     refresh: (token) => auth.refresh(token),
     mapError: mapSpotifyHttpError,
-    onResponse: options.onHttp,
   })
 
   const getJson = <T>(path: string, validate: (x: unknown) => T): Promise<T> =>

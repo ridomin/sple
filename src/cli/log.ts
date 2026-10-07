@@ -1,5 +1,8 @@
+import { format } from 'node:util'
+import createDebug from 'debug'
 import type { CommandContext } from './cli.js'
-import type { HttpLogEntry } from '../core/http/client.js'
+
+export { formatHttpMessage } from '../core/http/client.js'
 
 /**
  * Redaction function per ADR-0007 §6.
@@ -22,80 +25,49 @@ export function redact(text: string): string {
   return result
 }
 
+/** `--verbose`: every sple namespace except HTTP request lines (ADR-0007 A11). */
+export const VERBOSE_PATTERN = 'sple:*,-sple:http*'
+/** `--debug`: every sple namespace. */
+export const DEBUG_PATTERN = 'sple:*'
+
 /**
- * Logger interface for creating namespaced loggers.
+ * Configure the `debug` package once at startup (ADR-0007 A11). The global
+ * output function is replaced first, so every enabled line is redacted and
+ * written through `write`; then `DEBUG` and the flag pattern are enabled.
  */
+export function setupLogging(opts: {
+  verbose: boolean
+  debug: boolean
+  /** The `DEBUG` environment variable. */
+  debugEnv?: string
+  write: (line: string) => void
+}): void {
+  createDebug.log = (...args: unknown[]) => opts.write(redact(format(...args)))
+  const flagPattern = opts.debug ? DEBUG_PATTERN : opts.verbose ? VERBOSE_PATTERN : ''
+  createDebug.enable([opts.debugEnv, flagPattern].filter(Boolean).join(','))
+}
+
+/** A namespaced logger: `info` is a `debug` log on `sple:<namespace>`; warnings and errors always print. */
 export interface Logger {
   info(message: string): void
-  debug(message: string): void
   error(message: string): void
   warn(message: string): void
 }
 
-/**
- * Create a logger with the given namespace.
- * Logs are written to stderr with the format: sple:<namespace> <message>
- * All messages are redacted before output.
- */
 export function createLogger(namespace: string, ctx: CommandContext): Logger {
   const prefix = `sple:${namespace}`
-  const isVerbose = ctx.config.verbose || ctx.debug
-  const isDebug = ctx.debug
+  const debug = createDebug(prefix)
 
   return {
     info(message: string) {
-      if (isVerbose) {
-        ctx.io.err(`${prefix} ${redact(message)}`)
-      }
-    },
-    debug(message: string) {
-      if (isDebug) {
-        ctx.io.err(`${prefix} ${redact(message)}`)
-      }
+      // '%s' so a '%' in the message is never read as a format directive.
+      debug('%s', message)
     },
     error(message: string) {
-      // Errors always output, but redacted
       ctx.io.err(`${prefix} ${redact(message)}`)
     },
     warn(message: string) {
-      // Warnings always output, but redacted
       ctx.io.err(`${prefix} warning: ${redact(message)}`)
     },
   }
-}
-
-/**
- * Log an HTTP request/response for --debug mode.
- * Format: sple:http <method> <path> <status> <duration>ms [<retryCount> retries]
- */
-export function logHttpCall(
-  ctx: CommandContext,
-  method: string,
-  path: string,
-  status: number | string,
-  durationMs: number,
-  retryCount?: number
-): void {
-  if (ctx.debug) {
-    const retryPart = retryCount && retryCount > 0 ? ` ${retryCount} retries` : ''
-    ctx.io.err(`sple:http ${method} ${path} ${status} ${durationMs}ms${retryPart}`)
-  }
-}
-
-/**
- * Format one `--debug` HTTP line (ADR 0007 §6), redacted:
- * `sple:http GET /v1/playlists/…/items?limit=100&offset=0 200 143ms`.
- */
-export function formatHttpLine(entry: HttpLogEntry): string {
-  const retryPart = entry.retries > 0 ? ` ${entry.retries} retries` : ''
-  return redact(`sple:http ${entry.method} ${entry.path} ${entry.status} ${entry.durationMs}ms${retryPart}`)
-}
-
-/**
- * Configure global logging based on context flags.
- * Maps --verbose to info logs and --debug to all logs including HTTP.
- */
-export function setupGlobalLogging(_ctx: CommandContext): void {
-  // Future: could set up a global debug namespace handler here
-  // For now, individual loggers handle the verbose/debug flags
 }

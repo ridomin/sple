@@ -227,11 +227,11 @@ export class SpotifyAuth implements ProviderAuth {
         body: new URLSearchParams(params).toString(),
       })
     } catch {
-      log(`POST /api/token (${grant}) → network error`)
+      log('%s', `POST /api/token (${grant}) → network error`)
       throw new ProviderError('Could not reach the Spotify token endpoint')
     }
     const body = await res.text()
-    log(`POST /api/token (${grant}) → ${res.status} (${Date.now() - start}ms)`)
+    log('%s', `POST /api/token (${grant}) → ${res.status} (${Date.now() - start}ms)`)
 
     if (!res.ok) {
       throw mapTokenEndpointError(res.status, body, grant, res.headers.get('retry-after'))
@@ -247,10 +247,10 @@ export class SpotifyAuth implements ProviderAuth {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
     } catch {
-      log('GET /v1/me → network error')
+      log('%s', 'GET /v1/me → network error')
       throw new ProviderError('Could not reach the Spotify API')
     }
-    log(`GET /v1/me → ${res.status} (${Date.now() - start}ms)`)
+    log('%s', `GET /v1/me → ${res.status} (${Date.now() - start}ms)`)
 
     if (!res.ok) {
       const body = await res.text().catch(() => '')

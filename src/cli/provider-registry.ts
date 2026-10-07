@@ -8,7 +8,6 @@ import { createYouTubeMusicProvider } from '../providers/youtube-music/index.js'
 import { parseYouTubeTrackRef } from '../providers/youtube-music/playlist-ref.js'
 import type { TrackRefParser } from '../core/import/file-reader.js'
 import type { Config } from './config.js'
-import type { HttpLogEntry } from '../core/http/client.js'
 
 export type ProviderFactory = (config: Config) => Provider
 
@@ -55,8 +54,6 @@ function requireClientId(value: string | undefined, envVar: string, name: string
 }
 
 export interface DefaultRegistryOptions {
-  /** HTTP attempt sink for `--debug` (ADR 0007 §6). */
-  onHttp?: (entry: HttpLogEntry) => void
   /** Register the `fake` provider (`SPLE_ENABLE_FAKE_PROVIDER=1`; PRV-6). */
   enableFake?: boolean
 }
@@ -65,9 +62,7 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Pro
   const registry = new ProviderRegistry()
     .register('spotify', (config) =>
       createSpotifyProvider(
-        requireClientId(config.spotifyClientId, 'SPLE_SPOTIFY_CLIENT_ID', 'Spotify'),
-        undefined,
-        { onHttp: options.onHttp }
+        requireClientId(config.spotifyClientId, 'SPLE_SPOTIFY_CLIENT_ID', 'Spotify')
       ),
       parseSpotifyTrackRef
     )

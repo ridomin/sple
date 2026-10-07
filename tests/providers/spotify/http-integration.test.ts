@@ -8,11 +8,11 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setupLogging } from '../../../src/cli/log.js'
 import { createSpotifyProvider } from '../../../src/providers/spotify/index.js'
 import { saveTokens, loadTokens, type StoredToken } from '../../../src/core/config/token-store.js'
 import { AuthRequiredError, ProviderError, RateLimitError } from '../../../src/core/provider/errors.js'
 import { getExitCode, EXIT_CODES } from '../../../src/cli/exit-codes.js'
-import type { HttpLogEntry } from '../../../src/core/http/client.js'
 
 const API = 'https://api.spotify.com/v1'
 const TOKEN_URL = 'https://accounts.spotify.com/api/token'
@@ -286,19 +286,20 @@ test('no stored token → AuthRequiredError (exit 3) before any request', async 
   assert.equal(calls.length, 0)
 })
 
-test('onHttp receives method, path, status and duration only; search q is truncated', async () => {
+test('each attempt is one sple:http line: method, path, status and duration only; search q is truncated', async () => {
   storeToken()
   mockFetch(() => json(200, { tracks: { items: [], total: 0, offset: 0, limit: 10, next: null } }))
-  const entries: HttpLogEntry[] = []
-  const provider = createSpotifyProvider('cid', dir, { onHttp: (e) => entries.push(e) })
+  const lines: string[] = []
+  setupLogging({ verbose: false, debug: true, write: (l) => lines.push(l) })
+  try {
+    await createSpotifyProvider('cid', dir).search({ text: 'a very long query that should be truncated', type: 'track' }, { limit: 10 })
+  } finally {
+    setupLogging({ verbose: false, debug: false, write: () => {} })
+  }
 
-  await provider.search({ text: 'a very long query that should be truncated', type: 'track' }, { limit: 10 })
-
-  assert.equal(entries.length, 1)
-  assert.equal(entries[0].method, 'GET')
-  assert.equal(entries[0].status, 200)
-  assert.equal(entries[0].retries, 0)
-  assert.match(entries[0].path, /^\/v1\/search\?/)
-  assert.ok(!entries[0].path.includes('truncated'))
-  assert.ok(!JSON.stringify(entries).includes('old-access'))
+  const http = lines.filter((l) => / sple:http /.test(` ${l}`))
+  assert.equal(http.length, 1)
+  assert.match(http[0], /sple:http GET \/v1\/search\?\S+ 200 \d+ms$/)
+  assert.ok(!http[0].includes('truncated'))
+  assert.ok(!lines.join('\n').includes('old-access'))
 })

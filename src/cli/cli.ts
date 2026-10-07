@@ -9,8 +9,10 @@ import { createDefaultRegistry, type ProviderRegistry } from './provider-registr
 import { readPackageVersion } from './version.js'
 import { UsageError } from '../core/provider/errors.js'
 import type { Config } from './config.js'
-import { redact, formatHttpLine } from './log.js'
-import type { HttpLogEntry } from '../core/http/client.js'
+import createDebug from 'debug'
+import { redact, setupLogging } from './log.js'
+
+const logCli = createDebug('sple:cli')
 
 export interface CliIO {
   out: (msg: string) => void
@@ -103,10 +105,9 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
     const [command, ...commandArgs] = rest
 
     const env = opts.env ?? process.env
-    // --debug: one redacted line per HTTP attempt on stderr (ADR 0007 §6).
-    const onHttp = values.debug === true ? (entry: HttpLogEntry) => io.err(formatHttpLine(entry)) : undefined
-    const registry =
-      opts.registry ?? createDefaultRegistry({ onHttp, enableFake: env.SPLE_ENABLE_FAKE_PROVIDER === '1' })
+    // ADR-0007 A11: namespaced, redacted logs on stderr, filtered by DEBUG and the flags.
+    setupLogging({ verbose: values.verbose === true, debug: values.debug === true, debugEnv: env.DEBUG, write: io.err })
+    const registry = opts.registry ?? createDefaultRegistry({ enableFake: env.SPLE_ENABLE_FAKE_PROVIDER === '1' })
     const config = loadConfig(
       {
         provider: values.provider,
@@ -137,7 +138,7 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
       )
     }
 
-    if (config.verbose) io.err(redact(`sple:cli provider=${config.provider} command=${command}`))
+    logCli('%s', `provider=${config.provider} command=${command}`)
 
     // Validate mutually exclusive flags
     if (values.json && values.quiet) {
