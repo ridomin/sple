@@ -4,6 +4,7 @@
 
 ```
 sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--no-cache] [--dry-run] [--yes]
+sple import --resume <runId|last> [--report <path>] [--yes]
 ```
 
 The target is the global `--provider` (default `spotify`, or `SPLE_DEFAULT_PROVIDER`). There are no short flags.
@@ -107,9 +108,31 @@ Created private playlist "Road trip" (PLxxxx) https://www.youtube.com/playlist?l
 ## When something goes wrong
 
 - **Some tracks fail to add:** each one is printed as `sple: failed to add <ref>: <error>`, then `sple: added 93 of 95 tracks; 2 failed (see above)`, and sple exits 1. With `--json`, stdout still gets the `ImportOutput` and stderr ends with a `PartialFailure` error.
-- **Adding stops entirely** (quota, authentication): `sple: playlist <url or id> was created, but adding tracks failed`, and the exit code is the error's (5 for quota, 3 for authentication). The playlist may already hold some tracks.
-- **YouTube quota:** adding a track costs 50 of the 10,000 daily units, and a metadata search uses one of 100 daily searches, so YouTube imports are limited to roughly 100 new tracks a day. sple stops with exit code 5 before going over and says when the quota resets (midnight Pacific Time). See [the YouTube setup guide](youtube-music-setup.md#quota).
+- **Adding stops entirely** (quota, authentication): `sple: playlist <url or id> was created, but adding tracks failed`, then the resume command, and the exit code is the error's (5 for quota, 3 for authentication). The playlist holds the tracks added so far; [resume](#resuming-an-interrupted-import) to add the rest.
+- **YouTube quota:** adding a track costs 50 of the 10,000 daily units, and a metadata search uses one of 100 daily searches, so YouTube imports are limited to roughly 100 new tracks a day. sple stops with exit code 5 before going over, says when the quota resets (midnight Pacific Time), and prints the command that continues the import the next day. See [the YouTube setup guide](youtube-music-setup.md#quota).
 - **Missing permission:** run `sple auth login --provider <provider>` again.
+
+## Resuming an interrupted import
+
+sple saves an import's progress as it goes, in `runs/<runId>.json` in its config directory: after every matched track, as soon as the playlist exists, and after every batch of added tracks. If the import stops (quota, rate limit, expired login, Ctrl-C, crash), stderr says how to continue:
+
+```
+sple: import stopped; resume with: sple import --resume 20261007-3fa9c1
+sple: Quota exhausted: units (resets at 2026-10-08T07:00:00.000Z)
+```
+
+Run that command, after the quota resets if the stop was a quota stop:
+
+```bash
+sple import --resume 20261007-3fa9c1
+```
+
+- **Nothing is repeated:** tracks already matched aren't searched again, the playlist isn't created twice, and tracks already added aren't added again. If sple was killed between adding a track and saving, it checks the playlist's track count once and skips that track.
+- **Uses the original settings:** the run keeps its target provider, `--name`, `--min-confidence` and cache setting, and a copy of the source playlist, so the file doesn't need to be there any more. Those flags (and `--dry-run`) can't be given with `--resume`.
+- **Confirmation:** a run that stopped before the playlist was created asks again (or needs `--yes`); one that was already adding tracks just continues.
+- **No ID?** After Ctrl-C or a crash sple can't print one. `sple import --resume last` continues the most recent unfinished import.
+- **Unknown or old ID:** `No unfinished import '<id>'` lists the imports that can still be resumed. A run expires 30 days after it started. `sple auth logout` deletes the runs that involve that provider.
+- **Cleanup:** a finished or declined import deletes its run file. A dry run never creates one.
 
 ## Improving matches
 
@@ -122,4 +145,3 @@ Created private playlist "Road trip" (PLxxxx) https://www.youtube.com/playlist?l
 - **YouTube Music has no ISRC search,** so it matches by metadata only. That's less reliable for remixes and alternate versions.
 - **Duplicates:** if two source tracks match the same target track, both are added.
 - **Liked Songs** can be exported (`sple export --liked`), but import always creates a playlist. It never adds likes.
-- **Not resumable yet:** an interrupted import has to be re-run, and it creates a new playlist.

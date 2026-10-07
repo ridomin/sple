@@ -50,14 +50,28 @@ export class MatchingEngine {
     file: CanonicalPlaylistFile,
     provider: Provider,
     capabilities: ProviderCapabilities,
-    options: { minConfidence?: number; sourceFilePath?: string; targetPlaylistName?: string } = {}
+    options: {
+      minConfidence?: number
+      sourceFilePath?: string
+      targetPlaylistName?: string
+      /** Results of an interrupted run (FR-MIG-4): kept as they are; their tracks are not matched again. */
+      previous?: MatchResult[]
+      /** Called after each newly matched track, so the caller can checkpoint. */
+      onResult?: (result: MatchResult) => void
+    } = {}
   ): Promise<MatchReport> {
     const minConfidence = options.minConfidence ?? 0.5
     const results: MatchResult[] = []
+    const previous = new Map((options.previous ?? []).map((r) => [r.position, r]))
 
     // Match each track in position order (ADR-0009 A1 §1.1)
     const tracks = [...file.tracks].sort((a, b) => a.position - b.position)
     for (const track of tracks) {
+      const done = previous.get(track.position)
+      if (done) {
+        results.push(done)
+        continue
+      }
       const request: MatchRequest = {
         track,
         position: track.position,
@@ -75,6 +89,7 @@ export class MatchingEngine {
       }
 
       results.push(result)
+      options.onResult?.(result)
     }
 
     // Add unsupported items to results
