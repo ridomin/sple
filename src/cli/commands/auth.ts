@@ -21,8 +21,13 @@ export interface AuthCommandContext {
   noBrowser?: boolean
   manual?: boolean
   json?: boolean
+  /** Suppress the informational stdout lines of login and logout (ADR-0007 §3.7). */
+  quiet?: boolean
   all?: boolean
 }
+
+/** Errors and warnings still reach stderr; stdout is dropped. */
+const quietIO = (io: CliIO): CliIO => ({ out: () => {}, err: io.err })
 
 /** Route `sple auth <subcommand>`. `args` are the positionals after "auth". */
 export async function handleAuthCommand(
@@ -55,7 +60,7 @@ export async function handleAuthCommand(
       }
       const mode: AuthMode = ctx.noBrowser ? 'no-browser' : ctx.manual ? 'manual' : 'loopback'
       const provider = ctx.registry.create(ctx.config.provider, ctx.config)
-      return handleLogin(provider, io, { mode })
+      return handleLogin(provider, ctx.quiet ? quietIO(io) : io, { mode })
     }
     case 'status': {
       const targets = ctx.providerExplicit
@@ -70,7 +75,7 @@ export async function handleAuthCommand(
       const targets = ctx.all
         ? resolveAllTargets(ctx.registry, ctx.config)
         : [resolveTarget(ctx.registry, ctx.config, ctx.config.provider)]
-      return handleLogout(targets, io)
+      return handleLogout(targets, ctx.quiet ? quietIO(io) : io)
     }
   }
 }
