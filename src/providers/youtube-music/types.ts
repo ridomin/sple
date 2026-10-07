@@ -39,8 +39,8 @@ export interface YouTubeVideo {
 }
 
 export interface YouTubeSearchResult {
-  id: { videoId?: string };
-  snippet: { title: string; description: string; channelTitle: string };
+  id: { kind?: string; videoId?: string; playlistId?: string; channelId?: string };
+  snippet: { title: string; description?: string; channelId?: string; channelTitle: string };
 }
 
 export interface YouTubeListResponse<T> {

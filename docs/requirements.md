@@ -75,7 +75,7 @@ Priority: **M** = must have (MVP), **S** = should have (MVP if time allows), **L
 | FR-EXP-3 | M | **CSV**: one row per track, for spreadsheets. |
 | FR-EXP-4 | — | *(removed; ID kept so references stay stable)* |
 | FR-EXP-5 | S | `--all` exports every readable playlist into a directory, one file per playlist, plus an index file. Playlists that can't be read are skipped with a warning (and a count) and listed in the index as `"status": "skipped", "reason": "not-owned"`. |
-| FR-EXP-6 | M | `sple export --liked` exports "Liked Songs" (the saved-tracks library) in the same formats as a playlist. `--all` includes it. It needs the `user-library-read` scope on Spotify. On providers where the export is approximate (e.g. YouTube official API: all liked videos, max 5,000), the CLI warns the user. |
+| FR-EXP-6 | M | `sple export --liked` exports "Liked Songs" (the saved-tracks library) in the same formats as a playlist. `--all` includes it. It needs the `user-library-read` scope on Spotify. On providers where the export is approximate (`likedSongs.read: 'approximate'`), the CLI warns the user. YouTube reads the `LM` playlist and is exact (spike S5). |
 | FR-EXP-7 | M (M3) | `sple import <file> [--provider X] [--name …] [--report path] [--min-confidence n] [--dry-run] [--yes]` creates a **private** playlist from a canonical file (or CSV) by matching tracks on the target provider (FR-MIG-2) and adding only the matched tracks. For CSV, the source provider is inferred from the refs. Output, exit codes and report format: [ADR-0007 A9](adr/0007-cli-conventions.md#a9-import), [ADR-0008 Amendment 1](adr/0008-canonical-playlist-file.md#amendment-1-spec-review-for-ports), [ADR-0009 Amendment 1](adr/0009-matching-strategy.md#amendment-1-spec-review-for-ports). |
 | FR-EXP-8 | M | The canonical JSON schema is documented and published as a JSON Schema file in the repo. The docs state that export files belong to the user and are outside `sple`'s data retention (NFR-9). |
 
@@ -167,7 +167,7 @@ Command grammar, output modes, `--json` shapes, error output, stdin input, parti
     - Desktop clients come with a `client_secret` that Google says is not confidential.
     - Apps left in "Testing" have refresh tokens that expire after 7 days, plus an unverified-app warning and a 100-user cap.
   - **No ISRC:** neither option exposes ISRCs, so matching relies on title + artist + duration only, with a risk of matching music videos or covers.
-  - **Liked Songs:** export through the official API is approximate. It returns all liked videos (music mixed with non-music), capped at 5,000.
+  - **Liked Songs:** the official API serves YouTube Music's "Liked Music" playlist `LM`, so the export is exact (spike S5, 2026-10-07; ADR-0002 Amendment 3). `LM` is not a documented ID; if YouTube withdraws it, fall back to liked videos (music mixed with non-music, max 5,000) and treat the export as approximate.
   - **Deleting playlists:** YouTube can truly delete them (`canDeletePlaylist=true`).
   - **YouTube API terms:**
     - Data may be stored for at most 30 days without a refresh, so match caches need a TTL of 30 days or less (user-created export files excepted; NFR-9).
@@ -246,7 +246,7 @@ Command grammar, output modes, `--json` shapes, error output, stdin input, parti
 | **M1 — Spotify MVP** | Spikes S1–S4 first. FR-AUTH (M), FR-SEARCH (M), FR-PL (M), FR-EXP (M, including Liked Songs), CLI-1…8. |
 | **M2 — Spotify polish** | FR-PL-5 (edit), FR-SEARCH-3 (field filters), FR-EXP-5 (export all), FR-PL-1 `--filter` option. |
 | **M3 — Import + matching** | FR-EXP-7, matching engine (strategy chain, metadata matching as the core), match report (tested against the fake provider). **Done 2026-10-05**; playlist creation landed in M3.1 (#23). The spec review of 2026-10-07 changed parts of the contract; see §12. |
-| **M4a — YouTube Music, read-only** | A preview adapter already exists in the TypeScript code (§12); it does not yet meet this milestone. Spikes S5–S7 first. `docs/PRIVACY.md` (NFR-9) before any YouTube data is stored. Google auth (login/logout with revocation/status), search, `playlist list/show`, export, approximate Liked export. Login requests `youtube` (owner decision 2026-10-07); reads also accept `youtube.readonly` (ADR-0003 Amendment 3). |
+| **M4a — YouTube Music, read-only** | A preview adapter already exists in the TypeScript code (§12); it does not yet meet this milestone. Spikes S5–S7 first. `docs/PRIVACY.md` (NFR-9) before any YouTube data is stored. Google auth (login/logout with revocation/status), search, `playlist list/show`, export, Liked export (the `LM` playlist, spike S5). Login requests `youtube` (owner decision 2026-10-07); reads also accept `youtube.readonly` (ADR-0003 Amendment 3). |
 | **M4b — YouTube Music, writes + migrate** | Create/remove playlists, populate-playlist, quota ledger and cost estimate, resumable `migrate` (FR-MIG). Enables Switcher persona. |
 | **Later** | Other providers, unscheduled. |
 
@@ -256,4 +256,4 @@ The specification (this file and the ADRs) is the target. This section lists whe
 
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
-| D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: `getLikedTracks` returns nothing; `search` ignores `--type`; `listPlaylists` ignores `--owned`/`--followed` and marks every playlist owned; no `docs/PRIVACY.md`; spikes S5–S7 not run | #65 |
+| D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: no `docs/PRIVACY.md`; spikes S5–S7 not run | #65 |

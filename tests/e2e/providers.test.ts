@@ -103,12 +103,12 @@ test('Provider Interface Compliance (E2E)', async (t) => {
       assert.strictEqual(youtube.capabilities.canDeletePlaylist, true)
     })
 
-    await t.test('Spotify has exact Liked Songs, YouTube has approximate', () => {
+    await t.test('Spotify and YouTube (LM playlist, spike S5) both read Liked Songs exactly', () => {
       const spotify = createSpotifyProvider('test-id')
       const youtube = createYouTubeMusicProvider('test-id', 'test-secret')
 
       assert.strictEqual(spotify.capabilities.likedSongs.read, 'exact')
-      assert.strictEqual(youtube.capabilities.likedSongs.read, 'approximate')
+      assert.strictEqual(youtube.capabilities.likedSongs.read, 'exact')
     })
   })
 })

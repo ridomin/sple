@@ -1,4 +1,4 @@
-import type { Provider, PageRequest } from '../../core/provider/provider.js'
+import type { Provider, PageRequest, PlaylistFilter, SearchItem } from '../../core/provider/provider.js'
 import type { ProviderCapabilities } from '../../core/provider/capabilities.js'
 import { HttpClient } from '../../core/http/client.js'
 import { YouTubeMusicAuth } from './auth.js'
@@ -7,7 +7,7 @@ import { mapYouTubeHttpError } from './errors.js'
 import { parseYouTubePlaylistId, parseYouTubeTrackRef } from './playlist-ref.js'
 import { YOUTUBE_QUOTA_MODEL, youTubeRequestCost } from './quota.js'
 import { QuotaLedger } from '../../core/quota/ledger.js'
-import { QuotaExhaustedError } from '../../core/provider/errors.js'
+import { QuotaExhaustedError, UsageError } from '../../core/provider/errors.js'
 
 const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
   official: true,
@@ -20,7 +20,8 @@ const YOUTUBE_MUSIC_CAPABILITIES: ProviderCapabilities = {
   maxSearchPageSize: 50,
   readPageSize: { playlists: 50, playlistItems: 50, liked: 50 },
   playlistItemsAccess: 'all',
-  likedSongs: { read: 'approximate', write: false, readCap: 5000 },
+  // Read exactly from YouTube Music's "Liked Music" playlist LM (spike S5).
+  likedSongs: { read: 'exact', write: false },
   isrcSearchMode: 'none',
   searchReturnsDuration: false,
   musicAwareSearch: false,
@@ -72,18 +73,44 @@ export function createYouTubeMusicProvider(
     parseTrackRef: parseYouTubeTrackRef,
 
     async search(q, page: PageRequest) {
+      if (q.type === 'album') {
+        throw new UsageError('YouTube Music search does not support --type album: the YouTube Data API has no albums')
+      }
       await auth.requireOperation('search')
-      const { items: tracks, nextPageToken, totalResults } = await client.searchTracks(
-        { text: q.text },
-        { limit: page.limit, cursor: page.cursor as string | undefined }
-      )
+      const request = { limit: page.limit, cursor: page.cursor as string | undefined }
 
-      // Convert CanonicalTrack to SearchItem
-      const items = tracks.map((track, idx) => ({
+      if (q.type === 'playlist' || q.type === 'artist') {
+        const { items, nextPageToken, totalResults } = await client.searchResources(
+          q.type === 'playlist' ? 'playlist' : 'channel', q.text, request
+        )
+        return {
+          items: items.flatMap((r): SearchItem[] => {
+            if (q.type === 'playlist' && r.id.playlistId) {
+              return [{
+                type: 'playlist', id: r.id.playlistId, ref: r.id.playlistId, name: r.snippet.title,
+                url: `https://www.youtube.com/playlist?list=${r.id.playlistId}`,
+                owner: { id: r.snippet.channelId ?? '', displayName: r.snippet.channelTitle },
+              }]
+            }
+            if (q.type === 'artist' && r.id.channelId) {
+              return [{
+                type: 'artist', id: r.id.channelId, ref: r.id.channelId, name: r.snippet.title,
+                url: `https://www.youtube.com/channel/${r.id.channelId}`,
+              }]
+            }
+            return []
+          }),
+          total: totalResults,
+          next: nextPageToken ? { cursor: nextPageToken } : undefined,
+        }
+      }
+
+      const { items: tracks, nextPageToken, totalResults } = await client.searchTracks({ text: q.text }, request)
+      const items = tracks.map((track, idx): SearchItem => ({
         id: track.refs?.['youtube-music'] || `yt-${idx}`,
         ref: track.refs?.['youtube-music'] || '',
         name: track.title,
-        type: 'track' as const,
+        type: 'track',
         track
       }))
 
@@ -94,7 +121,9 @@ export function createYouTubeMusicProvider(
       }
     },
 
-    async listPlaylists(page: PageRequest) {
+    async listPlaylists(page: PageRequest, filter?: PlaylistFilter) {
+      // The Data API lists only the user's own playlists (mine=true); saved playlists are not exposed.
+      if (filter === 'followed') return { items: [], total: 0 }
       await auth.requireOperation('listPlaylists')
       const { items: playlists, nextPageToken, totalResults } = await client.listPlaylists({
         limit: page.limit,
@@ -125,11 +154,16 @@ export function createYouTubeMusicProvider(
       }
     },
 
-    async getLikedTracks(_page: PageRequest) {
+    async getLikedTracks(page: PageRequest) {
       await auth.requireOperation('getLikedTracks')
-      // YouTube API doesn't expose liked songs directly; return empty for now
-      // TODO: Implement via favorites or watch history (M4a spike S5)
-      return { items: [] }
+      const { items, nextPageToken, totalResults } = await client.getLikedTracks(
+        { limit: page.limit, cursor: page.cursor as string | undefined }
+      )
+      return {
+        items,
+        total: totalResults,
+        next: nextPageToken ? { cursor: nextPageToken } : undefined
+      }
     },
 
     async createPlaylist(input) {
