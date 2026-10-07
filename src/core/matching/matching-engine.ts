@@ -10,7 +10,7 @@ import type { CanonicalPlaylistFile } from '../export/format.js'
 import { KnownRefStrategy } from './strategies/known-ref-strategy.js'
 import { IsrcStrategy } from './strategies/isrc-strategy.js'
 import { MetadataStrategy } from './strategies/metadata-strategy.js'
-import { AuthRequiredError, QuotaExhaustedError, RateLimitError } from '../provider/errors.js'
+import { isFatalProviderError } from '../provider/errors.js'
 
 /**
  * MatchingEngine orchestrates the three-strategy chain for track matching.
@@ -165,7 +165,7 @@ export class MatchingEngine {
       } catch (error) {
         // ADR-0009 A1 §1.4: these stop the whole run; anything else is recorded
         // and the next strategy runs.
-        if (isFatalMatchError(error)) throw error
+        if (isFatalProviderError(error)) throw error
         lastError = error instanceof Error ? error.message : String(error)
       }
     }
@@ -190,13 +190,4 @@ export class MatchingEngine {
       refs: {},
     }
   }
-}
-
-/** Errors that stop matching and propagate with their exit code (ADR-0009 A1 §1.4). */
-export function isFatalMatchError(error: unknown): boolean {
-  return (
-    error instanceof AuthRequiredError ||
-    error instanceof QuotaExhaustedError ||
-    error instanceof RateLimitError
-  )
 }

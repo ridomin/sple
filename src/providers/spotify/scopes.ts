@@ -11,6 +11,7 @@ export type SpotifyM1Operation = Extract<
   | 'readLiked'
   | 'createPlaylist'
   | 'removePlaylist'
+  | 'populatePlaylist'
 >
 
 /** Visibility of the playlist being created; decides which modify scope is needed. */
@@ -37,6 +38,7 @@ export const SPOTIFY_OPERATION_SCOPES: Readonly<Record<SpotifyM1Operation, reado
   readLiked: ['user-library-read'],
   createPlaylist: ['playlist-modify-public', 'playlist-modify-private'],
   removePlaylist: ['playlist-modify-public', 'playlist-modify-private'],
+  populatePlaylist: ['playlist-modify-public', 'playlist-modify-private'],
 }
 
 /** Scopes requested at login: the union of the M1 table, and nothing more. */

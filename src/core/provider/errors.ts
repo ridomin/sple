@@ -68,3 +68,16 @@ export class UsageError extends ProviderError {
     Object.setPrototypeOf(this, UsageError.prototype)
   }
 }
+
+/**
+ * Errors that stop a multi-step run (matching, populating a playlist) instead
+ * of being recorded per item: the next item would fail the same way
+ * (ADR-0009 A1 §1.4).
+ */
+export function isFatalProviderError(error: unknown): boolean {
+  return (
+    error instanceof AuthRequiredError ||
+    error instanceof QuotaExhaustedError ||
+    error instanceof RateLimitError
+  )
+}

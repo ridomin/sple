@@ -344,6 +344,6 @@ Login requests the union of the table: `playlist-read-private playlist-read-coll
 | `getLikedTracks` | `GET /v1/me/tracks?limit=(≤50)&offset=`; `addedAt` from `added_at` |
 | `createPlaylist` | `POST /v1/me/playlists` `{ name, description, public, collaborative }`; public + collaborative is a `UsageError` |
 | `removePlaylist` | `DELETE /v1/me/library?uris=spotify:playlist:<id>` → `{ action: 'unfollowed' }` |
-| `populatePlaylist` | `POST /v1/playlists/{id}/items` with the track URIs (body field per the February 2026 reference; not yet implemented, see requirements §12), at most 100 per request, in order |
+| `populatePlaylist` | `POST /v1/playlists/{id}/items` with body `{ "uris": [...] }` (201 + `snapshot_id`), at most 100 per request, in order. Refs that are not `spotify:track:<id>` go to `failed` (`Not a Spotify track URI`) without a request. Auth, quota and rate-limit errors propagate; any other error marks every ref in that batch failed with the error message and the next batch runs. `skipExisting` first pages through `GET /v1/playlists/{id}/items` and leaves out refs already present (neither added nor failed). |
 
 Track mapping: `title` = `name` (`"(untitled)"` if empty), `artists` = artist names (`["Unknown Artist"]` if none), `album` = `album.name`, `durationMs` = `duration_ms`, `isrc` = `external_ids.isrc` when present, otherwise `null`, `refs.spotify` = `uri`.

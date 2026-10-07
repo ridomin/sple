@@ -1,6 +1,12 @@
 import type { Provider, PageRequest, PlaylistFilter, PlaylistSummary, CanonicalTrack, SearchItem } from '../../core/provider/provider.js'
 import type { ProviderCapabilities } from '../../core/provider/capabilities.js'
-import { UsageError, AccessRestrictedError, NotFoundError, ProviderError } from '../../core/provider/errors.js'
+import {
+  UsageError,
+  AccessRestrictedError,
+  NotFoundError,
+  ProviderError,
+  isFatalProviderError,
+} from '../../core/provider/errors.js'
 import { HttpClient, type HttpLogEntry } from '../../core/http/client.js'
 import { SpotifyAuth } from './auth.js'
 import { parseSpotifyPlaylistRef } from './playlist-ref.js'
@@ -15,6 +21,8 @@ import {
 } from './schemas.js'
 
 export const SPOTIFY_API_BASE = 'https://api.spotify.com/v1'
+/** Canonical Spotify track ref (ADR-0003 §3.1). */
+const SPOTIFY_TRACK_URI = /^spotify:track:[A-Za-z0-9]{22}$/
 
 const SPOTIFY_CAPABILITIES: ProviderCapabilities = {
   // isrcSearchMode and playlistItemsAccess from spikes S1/S2 (ADR-0003 Amendment 1)
@@ -132,6 +140,23 @@ export function createSpotifyProvider(
    * access once instead of re-fetching the playlist for every page.
    */
   const readable = new Map<string, boolean>()
+
+  /** Every track URI already in a playlist (for populatePlaylist's skipExisting). */
+  const playlistTrackUris = async (id: string): Promise<Set<string>> => {
+    const uris = new Set<string>()
+    const limit = SPOTIFY_CAPABILITIES.maxTracksPerRequest
+    for (let offset: number | undefined = 0; offset !== undefined; ) {
+      const response: SpotifyPage = await getJson(`/playlists/${id}/items?limit=${limit}&offset=${offset}`, (x) =>
+        validateSpotifyPage(x, 'playlist items')
+      )
+      for (const item of mapSpotifyPlaylistItems(response.items, offset + 1)) {
+        const u = item.track?.refs.spotify
+        if (u) uris.add(u)
+      }
+      offset = nextOffset(response, offset, limit)?.offset
+    }
+    return uris
+  }
 
   const fetchPlaylist = async (id: string, userId: string) => {
     const raw = await getJson(`/playlists/${id}`, validateObject('playlist'))
@@ -338,8 +363,40 @@ export function createSpotifyProvider(
         .flatMap((item) => (item.type === 'track' ? [{ ref: item.ref, track: item.track }] : []))
         .slice(0, opts.limit)
     },
-    // Not an M1 operation: no scope in the M1 table.
-    populatePlaylist: () =>
-      Promise.reject(new UsageError('Playlist population is not available in this release')),
+    async populatePlaylist(ref, trackRefs, opts) {
+      await guard('populatePlaylist')
+      const id = playlistId(ref)
+      const added: string[] = []
+      const failed: { ref: string; error: string }[] = []
+
+      const existing = opts.skipExisting ? await playlistTrackUris(id) : new Set<string>()
+      const toAdd: string[] = []
+      for (const trackRef of trackRefs) {
+        if (!SPOTIFY_TRACK_URI.test(trackRef)) failed.push({ ref: trackRef, error: 'Not a Spotify track URI' })
+        else if (!existing.has(trackRef)) toAdd.push(trackRef)
+      }
+
+      // POST /playlists/{id}/items appends in request order, at most 100 per request.
+      const batchSize = SPOTIFY_CAPABILITIES.maxTracksPerRequest
+      for (let i = 0; i < toAdd.length; i += batchSize) {
+        const uris = toAdd.slice(i, i + batchSize)
+        try {
+          await http.request({
+            method: 'POST',
+            url: `${SPOTIFY_API_BASE}/playlists/${id}/items`,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uris }),
+          })
+          added.push(...uris)
+        } catch (error) {
+          // Auth, quota and rate limits would fail every later batch too.
+          if (isFatalProviderError(error)) throw error
+          const message = error instanceof Error ? error.message : String(error)
+          failed.push(...uris.map((u) => ({ ref: u, error: message })))
+        }
+      }
+
+      return { added, failed }
+    },
   }
 }
