@@ -1,13 +1,22 @@
 import { HttpClient } from '../../core/http/client.js'
 import { PlaylistSummary, CanonicalTrack } from '../../core/provider/provider.js'
-import { NotFoundError } from '../../core/provider/errors.js'
+import { NotFoundError, isFatalProviderError } from '../../core/provider/errors.js'
+import { YouTubeConflictError } from './errors.js'
 import * as YouTubeTypes from './types.js'
 import { parseYouTubePlaylistId } from './playlist-ref.js'
 
 export class YouTubeMusicHttpClient {
   private readonly baseUrl = 'https://www.googleapis.com/youtube/v3'
 
-  constructor(private httpClient: HttpClient) {}
+  /** Waits before each retry of a 409 on playlistItems.insert; its length is the retry count. */
+  private conflictRetryDelaysMs: number[]
+
+  constructor(
+    private httpClient: HttpClient,
+    options: { conflictRetryDelaysMs?: number[] } = {}
+  ) {
+    this.conflictRetryDelaysMs = options.conflictRetryDelaysMs ?? [1000, 2000]
+  }
 
   async listPlaylists(page?: { limit?: number; cursor?: string }): Promise<{ items: PlaylistSummary[]; nextPageToken?: string; totalResults?: number }> {
     const maxResults = page?.limit ?? 50
@@ -181,27 +190,44 @@ export class YouTubeMusicHttpClient {
           continue
         }
 
-        const url = new URL(this.baseUrl + '/playlistItems')
-        url.searchParams.set('part', 'snippet')
-
-        await this.httpClient.request({
-          method: 'POST',
-          url: url.toString(),
-          body: JSON.stringify({
-            snippet: {
-              playlistId,
-              resourceId: { kind: 'youtube#video', videoId }
-            }
-          })
-        })
-
+        await this.insertPlaylistItem(playlistId, videoId)
         added.push(trackRef)
       } catch (err) {
+        // Auth, quota and rate limits would fail every remaining track too.
+        if (isFatalProviderError(err)) throw err
         failed.push({ ref: trackRef, error: (err as Error).message })
       }
     }
 
     return { added, failed }
+  }
+
+  /** playlistItems.insert, retrying the transient 409 seen right after a playlist is created. */
+  private async insertPlaylistItem(playlistId: string, videoId: string): Promise<void> {
+    const url = new URL(this.baseUrl + '/playlistItems')
+    url.searchParams.set('part', 'snippet')
+    const request = {
+      method: 'POST',
+      url: url.toString(),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        snippet: {
+          playlistId,
+          resourceId: { kind: 'youtube#video', videoId }
+        }
+      })
+    }
+
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await this.httpClient.request(request)
+        return
+      } catch (err) {
+        const delay = this.conflictRetryDelaysMs[attempt]
+        if (!(err instanceof YouTubeConflictError) || delay === undefined) throw err
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
   }
 
   private async getVideos(videoIds: string[]): Promise<YouTubeTypes.YouTubeVideo[]> {
