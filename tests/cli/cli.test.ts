@@ -207,12 +207,10 @@ test('unknown playlist subcommand is a usage error', async () => {
   assert.match(r.err, /sple playlist --help/)
 })
 
-test('legacy commands exit with helpful message', async () => {
-  for (const cmd of ['migrate']) {
-    const r = await exec([cmd])
-    assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
-    assert.match(r.err, /later release/)
-  }
+test('migrate is routed: without --from/--to it is a usage error', async () => {
+  const r = await exec(['migrate'])
+  assert.strictEqual(r.code, EXIT_CODES.USAGE_ERROR)
+  assert.match(r.err, /--from and --to are required/)
 })
 
 test('--provider flag works end-to-end for commands', async () => {

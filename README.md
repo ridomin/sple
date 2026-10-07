@@ -7,7 +7,8 @@ A command-line tool for exporting, searching, and migrating playlists across mus
 - **Search** the Spotify or YouTube Music catalog for tracks, albums, artists and playlists
 - **Manage playlists:** list, show, create and remove
 - **Export** playlists and Liked Songs to a lossless JSON format or CSV
-- **Import** an exported file into another provider: tracks are matched by ref, ISRC or metadata, with a match report (a one-step `migrate` command is planned)
+- **Import** an exported file into another provider: tracks are matched by ref, ISRC or metadata, with a match report
+- **Migrate** playlists or Liked Songs from one provider to another in one step, resumable across days of YouTube quota
 - **Authentication:** browser, no-browser and manual OAuth flows, with tokens stored locally and refreshed automatically
 
 ## Getting Started
@@ -123,7 +124,18 @@ sple import road-trip.json --provider youtube-music
 sple import road-trip.json --provider youtube-music --dry-run --report report.json
 ```
 
-`import` matches each track on the target provider (known ref, then ISRC, then title, artist and duration), prints a match report, and after you confirm creates a private playlist with the matched tracks. See the [import guide](docs/user/import.md).
+`import` matches each track on the target provider (known ref, then a cached match, then ISRC, then title, artist and duration), prints a match report, and after you confirm creates a private playlist with the matched tracks. See the [import guide](docs/user/import.md).
+
+### Migrate
+
+```bash
+sple migrate --from spotify --to youtube-music "Road trip" --dry-run
+sple migrate --from spotify --to youtube-music --liked
+sple migrate --from spotify --to youtube-music --all --report reports/
+sple migrate --resume last
+```
+
+`migrate` reads the source playlists, matches every track on the target, and creates a private playlist for each source with the matched tracks. Progress is saved, so a migration stopped by the YouTube quota continues with `--resume` the next day. See the [migrate guide](docs/user/migrate.md).
 
 ### Global options
 
