@@ -10,12 +10,14 @@ export interface MatchResult {
   status: 'matched' | 'low-confidence' | 'unmatched' | 'unsupported'
   candidate?: MatchCandidate // Best match (if status is matched or low-confidence)
   confidence?: number // Confidence score (0-1)
-  strategies?: string[] // Which strategies were tried
+  strategies: string[] // Strategies tried, in order (ends with the one that matched)
   error?: string // Error message if matching failed
 }
 
 // Collection of all match results for a playlist
+/** Match report v1 (ADR-0009 Amendment 1 §6). */
 export interface MatchReport {
+  schemaVersion: 1
   importedAt: string // ISO 8601 UTC
   sourceFile: {
     path: string
@@ -24,7 +26,8 @@ export interface MatchReport {
     trackCount: number
   }
   targetProvider: string
-  targetPlaylistName?: string // Name for the new playlist
+  targetPlaylistName: string // --name or the file's playlist name
+  minConfidence: number
   results: MatchResult[]
   summary: {
     total: number
@@ -33,7 +36,7 @@ export interface MatchReport {
     unmatched: number
     unsupported: number
   }
-  recommendations?: string[] // Suggested actions for the user
+  recommendations: string[] // Suggested actions for the user
 }
 
 // Request to match a single track

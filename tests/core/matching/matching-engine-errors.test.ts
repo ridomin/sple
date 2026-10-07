@@ -66,7 +66,7 @@ describe('MatchingEngine errors', () => {
     })
     const report = await new MatchingEngine().match(makeFile(), provider, provider.capabilities)
     assert.strictEqual(report.results[0].status, 'matched')
-    assert.deepStrictEqual(report.results[0].strategies, ['metadata'])
+    assert.deepStrictEqual(report.results[0].strategies, ['known-ref', 'isrc', 'metadata'])
   })
 
   test('when every strategy errors, the track is unmatched with the last error message', async () => {

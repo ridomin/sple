@@ -130,10 +130,8 @@ Examples:
   const report = await engine.match(canonicalFile, provider, provider.capabilities, {
     minConfidence,
     sourceFilePath: filePath,
+    targetPlaylistName: playlistName,
   })
-
-  // Set playlist name in report (use provided name or source name)
-  report.targetPlaylistName = playlistName || canonicalFile.playlist.name
 
   // Step 4: Output match report
   log.info(`Match results: ${report.summary.matched} matched, ${report.summary.lowConfidence} low-confidence, ${report.summary.unmatched} unmatched`)

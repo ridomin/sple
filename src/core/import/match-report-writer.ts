@@ -48,7 +48,7 @@ export class MatchReportWriter {
     lines.push('')
 
     // Recommendations
-    if (report.recommendations && report.recommendations.length > 0) {
+    if (report.recommendations.length > 0) {
       lines.push('Recommendations')
       lines.push('---------------')
       for (const rec of report.recommendations) {
@@ -101,12 +101,9 @@ export class MatchReportWriter {
     return text
   }
 
-  /**
-   * Format a percentage value with value/total.
-   * Returns "0%" for zero total.
-   */
+  /** `round(100 · value / total)`, halves up; `0%` when total is 0 (ADR-0009 A1 §6). */
   private percentage(value: number, total: number): string {
     if (total === 0) return '0%'
-    return `${Math.round((value / total) * 100)}%`
+    return `${Math.round((100 * value) / total)}%`
   }
 }

@@ -257,7 +257,6 @@ The specification (this file and the ADRs) is the target. This section lists whe
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
 | D1 | `readPageSize` capability for reads (ADR-0003 A2) | `playlist show` and `export` use `maxTracksPerRequest` as the page size (YouTube: 1 item per request); Liked Songs uses `min(50, maxTracksPerRequest)`; `playlist list` and the resolver hardcode 50 | #38 |
-| D8 | Match report v1 (ADR-0009 A1 §6) | No `schemaVersion` or `minConfidence`; `strategies` lists only the winning strategy on a match | #44 |
 | D9 | `import` output contract (ADR-0007 A9) | stdout is always the text report (`--json` and `--quiet` have no effect on stdout); short flags `-p`/`-n`; the non-TTY check happens after matching; declining exits 0 | #45 |
 | D10 | Spotify exports `external_ids.isrc` (FR-EXP-2) | `isrc` is hard-coded to `null` | #28 |
 | D11 | Fake provider opt-in (PRV-6) | Always registered, listed in help and `auth status` | #46 |

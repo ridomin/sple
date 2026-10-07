@@ -43,13 +43,14 @@ export class MatchingEngine {
     file: CanonicalPlaylistFile,
     provider: Provider,
     capabilities: ProviderCapabilities,
-    options: { minConfidence?: number; sourceFilePath?: string } = {}
+    options: { minConfidence?: number; sourceFilePath?: string; targetPlaylistName?: string } = {}
   ): Promise<MatchReport> {
     const minConfidence = options.minConfidence ?? 0.5
     const results: MatchResult[] = []
 
-    // Match each track in the file
-    for (const track of file.tracks) {
+    // Match each track in position order (ADR-0009 A1 §1.1)
+    const tracks = [...file.tracks].sort((a, b) => a.position - b.position)
+    for (const track of tracks) {
       const request: MatchRequest = {
         track,
         position: track.position,
@@ -76,6 +77,7 @@ export class MatchingEngine {
         position: unsupportedItem.position,
         status: 'unsupported',
         error: `Unsupported item type: ${unsupportedItem.kind}`,
+        strategies: [],
       })
     }
 
@@ -107,6 +109,7 @@ export class MatchingEngine {
     }
 
     return {
+      schemaVersion: 1,
       importedAt: new Date().toISOString(),
       sourceFile: {
         path: options.sourceFilePath ?? '',
@@ -115,6 +118,8 @@ export class MatchingEngine {
         trackCount: file.playlist.trackCount,
       },
       targetProvider: provider.id,
+      targetPlaylistName: options.targetPlaylistName || file.playlist.name,
+      minConfidence,
       results,
       summary,
       recommendations,
@@ -149,7 +154,9 @@ export class MatchingEngine {
 
     // Try each strategy in priority order
     let lastError: string | undefined
+    const tried: string[] = []
     for (const strategy of applicableStrategies) {
+      tried.push(strategy.name)
       try {
         const candidate = await strategy.execute(request, provider)
         if (candidate) {
@@ -159,7 +166,7 @@ export class MatchingEngine {
             status: 'matched',
             candidate,
             confidence: candidate.confidence,
-            strategies: [strategy.name],
+            strategies: tried,
           }
         }
       } catch (error) {
@@ -175,7 +182,7 @@ export class MatchingEngine {
       track: request.track,
       position: request.position,
       status: 'unmatched',
-      strategies: applicableStrategies.map((s) => s.name),
+      strategies: tried,
       ...(lastError !== undefined && { error: lastError }),
     }
   }
