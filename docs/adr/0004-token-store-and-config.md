@@ -1,6 +1,6 @@
 # ADR 0004: Token store and config
 
-- **Status:** Accepted (2026-10-01)
+- **Status:** Accepted (2026-10-01); amended 2026-10-07 (Amendment 1)
 - **Date:** 2026-10-01
 - **Deciders:** project owner (user); architect (author)
 - **Related:** `docs/requirements.md` FR-AUTH-1, FR-AUTH-2, FR-AUTH-3, FR-AUTH-4, FR-AUTH-6, CLI-5, CLI-6, NFR-2, NFR-3; ADR 0003 (Provider interface); ADR 0002 (YouTube Music auth)
@@ -24,6 +24,7 @@ Configuration is stored in a single `.env` file in the user's platform-specific 
 - **Linux:** `~/.config/sple/.env` (or `${XDG_CONFIG_HOME}/sple/.env`)
 - **macOS:** `~/Library/Application Support/sple/.env`
 - **Windows:** `%APPDATA%\sple\.env` (typically `C:\Users\<user>\AppData\Roaming\sple\.env`)
+- **Fallback:** `~/.sple/.env` on Windows when `APPDATA` is unset, and on any other platform. macOS does not read `XDG_CONFIG_HOME`.
 
 The `.env` file uses environment variable syntax (`KEY=value`). The file is loaded once at CLI startup by the config module.
 
@@ -34,11 +35,16 @@ The `.env` file uses environment variable syntax (`KEY=value`). The file is load
 | `SPLE_SPOTIFY_CLIENT_ID` | Yes (Spotify) | Spotify app Client ID | `abc123def456` |
 | `SPLE_YOUTUBE_MUSIC_CLIENT_ID` | Yes (YouTube) | Google Desktop app Client ID (OAuth) | `123456789.apps.googleusercontent.com` |
 | `SPLE_GOOGLE_CLIENT_SECRET` | Yes (YouTube) | Google Desktop app client secret (non-confidential, stored to enable refresh tokens) | `secret_xyz` |
-| `SPLE_DEFAULT_PROVIDER` | No | Default provider when `--provider` is not specified. Defaults to `spotify`. | `spotify` or `youtube-music` |
+| `SPLE_DEFAULT_PROVIDER` | No | Default provider when `--provider` is not specified. Defaults to `spotify`. An unknown value is a `UsageError` (exit 2). | `spotify` or `youtube-music` |
+| `SPLE_ENABLE_FAKE_PROVIDER` | No | `1` registers the `fake` provider in the CLI (tests and demos only; ADR 0003 Amendment 2). | `1` |
+
+Values are trimmed; an empty value counts as unset.
 
 Comments and empty lines are allowed in the .env file. Tokens are **never** stored here; they live in `tokens.json` (see below).
 
-**Precedence (CLI-6):** flags > environment variables (including those from .env) > .env file > defaults. Each CLI command accepts flags that override config.
+**Precedence (CLI-6):** flags > process environment > `.env` file > defaults. A variable already set in the process environment is never overwritten by the file. Only `--provider` has a flag today; client IDs and the secret come from the environment or the file.
+
+**Missing client configuration:** a command that needs a provider whose client ID is not set fails with `UsageError` (exit 2): `Missing <Provider> client ID. Set <VAR> in your environment or .env file.` `auth status` and `auth logout` still work for such a provider from `tokens.json` alone (logout then deletes local tokens and warns that access was not revoked).
 
 ### 2. Token file: tokens.json in the user's config directory
 
@@ -110,9 +116,11 @@ Tokens are stored in a versioned JSON file alongside `.env`:
 
 Both modules handle schema versioning and migration (if tokens.json is v0 or v1, ensure it's upgraded to v1).
 
-**Environment variable loading** — Rather than a custom .env loader, environment variables are loaded using Node's built-in `--env-file` flag, which is available in Node.js 21.7.0+. The CLI entry point is invoked as `node --env-file=<configDir>/.env dist/cli/cli.js` or wrapped in an npm script. This simplifies the code and eliminates a custom module.
+**Environment variable loading** — The CLI loads `<configDir>/.env` once at startup, before parsing arguments, with Node's `process.loadEnvFile` (Node 20.13+). A missing file is not an error. A file that cannot be parsed prints `Failed to load .env: <reason>` to stderr and the CLI continues without it. Ports use any dotenv parser that supports the subset in Amendment 1.
 
 ### 4. HTTP client integration (from ADR-0003)
+
+> Superseded by ADR 0010 (refresh timing, single-flight, persistence). Kept as background.
 
 Each adapter's HTTP client (initialized per provider) integrates with the token store:
 
@@ -160,3 +168,31 @@ Token refresh is transparent to the `Provider` interface and CLI.
 - XDG Base Directory specification: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 - macOS app support directories: https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXPathnames/MacOSXPathnames.html
 - Windows %APPDATA%: https://docs.microsoft.com/en-us/windows/win32/shell/knownfolderid
+
+## Amendment 1 (spec review for ports)
+
+- **Date:** 2026-10-07
+- **Why:** record what M0–M3 built, so another implementation reads and writes the same files. Differences in the TypeScript code are tracked in `docs/requirements.md` §12.
+
+| Change | Why |
+|---|---|
+| `.env` is loaded by the CLI at startup (`process.loadEnvFile`), not with `node --env-file` | `npx sple` and the `bin` entry cannot pass Node flags. Process environment wins over the file. |
+| Fallback config directory `~/.sple` | Implemented for Windows without `APPDATA` and unknown platforms. |
+| New variable `SPLE_ENABLE_FAKE_PROVIDER` | ADR 0003 Amendment 2. |
+| `StoredToken.displayName?: string` | Added in ADR 0003 Amendment 1 (M1-7); listed here so the token schema is in one place. |
+| Token refresh moved to ADR 0010 | §4's sketch is replaced by the exact retry, refresh and persistence rules. |
+
+### `.env` syntax (subset ports must accept)
+
+- One `KEY=value` per line; blank lines and lines starting with `#` are ignored.
+- The value may be wrapped in single or double quotes, which are removed.
+- No variable expansion, no multi-line values.
+
+### `tokens.json` rules
+
+- **Shape:** `{ "schemaVersion": 1, "providers": { "<providerId>": { "accounts": [StoredToken] } } }`. Only `accounts[0]` is read or written (one account per provider).
+- **`StoredToken`:** `accessToken` (non-empty string), `refreshToken?` (string), `expiresAt?` (ISO 8601 UTC), `scopes` (string array, may be empty), `userId` (non-empty string), `displayName?` (string), `grantedAt` (non-empty ISO 8601 string). A token that breaks these rules is rejected on load and on save.
+- **Read:** a missing file means "not logged in" for every provider. `schemaVersion` other than 1 is an error. A missing provider entry or an empty `accounts` array means "not logged in".
+- **Write:** create the config directory if needed, read the current file (or start a new v1 document), replace `accounts[0]` for the provider, and write the whole file as UTF-8 JSON with 2-space indentation. On POSIX the file must be created with mode `0600` (never readable by others, even briefly).
+- **Delete (logout):** remove the provider's entry entirely; other providers are untouched. A missing file is not an error.
+- Concurrent writers are not locked against; the last write wins.

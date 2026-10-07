@@ -1,6 +1,6 @@
 # ADR 0007: CLI conventions and output contracts
 
-- **Status:** Accepted (2026-10-02)
+- **Status:** Accepted (2026-10-02); amended 2026-10-07 (Amendment 1)
 - **Date:** 2026-10-02
 - **Deciders:** project owner (user); architect (author)
 - **Related:** `docs/requirements.md` CLI-1 to CLI-8, NFR-3, NFR-4, FR-SEARCH-1/2/4, FR-PL-1 to FR-PL-4, FR-PL-6, FR-EXP-1/6, FR-AUTH-4; ADR 0003 (Provider interface, incl. Amendment 1); ADR 0005 (Canonical track model); ADR 0008 (Canonical playlist file, M1-25)
@@ -32,9 +32,10 @@ This ADR fixes those details for every M1 command. Commands added later follow t
 | `--quiet` | IDs only (§2.4) |
 | `--verbose` | Info logs on stderr (§6) |
 | `--debug` | `--verbose` plus HTTP request lines (§6) |
+| `--yes` | Answer yes to confirmation prompts (Amendment 1) |
 | `--help`, `-h` / `--version`, `-v` | As above |
 
-Flags may appear before or after positionals. `--` ends flag parsing (so a search query may start with `-`).
+Flags may appear before or after positionals. `--` ends flag parsing (so a search query may start with `-`). Global flags are recognised anywhere before `--`; `--help`/`-h` is global only before the command name (after it, the command prints its own help).
 
 ### 2. Output modes (CLI-2)
 
@@ -165,7 +166,7 @@ export interface PlaylistShowOutput {
 }
 ```
 
-Positions number every item in the playlist, supported or not, so `tracks` and `unsupportedItems` together cover `1..n` without gaps. A playlist whose tracks are not readable fails before any output (exit 1, FR-PL-2).
+~~Positions number every item in the playlist, supported or not.~~ **Amendment 1:** providers drop unsupported items (local files, episodes, unavailable), so positions number the returned tracks `1..k` without gaps and `unsupportedItems` is always `[]` for now. When the provider reports a `total` larger than `k`, stderr gets `sple: warning: <total-k> of <total> items in "<name>" are not supported (local files, podcast episodes, or unavailable tracks) and are not shown`. A playlist whose tracks are not readable fails before any output (exit 1, FR-PL-2).
 
 #### 3.4 `sple playlist create`
 
@@ -262,7 +263,7 @@ Without `--provider`, there is one entry per registered provider (CLI-5, FR-AUTH
 
 ### 5. Partial failure (NFR-4)
 
-Applies to commands that process several items. In M1 that is `export` with several playlists; `show` and `remove` take exactly one.
+Applies to commands that process several items: `export` with several playlists, and adding tracks in `import` (Amendment 1). `show` and `remove` take exactly one.
 
 - **Before any item is processed**, the command validates flags, reads stdin, and resolves every input to a playlist. Any usage problem, including an ambiguous name, exits 2 and nothing is written.
 - Then each item is processed in order. A per-item failure (not readable, not found, provider error) is reported on stderr as it happens and the command continues with the next item.
@@ -330,3 +331,122 @@ Applies to commands that process several items. In M1 that is `export` with seve
 - **Errors as JSON on stdout with `--json`:** rejected. stdout would carry two shapes, and `cmd --json | jq` would treat an error as data.
 - **Abort on first failure in multi-item commands:** rejected by NFR-4.
 - **Logging with the `debug` package:** rejected. A small in-house logger with mandatory redaction is less code than wrapping a dependency so it cannot bypass redaction.
+
+## Amendment 1 (spec review for ports)
+
+- **Date:** 2026-10-07
+- **Why:** record the per-command rules M1–M3 implemented, add the `import` contract, and settle the unsupported-items question, so the CLI can be rebuilt in another language with the same behavior. Differences in the TypeScript code are tracked in `docs/requirements.md` §12.
+
+### A1. Global behavior
+
+- `--yes` is a global flag; commands also accept it after their name.
+- `--version`/`-v` anywhere prints `sple v<version>` and exits 0. `sple` with no command, or `--help` before the command, prints the root help and exits 0.
+- An unknown option before the command, an unknown command, or a missing `--provider` value → exit 2.
+- `migrate` is a reserved command: `Command 'migrate' is available in a later release` (exit 2).
+- `--provider` choices in help and messages list registered providers only (`fake` only with `SPLE_ENABLE_FAKE_PROVIDER=1`).
+- `--json` and `--quiet` together are rejected before any request (exit 2).
+- Table headers are the column names below, lower-case. Flexible (shrinkable) columns are `title`, `name`, `album`, `artists`, `description`, `url`.
+
+### A2. Error messages (§4)
+
+`sple: <message>` where `<message>` is built from the error type (ADR 0003 §4), then redacted (§6):
+
+| Error | Message |
+|---|---|
+| `AuthRequiredError` with `scope` | `Missing scope '<scope>'. Run "sple auth login" to grant <scope>` |
+| `AuthRequiredError` without `scope` | `Authentication required. Run "sple auth login" to log in.` |
+| `NotFoundError` | `<resourceType> not found: <message>` |
+| `QuotaExhaustedError` | `Quota exhausted: <bucket>` plus ` (resets at <ISO>)` when `resetAt` is known |
+| `RateLimitError` | `Rate limited. Please try again later.` plus ` Retry after <ceil(retryAfterMs/1000)>s.` when known |
+| `AccessRestrictedError` | `Access restricted: <message>` |
+| anything else | the error's message |
+
+### A3. `search`
+
+`sple search <query…> [--type track|album|artist|playlist] [--limit N] [--offset N | --all [--max-results N]]`
+
+- Positionals are joined with one space to form the query; an empty query → exit 2.
+- `--limit` default **10**, integer ≥ 1. `--offset` default 0, integer ≥ 0, and > 0 only on `offset` providers. `--offset + --limit ≤ 1000`.
+- `--all` reads until results run out or `--max-results` (default **100**, maximum **1000**) is reached. `--all` with `--offset` or `--limit`, and `--max-results` without `--all`, → exit 2.
+- Requests are split into pages of `maxSearchPageSize` (Spotify: `--limit 25` → 10 + 10 + 5).
+- `next.offset` is set only on offset providers, when the provider reported more results and the read stopped at the limit or cap, and the next offset is < 1000.
+- Columns: track `title, artists, album, duration, id`; album `name, artists, released, tracks, id`; artist `name, id`; playlist `name, owner, tracks, id`. Empty result → stderr `No results for "<query>" in <Provider>`.
+
+### A4. `playlist list`
+
+`sple playlist list [--owned | --followed]` (`--filter` arrives in M2, FR-PL-1). Both flags → exit 2. Reads every page with `readPageSize.playlists`; when the first page reports `total` on an offset provider, the remaining pages are fetched with at most 4 concurrent requests, in order. `--owned` keeps `owned === true`, `--followed` keeps `owned === false`. Empty → stderr `No playlists.`
+
+### A5. `playlist show`
+
+`sple playlist show <playlist|->`. Resolution per ADR 0003 §3.2. Pages of `readPageSize.playlistItems`. A readable playlist the user does not own (on a provider whose access is not `'all'`) prints `sple: note: "<name>" is owned by <owner>; readable via collaborator access` on stderr. The not-readable message (exit 1) is: `cannot read the tracks of "<name>" (owned by <owner>). <Provider> only returns the tracks of playlists you own[ or collaborate on]. Workaround: in the <Provider> app, copy its tracks into a playlist you own, then use that playlist.` Empty playlist → stderr `Playlist "<name>" has no tracks.` `--quiet` prints `refs[<provider>]` per track.
+
+### A6. `playlist create`
+
+`sple playlist create <name> [--description <text>] [--public | --private] [--collaborative] [--dry-run]`
+
+- Exactly one non-empty name (quote names with spaces), else exit 2.
+- Default visibility is private. `--public` with `--private` → exit 2. `--collaborative` means private and cannot be combined with `--public` (exit 2). `--collaborative` on a provider without `supportsCollaborative` → exit 2.
+- Table sentence: `Created <public|private|collaborative> playlist "<name>" (<id>)[ <url>]`; dry run: `[dry-run] Would create <visibility> playlist "<name>" in <Provider>`.
+
+### A7. `playlist remove`
+
+`sple playlist remove <playlist|-> [--yes] [--dry-run]`
+
+- Confirmation rules are checked before any request: without `--yes` (and not `--dry-run`), `-` input or a non-TTY stdin → exit 2.
+- Before the prompt, stderr gets the provider notice: `This permanently deletes the playlist from <Provider>.` (`canDeletePlaylist`) or `<Provider> cannot delete playlists; this unfollows it (removes it from your library). Owned playlists can be restored from your <Provider> account page.`
+- Prompt on stderr: `<Delete|Unfollow> playlist "<name>" (<id>)? (y/n): `; `y` or `yes` (any case) confirms. Anything else → stderr `Aborted; nothing was changed.`, **exit 1**.
+- Table sentence: `<Deleted|Unfollowed> playlist "<name>" (<id>)`; dry run: `[dry-run] Would <delete|unfollow> playlist "<name>" (<id>) in <Provider>`, with the notice on stderr.
+
+### A8. `export`
+
+`sple export <playlist…|-> [--liked] [-o <file|dir>] [--format json|csv] [--force]`; `--all` arrives in M2 (FR-EXP-5) and is rejected with exit 2 until then.
+
+- **Validation first:** format is `json` (default) or `csv`; `-` at most once and alone; no empty arguments; at least one playlist or `--liked`. Several sources without `-o` → exit 2. `--json` without `-o` → exit 2.
+- **Destination:** without `-o`, the single source is written to stdout. With `-o`, the path is a **directory** when there are several sources, when it ends with a path separator, or when it is an existing directory; otherwise it is a **file** and its parent directory must exist. A directory path that exists as a file → exit 2. The directory is created if needed.
+- **File names in a directory:** `<slug(name)>-<id>.<format>`; Liked Songs is `liked-songs.<format>`. `slug`: NFKD, drop combining marks, lower-case, runs of characters outside `[a-z0-9]` → `-`, trim `-`, cut to 60 characters, trim a trailing `-`; empty → `playlist`.
+- **Overwrite:** an existing target without `--force` → exit 2, checked for every target before anything is written. Files are written atomically (temporary file in the same directory, then rename); a failed write leaves no partial file.
+- **Resolution:** every input is resolved first (ADR 0003 §3.2). An ambiguous name, or an auth/quota/rate-limit error, stops with nothing written. Other resolution errors are reported and skipped (§5). An input resolving to a playlist already listed → stderr warning, exported once.
+- **Reading:** playlist items in pages of `readPageSize.playlistItems`, Liked Songs in pages of `readPageSize.liked`. Unsupported items are dropped as in A5 (warning ends `and were not exported`). `source.userId` is the logged-in user's ID when `auth.status()` returns one.
+- **Summary (stderr):** `sple: exported <n> playlist(s)` on success (not with `--json`/`--quiet`), or the §5 partial-failure line.
+
+### A9. `import`
+
+`sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--dry-run] [--yes]`. The target provider is the global `--provider`. There are no short flags.
+
+**Order of work**
+
+1. Validate flags: exactly one file; `--min-confidence` is a number in [0, 1] (default 0.5); unless `--dry-run` or `--yes`, stdin must be a TTY (else exit 2 before any request).
+2. Read the file (ADR 0008 Amendment 1). An unreadable or invalid file → exit 2 (`Failed to read file: <reason>`).
+3. Match every track on the target provider (ADR 0009 Amendment 1). Auth, quota and rate-limit errors stop the command with their exit code and nothing is created.
+4. Write `--report <path>` if given: JSON (`MatchReport`) when the path ends in `.json` (any case), otherwise the text report. An existing file is overwritten.
+5. Print the result (below) and, on stderr, `<matched>/<total> tracks ready to import (<pct>%)` and, when there are any, `<n> low-confidence match(es) skipped (below --min-confidence <x>)`.
+6. Unless `--dry-run`: confirm on stderr with `Create playlist "<name>" with <n> matched track(s)? (y/n): ` (skipped with `--yes`). Declining → `Aborted; nothing was changed.`, exit 1.
+7. Create a **private**, non-collaborative playlist named `--name` or the file's `playlist.name`, then `populatePlaylist` with the `matched` refs in position order (`skipExisting: false`). Low-confidence and unmatched tracks are not added.
+
+**Output modes**
+
+| Mode | stdout |
+|---|---|
+| table / TSV | The text report (ADR 0009 Amendment 1), then `Created private playlist "<name>" (<id>)[ <url>] with <added> of <requested> tracks` (or `[dry-run] Would create private playlist "<name>" with <n> tracks`). Import has no tabular result, so TSV mode prints the same text. |
+| `--quiet` | The created playlist's ID; nothing on a dry run. |
+| `--json` | One `ImportOutput` document. |
+
+```ts
+export interface ImportOutput {
+  dryRun: boolean
+  report: MatchReport                                    // ADR 0009 Amendment 1
+  /** Absent on a dry run. */
+  playlist?: { id: string; ref: string; name: string; url?: string }
+  added: number                                          // 0 on a dry run
+  failed: Array<{ ref: string; error: string }>          // per-track populate failures
+}
+```
+
+**Exit codes:** 0 when every matched track was added (or on a dry run). Per-track add failures → each on stderr as `sple: failed to add <ref>: <error>`, then `sple: added <a> of <n> tracks; <f> failed (see above)`, exit 1, and with `--json` the `PartialFailure` `ErrorOutput` on stderr while stdout still gets `ImportOutput`. If `populatePlaylist` throws, stderr gets `sple: playlist <url or id> was created, but adding tracks failed` and the command exits with the thrown error's code.
+
+### A10. `auth`
+
+- `auth login [--no-browser | --manual]` (both → exit 2); output per ADR 0010 §2. `--quiet` suppresses the stdout lines.
+- `auth status [--json]`: human form per provider: `<Provider> (<id>): logged in` / `: not logged in`, then `  User: [<displayName> ](<id>)`, `  Scopes: <space-joined or (none)>`, `  Token expires: <ISO>`. A token that has already expired is reported as `expired` (stderr warning `<Provider> access token has expired; it will be refreshed on next use`); one expiring within 5 minutes gets `Warning: <Provider> access token expires in less than 5 minutes`. Status is read from `tokens.json` and makes no network call.
+- `auth logout [--provider X | --all]` (both → exit 2): stdout `Revoked access with <Provider>` or `Logged out from <Provider>`, then `Deleted: <items>` and the provider's notice. Every target is attempted; the exit code is that of the first failure.
+- `--no-browser`/`--manual` on other subcommands, `--all` outside logout, and `--json` outside status → exit 2.
