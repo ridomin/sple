@@ -4,7 +4,13 @@ import { AuthRequiredError } from '../../core/provider/errors.js'
 /** Spotify operations used by M1 commands. Later operations add their scopes here. */
 export type SpotifyM1Operation = Extract<
   ProviderOperation,
-  'search' | 'listPlaylists' | 'getPlaylistItems' | 'readLiked' | 'createPlaylist' | 'removePlaylist'
+  | 'search'
+  | 'searchTracks'
+  | 'listPlaylists'
+  | 'getPlaylistItems'
+  | 'readLiked'
+  | 'createPlaylist'
+  | 'removePlaylist'
 >
 
 /** Visibility of the playlist being created; decides which modify scope is needed. */
@@ -21,10 +27,11 @@ export interface PlaylistVisibility {
  *   Spike S4(b) is unverified, so it requires both modify scopes (the playlist's
  *   visibility is not known before the call). If S4(b) shows a 403 for private
  *   playlists, add `user-library-modify` here.
- * - `search` needs a logged-in user but no scope.
+ * - `search` and `searchTracks` need a logged-in user but no scope.
  */
 export const SPOTIFY_OPERATION_SCOPES: Readonly<Record<SpotifyM1Operation, readonly string[]>> = {
   search: [],
+  searchTracks: [],
   listPlaylists: ['playlist-read-private', 'playlist-read-collaborative'],
   getPlaylistItems: ['playlist-read-private'],
   readLiked: ['user-library-read'],

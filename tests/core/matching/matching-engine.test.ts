@@ -44,7 +44,7 @@ describe('MatchingEngine', () => {
           itemsReadable: true,
         }),
         removePlaylist: async () => ({ action: 'deleted' as const }),
-        resolveTrack: async () => [],
+        searchTracks: async () => [],
         populatePlaylist: async () => ({ added: [], failed: [] }),
         auth: {
           login: async () => ({ loggedIn: false, scopes: [] }),
@@ -90,22 +90,18 @@ describe('MatchingEngine', () => {
         id: 'spotify',
         displayName: 'Spotify',
         capabilities: mockCapabilities,
-        search: async () => ({
-          items: [
-            {
-              id: 'track-456',
-              ref: 'spotify:track:456',
-              type: 'track' as const,
-              name: 'Song B',
-              track: {
-                title: 'Song B',
-                artists: ['Artist B'],
-                durationMs: 300000,
-                refs: { spotify: 'spotify:track:456' },
-              },
+        search: async () => ({ items: [] }),
+        searchTracks: async () => [
+          {
+            ref: 'spotify:track:456',
+            track: {
+              title: 'Song B',
+              artists: ['Artist B'],
+              durationMs: 300000,
+              refs: { spotify: 'spotify:track:456' },
             },
-          ],
-        }),
+          },
+        ],
         parsePlaylistRef: () => null,
         listPlaylists: async () => ({ items: [] }),
         getPlaylist: async () => ({
@@ -127,7 +123,6 @@ describe('MatchingEngine', () => {
           itemsReadable: true,
         }),
         removePlaylist: async () => ({ action: 'deleted' as const }),
-        resolveTrack: async () => [],
         populatePlaylist: async () => ({ added: [], failed: [] }),
         auth: {
           login: async () => ({ loggedIn: false, scopes: [] }),
@@ -200,7 +195,7 @@ describe('MatchingEngine', () => {
           itemsReadable: true,
         }),
         removePlaylist: async () => ({ action: 'deleted' as const }),
-        resolveTrack: async () => [],
+        searchTracks: async () => [],
         populatePlaylist: async () => ({ added: [], failed: [] }),
         auth: {
           login: async () => ({ loggedIn: false, scopes: [] }),
@@ -277,7 +272,7 @@ describe('MatchingEngine', () => {
           itemsReadable: true,
         }),
         removePlaylist: async () => ({ action: 'deleted' as const }),
-        resolveTrack: async () => [],
+        searchTracks: async () => [],
         populatePlaylist: async () => ({ added: [], failed: [] }),
         auth: {
           login: async () => ({ loggedIn: false, scopes: [] }),
@@ -354,7 +349,7 @@ describe('MatchingEngine', () => {
           itemsReadable: true,
         }),
         removePlaylist: async () => ({ action: 'deleted' as const }),
-        resolveTrack: async () => [],
+        searchTracks: async () => [],
         populatePlaylist: async () => ({ added: [], failed: [] }),
         auth: {
           login: async () => ({ loggedIn: false, scopes: [] }),
@@ -423,7 +418,7 @@ describe('MatchingEngine', () => {
           itemsReadable: true,
         }),
         removePlaylist: async () => ({ action: 'deleted' as const }),
-        resolveTrack: async () => [],
+        searchTracks: async () => [],
         populatePlaylist: async () => ({ added: [], failed: [] }),
         auth: {
           login: async () => ({ loggedIn: false, scopes: [] }),
@@ -479,7 +474,7 @@ describe('MatchingEngine', () => {
           itemsReadable: true,
         }),
         removePlaylist: async () => ({ action: 'deleted' as const }),
-        resolveTrack: async () => [],
+        searchTracks: async () => [],
         populatePlaylist: async () => ({ added: [], failed: [] }),
         auth: {
           login: async () => ({ loggedIn: false, scopes: [] }),
@@ -542,7 +537,7 @@ describe('MatchingEngine', () => {
           itemsReadable: true,
         }),
         removePlaylist: async () => ({ action: 'deleted' as const }),
-        resolveTrack: async () => [],
+        searchTracks: async () => [],
         populatePlaylist: async () => ({ added: [], failed: [] }),
         auth: {
           login: async () => ({ loggedIn: false, scopes: [] }),
@@ -608,7 +603,7 @@ describe('MatchingEngine', () => {
           itemsReadable: true,
         }),
         removePlaylist: async () => ({ action: 'deleted' as const }),
-        resolveTrack: async () => [],
+        searchTracks: async () => [],
         populatePlaylist: async () => ({ added: [], failed: [] }),
         auth: {
           login: async () => ({ loggedIn: false, scopes: [] }),

@@ -15,9 +15,10 @@ test('MatchResult with matched status', () => {
     status: 'matched',
     confidence: 0.95,
     candidate: {
-      trackRef: 'tgt:1',
+      ref: 'tgt:1',
+      track: { title: 'Song', artists: ['Artist'], durationMs: 180000, refs: {} },
       confidence: 0.95,
-      metadata: { title: 'Song', artists: ['Artist'], duration: 180000 },
+      strategy: 'metadata',
     },
     strategies: ['metadata'],
   }

@@ -2,7 +2,8 @@ import type {
   Provider,
   PlaylistSummary,
   CanonicalTrack,
-  MatchCandidate,
+  TrackQuery,
+  TrackHit,
   Page,
   PageRequest,
   PlaylistFilter,
@@ -336,66 +337,19 @@ export class FakeProvider implements Provider {
     return { action: 'deleted' }
   }
 
-  async resolveTrack(
-    track: CanonicalTrack,
-    opts: { maxCandidates: number }
-  ): Promise<MatchCandidate[]> {
-    const candidates: MatchCandidate[] = []
-
-    // Try known ref first
-    for (const [provider, ref] of Object.entries(track.refs)) {
-      if (provider === 'fake' && this.tracks.has(ref)) {
-        candidates.push({
-          ref,
-          track: this.trackToCanonical(this.tracks.get(ref)!),
-          confidence: 1.0,
-          strategy: 'known-ref',
-        })
-      }
+  async searchTracks(query: TrackQuery, opts: { limit: number }): Promise<TrackHit[]> {
+    // Simple catalog lookup: exact ISRC, or a case-insensitive title containment
+    // either way. Scoring is the matching engine's job.
+    const matches = (t: FakeTrack): boolean => {
+      if (query.kind === 'isrc') return t.isrc === query.isrc
+      const a = t.title.toLowerCase()
+      const b = query.title.toLowerCase()
+      return a.includes(b) || b.includes(a)
     }
-
-    if (candidates.length >= opts.maxCandidates) {
-      return candidates.slice(0, opts.maxCandidates)
-    }
-
-    // Try ISRC if available
-    if (track.isrc && this.capabilities.isrcSearchMode === 'filter') {
-      for (const fakeTrack of this.tracks.values()) {
-        if (fakeTrack.isrc === track.isrc) {
-          candidates.push({
-            ref: fakeTrack.id,
-            track: this.trackToCanonical(fakeTrack),
-            confidence: 1.0,
-            strategy: 'isrc',
-          })
-          if (candidates.length >= opts.maxCandidates) {
-            return candidates.slice(0, opts.maxCandidates)
-          }
-        }
-      }
-    }
-
-    // Try title + artists match
-    for (const fakeTrack of this.tracks.values()) {
-      if (
-        fakeTrack.title.toLowerCase() === track.title.toLowerCase() &&
-        fakeTrack.artists.some((a) =>
-          track.artists?.some((ca) => a.toLowerCase() === ca.toLowerCase())
-        )
-      ) {
-        candidates.push({
-          ref: fakeTrack.id,
-          track: this.trackToCanonical(fakeTrack),
-          confidence: 0.95,
-          strategy: 'metadata',
-        })
-        if (candidates.length >= opts.maxCandidates) {
-          return candidates.slice(0, opts.maxCandidates)
-        }
-      }
-    }
-
-    return candidates
+    return Array.from(this.tracks.values())
+      .filter(matches)
+      .slice(0, opts.limit)
+      .map((t) => ({ ref: t.id, track: this.trackToCanonical(t) }))
   }
 
   async populatePlaylist(

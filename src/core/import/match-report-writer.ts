@@ -81,7 +81,7 @@ export class MatchReportWriter {
       lines.push('---------------------')
       for (const result of lowConf.slice(0, 10)) {
         const cand = result.candidate
-        const candTitle = cand?.metadata?.title ?? 'Unknown'
+        const candTitle = cand?.track.title ?? 'Unknown'
         lines.push(
           `${result.position}: ${result.track.title} → ${candTitle} (${this.percentage(result.confidence ?? 0, 1)})`
         )

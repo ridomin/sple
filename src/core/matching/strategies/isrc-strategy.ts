@@ -29,34 +29,14 @@ export class IsrcStrategy implements MatchingStrategy {
       return null
     }
 
-    // Search by ISRC
-    // Most providers accept ISRC in search queries
-    const results = await provider.search(
-      { text: `isrc:${track.isrc}`, type: 'track' },
-      { limit: 5 }
-    )
-
-    if (!results.items || results.items.length === 0) {
+    // The adapter turns the query into its own search syntax (ADR-0003 A2).
+    const [first] = await provider.searchTracks({ kind: 'isrc', isrc: track.isrc }, { limit: 5 })
+    if (!first) {
       return null
     }
 
-    // Find the first track item (filter out non-track search results)
-    const trackItem = results.items.find((item) => item.type === 'track')
-    if (!trackItem || trackItem.type !== 'track') {
-      return null
-    }
-
-    // Return the first (best) result with high confidence
-    // ISRC is unambiguous when it's in the file and found by the provider
-    return {
-      trackRef: trackItem.ref,
-      confidence: 0.95, // Near-perfect, but not 1.0 (ISRC lookup is highly reliable but not infallible)
-      metadata: {
-        title: trackItem.track.title,
-        artists: trackItem.track.artists,
-        album: trackItem.track.album,
-        duration: trackItem.track.durationMs,
-      },
-    }
+    // ISRC is unambiguous when it's in the file and found by the provider,
+    // but the lookup is not infallible, so not 1.0.
+    return { ref: first.ref, track: first.track, confidence: 0.95, strategy: 'isrc' }
   }
 }

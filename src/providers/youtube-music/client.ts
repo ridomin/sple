@@ -1,5 +1,5 @@
 import { HttpClient } from '../../core/http/client.js'
-import { PlaylistSummary, CanonicalTrack, MatchCandidate } from '../../core/provider/provider.js'
+import { PlaylistSummary, CanonicalTrack } from '../../core/provider/provider.js'
 import { NotFoundError } from '../../core/provider/errors.js'
 import * as YouTubeTypes from './types.js'
 import { parseYouTubePlaylistId } from './playlist-ref.js'
@@ -125,40 +125,6 @@ export class YouTubeMusicHttpClient {
       nextPageToken: body.nextPageToken,
       totalResults: body.pageInfo.totalResults
     }
-  }
-
-  async resolveTrack(track: CanonicalTrack, opts: { maxCandidates: number }): Promise<MatchCandidate[]> {
-    const query = `${track.title} ${track.artists.join(' ')}`
-    const url = new URL(this.baseUrl + '/search')
-    url.searchParams.set('part', 'snippet')
-    url.searchParams.set('type', 'video')
-    url.searchParams.set('q', query)
-    url.searchParams.set('maxResults', String(opts.maxCandidates))
-
-    const body = await this.httpClient.requestJson(
-      { method: 'GET', url: url.toString() },
-      (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubeSearchResult>
-    )
-
-    const videoIds = body.items.filter(item => item.id.videoId).map(item => item.id.videoId!)
-
-    if (videoIds.length === 0) return []
-
-    const videos = await this.getVideos(videoIds)
-
-    const candidates: MatchCandidate[] = []
-    for (const v of videos) {
-      const canonicalTrack = this.youtubeVideoToCanonical(v)
-      if (canonicalTrack) {
-        candidates.push({
-          ref: `https://www.youtube.com/watch?v=${v.id}`,
-          track: canonicalTrack,
-          confidence: this.calculateConfidence(track, v),
-          strategy: 'metadata'
-        })
-      }
-    }
-    return candidates
   }
 
   async createPlaylist(input: {
@@ -290,16 +256,6 @@ export class YouTubeMusicHttpClient {
     const minutes = parseInt(match[2]) || 0
     const seconds = parseInt(match[3]) || 0
     return (hours * 3600 + minutes * 60 + seconds) * 1000
-  }
-
-  private calculateConfidence(track: CanonicalTrack, video: YouTubeTypes.YouTubeVideo): number {
-    const titleMatch = track.title.toLowerCase().includes(video.snippet.title.toLowerCase()) ||
-      video.snippet.title.toLowerCase().includes(track.title.toLowerCase()) ? 0.5 : 0
-    const artistMatch = track.artists.some(a =>
-      video.snippet.channelTitle.toLowerCase().includes(a.toLowerCase()) ||
-      a.toLowerCase().includes(video.snippet.channelTitle.toLowerCase())
-    ) ? 0.5 : 0
-    return titleMatch + artistMatch
   }
 
   private extractPlaylistId(ref: string): string | null {

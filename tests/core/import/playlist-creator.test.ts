@@ -20,7 +20,9 @@ function result(position: number, status: MatchResult['status'], trackRef?: stri
   return {
     status,
     position,
-    candidate: trackRef ? { trackRef, confidence: status === 'matched' ? 0.95 : 0.4, metadata: {} } : undefined,
+    candidate: trackRef
+      ? { ref: trackRef, track: { title: `Song ${position}`, artists: [], refs: {} }, confidence: status === 'matched' ? 0.95 : 0.4, strategy: 'metadata' }
+      : undefined,
     track: { title: `Song ${position}`, artists: [], durationMs: 180000, refs: {} } as any,
   }
 }

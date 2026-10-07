@@ -345,7 +345,7 @@ test('FakeProvider', async (t) => {
     }
   })
 
-  await t.test('resolves track by title and artist', async () => {
+  await t.test('searchTracks by metadata returns hits whose title matches', async () => {
     provider.addTrack({
       id: 'track-resolve',
       title: 'Shape of You',
@@ -353,21 +353,17 @@ test('FakeProvider', async (t) => {
       duration: 233,
     })
 
-    const matches = await provider.resolveTrack(
-      {
-        title: 'Shape of You',
-        artists: ['Ed Sheeran'],
-        refs: {},
-      },
-      { maxCandidates: 10 }
+    const hits = await provider.searchTracks(
+      { kind: 'metadata', title: 'shape of you', artists: ['Someone Else'] },
+      { limit: 10 }
     )
 
-    assert.ok(matches.length > 0)
-    assert.strictEqual(matches[0].ref, 'track-resolve')
-    assert.ok(matches[0].confidence > 0.9)
+    assert.deepStrictEqual(hits.map((h) => h.ref), ['track-resolve'])
+    assert.strictEqual(hits[0].track.title, 'Shape of You')
+    assert.deepStrictEqual(hits[0].track.artists, ['Ed Sheeran'])
   })
 
-  await t.test('resolves track by ISRC', async () => {
+  await t.test('searchTracks by ISRC returns hits with that ISRC', async () => {
     const provider3 = new FakeProvider({
       capabilities: { isrcSearchMode: 'filter' },
     })
@@ -379,32 +375,27 @@ test('FakeProvider', async (t) => {
       duration: 200,
       isrc: 'USRC17607839',
     })
+    provider3.addTrack({ id: 'other', title: 'Song', artists: ['Artist'], duration: 200, isrc: 'USRC00000000' })
 
-    const matches = await provider3.resolveTrack(
-      {
-        title: 'Different Title',
-        artists: ['Different Artist'],
-        isrc: 'USRC17607839',
-        refs: {},
-      },
-      { maxCandidates: 10 }
-    )
+    const hits = await provider3.searchTracks({ kind: 'isrc', isrc: 'USRC17607839' }, { limit: 10 })
 
-    assert.ok(matches.length > 0)
-    assert.strictEqual(matches[0].ref, 'track-isrc')
+    assert.deepStrictEqual(hits.map((h) => h.ref), ['track-isrc'])
   })
 
-  await t.test('returns empty array for unresolvable track', async () => {
-    const matches = await provider.resolveTrack(
-      {
-        title: 'Nonexistent Song',
-        artists: ['Unknown Artist'],
-        refs: {},
-      },
-      { maxCandidates: 10 }
+  await t.test('searchTracks honours limit', async () => {
+    const p = new FakeProvider()
+    for (let i = 0; i < 5; i++) p.addTrack({ id: `t${i}`, title: 'Same Title', artists: ['A'], duration: 200 })
+    const hits = await p.searchTracks({ kind: 'metadata', title: 'Same Title', artists: [] }, { limit: 3 })
+    assert.deepStrictEqual(hits.map((h) => h.ref), ['t0', 't1', 't2'])
+  })
+
+  await t.test('searchTracks returns no hits for an unknown track', async () => {
+    const hits = await provider.searchTracks(
+      { kind: 'metadata', title: 'Nonexistent Song', artists: ['Unknown Artist'] },
+      { limit: 10 }
     )
 
-    assert.strictEqual(matches.length, 0)
+    assert.strictEqual(hits.length, 0)
   })
 
   await t.test('populates playlist with tracks', async () => {

@@ -2,7 +2,7 @@ export type ProviderId = 'spotify' | 'youtube-music' | 'fake'
 
 export type ProviderOperation =
   | 'search'
-  | 'resolveTrack'
+  | 'searchTracks'
   | 'listPlaylists'
   | 'getPlaylistItems'
   | 'createPlaylist'

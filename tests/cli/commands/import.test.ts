@@ -476,17 +476,9 @@ function makeCreationProvider(): FakeProvider {
   })
   // Let the ISRC strategy (confidence 0.95) find t2
   ;(provider.capabilities as any).isrcSearchMode = 'lookup'
-  provider.search = async (q) => {
-    if (q.text !== 'isrc:USRC10000002') return { items: [] }
-    return {
-      items: [{
-        type: 'track' as const,
-        id: 't2',
-        ref: 't2',
-        name: 'Song 2',
-        track: { title: 'Song 2', artists: ['A'], durationMs: 180000, refs: { fake: 't2' } },
-      }],
-    }
+  provider.searchTracks = async (q) => {
+    if (q.kind !== 'isrc' || q.isrc !== 'USRC10000002') return []
+    return [{ ref: 't2', track: { title: 'Song 2', artists: ['A'], durationMs: 180000, refs: { fake: 't2' } } }]
   }
   return provider
 }
@@ -559,7 +551,7 @@ test('import command: auth errors from playlist creation are not turned into usa
 test('import command: an auth error during matching stops the import before any playlist is created', async () => {
   const provider = makeCreationProvider()
   let created = false
-  provider.search = async () => {
+  provider.searchTracks = async () => {
     throw new AuthRequiredError('expired', 'token-expired')
   }
   const createPlaylist = provider.createPlaylist.bind(provider)

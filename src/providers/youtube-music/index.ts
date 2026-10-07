@@ -124,11 +124,15 @@ export function createYouTubeMusicProvider(
       return await client.removePlaylist(ref)
     },
 
-    async resolveTrack(track, opts) {
+    async searchTracks(query, opts) {
+      // isrcSearchMode is 'none': the engine never sends an ISRC query here.
+      if (query.kind === 'isrc') return []
       await auth.requireScopes(['https://www.googleapis.com/auth/youtube'])
-      return await client.resolveTrack(track, {
-        maxCandidates: opts?.maxCandidates ?? 10
-      })
+      const { items } = await client.searchTracks(
+        { text: [query.title, ...query.artists].join(' ') },
+        { limit: opts.limit }
+      )
+      return items.slice(0, opts.limit).map(track => ({ ref: track.refs['youtube-music'], track }))
     },
 
     async populatePlaylist(ref: string, trackRefs: string[], opts) {

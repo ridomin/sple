@@ -22,52 +22,29 @@ export class MetadataStrategy implements MatchingStrategy {
   async execute(request: MatchRequest, provider: Provider): Promise<MatchCandidate | null> {
     const { track } = request
 
-    // Build search query: "Title Artist"
-    const query = this.buildSearchQuery(track)
-
-    // Search with limit of 10 candidates to score
-    const results = await provider.search({ text: query, type: 'track' }, { limit: 10 })
-
-    if (!results.items || results.items.length === 0) {
-      return null
-    }
-
-    // Filter for track items only
-    const trackItems = results.items.filter((item) => item.type === 'track')
-    if (trackItems.length === 0) {
-      return null
-    }
+    // The adapter turns the query into its own search syntax (ADR-0003 A2).
+    const hits = await provider.searchTracks(
+      { kind: 'metadata', title: track.title, artists: track.artists, album: track.album, durationMs: track.durationMs },
+      { limit: 10 }
+    )
 
     // Score each result and return the best match
     let bestCandidate: MatchCandidate | null = null
     let bestScore = 0
 
-    for (const item of trackItems) {
-      if (item.type !== 'track') {
-        continue
-      }
-
+    for (const hit of hits) {
       const score = TrackNormalizer.calculateMetadataConfidence(
         track.title,
         track.artists,
         track.durationMs ?? 0,
-        item.track.title,
-        item.track.artists,
-        item.track.durationMs ?? 0
+        hit.track.title,
+        hit.track.artists,
+        hit.track.durationMs ?? 0
       )
 
       if (score > bestScore) {
         bestScore = score
-        bestCandidate = {
-          trackRef: item.ref,
-          confidence: score,
-          metadata: {
-            title: item.track.title,
-            artists: item.track.artists,
-            album: item.track.album,
-            duration: item.track.durationMs,
-          },
-        }
+        bestCandidate = { ref: hit.ref, track: hit.track, confidence: score, strategy: 'metadata' }
       }
     }
 
@@ -78,11 +55,5 @@ export class MetadataStrategy implements MatchingStrategy {
     }
 
     return null
-  }
-
-  private buildSearchQuery(track: { title: string; artists: string[] }): string {
-    // Build a query: "Title Artist" using primary artist if available
-    const artists = track.artists && track.artists.length > 0 ? track.artists[0] : ''
-    return [track.title, artists].filter(Boolean).join(' ')
   }
 }
