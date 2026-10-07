@@ -37,7 +37,7 @@ sple auth login --provider spotify
 sple auth login --provider youtube-music
 ```
 
-The default provider is Spotify. You can specify `--provider youtube-music` to authenticate with YouTube Music. YouTube Music needs your own Google OAuth client first: see [docs/user/youtube-music-setup.md](docs/user/youtube-music-setup.md).
+The default provider is Spotify. You can specify `--provider youtube-music` to authenticate with YouTube Music. YouTube Music needs your own Google OAuth client first: see [docs/user/youtube-music-setup.md](docs/user/youtube-music-setup.md). What sple accesses and stores is described in [docs/PRIVACY.md](docs/PRIVACY.md).
 
 **Login modes:**
 

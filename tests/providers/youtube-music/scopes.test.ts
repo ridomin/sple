@@ -93,6 +93,9 @@ test('logout reports deleting only the tokens it deletes', async () => {
   try {
     const result = await p.auth.logout()
     assert.deepStrictEqual(result.deletedData, ['access_token', 'refresh_token'])
+    // FR-AUTH-4 / NFR-9: export files are the user's and are not touched.
+    assert.match(result.notice ?? '', /Export files you created were not touched/)
+    assert.match(result.notice ?? '', /PRIVACY\.md/)
   } finally {
     globalThis.fetch = original
   }

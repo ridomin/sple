@@ -65,4 +65,4 @@ The default quota is 10,000 units per day, plus 100 searches per day, and it res
 | `Access blocked: … has not completed the Google verification process` | Your account is not a test user of a Testing app | Add it under **Audience → Test users**, or publish the app |
 | `Quota exhausted: units` | Daily quota used up | Wait until midnight Pacific Time |
 
-To remove sple's access, run `sple auth logout --provider youtube-music`. It revokes the token at Google and deletes it locally.
+To remove sple's access, run `sple auth logout --provider youtube-music`. It revokes the token at Google and deletes it locally. What sple accesses and stores is described in the [privacy policy](../PRIVACY.md).

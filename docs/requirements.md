@@ -256,4 +256,4 @@ The specification (this file and the ADRs) is the target. This section lists whe
 
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
-| D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: no `docs/PRIVACY.md`; spikes S5–S7 not run | #65 |
+| D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: spikes S6–S7 not reported | #65 |
