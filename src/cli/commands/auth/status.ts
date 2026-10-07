@@ -60,9 +60,15 @@ function printHuman(target: AuthTarget, s: AuthStatus, io: CliIO): void {
   }
   io.out(`  Scopes: ${s.scopes.join(' ') || '(none)'}`)
   if (s.expiresAt) {
-    io.out(`  Token expires: ${s.expiresAt}`)
-    if (new Date(s.expiresAt).getTime() - Date.now() < EXPIRY_WARN_MS) {
-      io.err(`Warning: ${target.displayName} access token expires in less than 5 minutes`)
+    const remaining = new Date(s.expiresAt).getTime() - Date.now()
+    if (remaining <= 0) {
+      io.out(`  Token expires: ${s.expiresAt} (expired)`)
+      io.err(`Warning: ${target.displayName} access token has expired; it will be refreshed on next use`)
+    } else {
+      io.out(`  Token expires: ${s.expiresAt}`)
+      if (remaining < EXPIRY_WARN_MS) {
+        io.err(`Warning: ${target.displayName} access token expires in less than 5 minutes`)
+      }
     }
   }
 }
