@@ -43,7 +43,7 @@ export interface CanonicalTrack {
 | `artists` | string[] | Yes | Artist display names in the order they appear on the provider (e.g., featured artists). Never empty. |
 | `album` | string | No | Album name if available. Not the album ID; use display name. |
 | `durationMs` | number | No | Track duration in milliseconds. Absent if the provider doesn't report duration. |
-| `isrc` | string \| null | No | International Standard Recording Code (ISRC). Null if the provider doesn't provide it (e.g., Spotify since Feb 2026). Absent if not yet resolved. |
+| `isrc` | string \| null | No | International Standard Recording Code (ISRC). Null if the provider doesn't provide it for this track. Absent if not yet resolved. (Spotify still returns `external_ids.isrc`; spike S1 found that the February 2026 removal note does not hold.) |
 | `refs` | Record<string, string> | Yes | Map of provider ID (e.g., `'spotify'`, `'youtube-music'`) to provider-specific track reference (URI, ID, or API path). At minimum, includes the source provider. As tracks are migrated and matched, refs accumulate. |
 | `addedAt` | string | No | ISO 8601 timestamp (UTC) of when the track was added to the source playlist. Used to preserve insertion order and date context during migration. |
 
@@ -96,7 +96,7 @@ Empty `artists` is an error (every track has at least one artist). If a provider
 - **Duration:** Optional because some read-only APIs (e.g., likes) may not report duration. Matching can work without it.
 - **ISRC:** Nullable (not just optional) to distinguish three states:
   - **Absent** (`undefined`): Not yet resolved or not applicable for this track.
-  - **Null** (`null`): Provider confirmed it doesn't have ISRC (e.g., Spotify since Feb 2026).
+  - **Null** (`null`): Provider confirmed it doesn't have ISRC for this track (e.g., Spotify omitted `external_ids.isrc`).
   - **String:** ISRC is present and valid.
 
 ### 6. Date context (addedAt)

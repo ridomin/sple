@@ -20,7 +20,7 @@ import {
 /**
  * Convert a Spotify track response to a CanonicalTrack.
  * @param track - Raw Spotify track object (will be validated)
- * @returns CanonicalTrack with isrc set to null per ADR-0005
+ * @returns CanonicalTrack; `isrc` is `external_ids.isrc`, or null when Spotify omits it
  */
 export function mapSpotifyTrackToCanonical(track: unknown): CanonicalTrack {
   let validated: SpotifyTrack
@@ -45,7 +45,8 @@ export function mapSpotifyTrackToCanonical(track: unknown): CanonicalTrack {
     refs: {
       spotify: validated.uri || '(no uri)',
     },
-    isrc: null, // ADR-0005: Spotify does not provide ISRC
+    // Spike S1: Spotify still returns external_ids.isrc for tracks.
+    isrc: validated.external_ids?.isrc || null,
   }
 
   // Optional fields

@@ -93,18 +93,19 @@ test('mapSpotifyTrackToCanonical', async (t) => {
     assert.strictEqual(canonical.durationMs, undefined)
   })
 
-  await t.test('always sets isrc to null per ADR-0005', () => {
-    const trackWithIsrc = {
-      id: 'track123',
-      name: 'Song',
-      artists: [{ name: 'Artist' }],
-      external_ids: { isrc: 'USRC12345678' },
-      uri: 'spotify:track:track123',
-    }
+  await t.test('maps external_ids.isrc, and null only when Spotify omits it (FR-EXP-2, spike S1)', () => {
+    const base = { id: 'track123', name: 'Song', artists: [{ name: 'Artist' }], uri: 'spotify:track:track123' }
 
-    const canonical = mapSpotifyTrackToCanonical(trackWithIsrc)
+    assert.strictEqual(mapSpotifyTrackToCanonical({ ...base, external_ids: { isrc: 'USRC12345678' } }).isrc, 'USRC12345678')
+    assert.strictEqual(mapSpotifyTrackToCanonical({ ...base, external_ids: {} }).isrc, null)
+    assert.strictEqual(mapSpotifyTrackToCanonical(base).isrc, null)
+  })
 
-    assert.strictEqual(canonical.isrc, null)
+  await t.test('recorded playlist items keep their ISRC', () => {
+    const fixture = JSON.parse(readFileSync(new URL('../../fixtures/spotify/s2-owned-items.json', import.meta.url), 'utf8'))
+    const items = mapSpotifyPlaylistItems((fixture.body ?? fixture).items)
+    const leyes = items.find((i) => i.track?.title === 'Las Leyes De La Frontera')
+    assert.strictEqual(leyes?.track?.isrc, 'ES5702101763')
   })
 
   await t.test('handles empty track name with default value', () => {
