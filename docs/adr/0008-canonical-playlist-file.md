@@ -1,6 +1,6 @@
 # ADR 0008: Canonical playlist file
 
-- **Status:** Accepted (2026-10-02)
+- **Status:** Accepted (2026-10-02); amended 2026-10-07 (Amendment 1)
 - **Date:** 2026-10-02
 - **Deciders:** project owner (user); architect (author)
 - **Related:** `docs/requirements.md` FR-EXP-1, FR-EXP-2, FR-EXP-3, FR-EXP-6, FR-EXP-7, FR-EXP-8, NFR-9; ADR 0005 (Canonical track model); ADR 0007 (CLI conventions, §2.5 `UnsupportedItem`, §3.6 `export`)
@@ -118,3 +118,25 @@ Export files belong to the user and are outside `sple`'s data retention (FR-EXP-
 - RFC 4180, Common Format and MIME Type for CSV Files: https://www.rfc-editor.org/rfc/rfc4180
 - JSON Schema 2020-12: https://json-schema.org/draft/2020-12
 - OWASP, CSV Injection: https://owasp.org/www-community/attacks/CSV_Injection
+
+## Amendment 1 (spec review for ports)
+
+- **Date:** 2026-10-07
+- **Why:** record how files are read back by `sple import` (M3), and the review decision on unsupported items. Differences in the TypeScript code are tracked in `docs/requirements.md` §12.
+
+### Unsupported items (writing)
+
+Providers drop unsupported items before the CLI sees them (ADR 0003 Amendment 2). Until an amendment carries them through, writers produce `unsupportedItems: []`, `position` numbers the exported tracks `1..k` without gaps, and `playlist.trackCount` equals `tracks.length`. The v1 schema and the shared position space stay as written, so files that do list unsupported items remain valid and readers must accept them.
+
+### Reading (import)
+
+- **Format** is chosen by extension, case-insensitive: `.json` → JSON, `.csv` → CSV, anything else → `UsageError` (exit 2).
+- **JSON:** the file must parse and pass every v1 invariant in §1/§2 (`checkPlaylistFile`: schema version, `exportedAt`, `generator`, `source`, the Liked Songs name rule, non-empty `artists`, at least one ref per track, unique positions, `trackCount`). `schemaVersion` other than 1 → `Unsupported schema version: <n>. This version of sple supports v1 only.` Any violation → exit 2 listing the problems. Tracks are processed in `position` order.
+- **CSV:** RFC 4180 as in §4 (quoted fields may contain commas, quotes and line breaks). The header must contain all eight columns `position,title,artists,album,duration_ms,added_at,isrc,ref`, in any order; extra columns are ignored. Per row:
+  - `position`: integer ≥ 1; if empty or invalid, the 1-based row number.
+  - `artists`: split on `;`, each trimmed, empties dropped; if none, `["Unknown Artist"]`.
+  - `album`, `added_at`, `isrc`: empty → absent. `duration_ms`: empty or not an integer → absent.
+  - `ref`: see source inference.
+  - Rows that are entirely empty are skipped.
+- **CSV source inference:** the source provider is the single registered provider whose `parseTrackRef` (ADR 0003 §3.1) accepts **every** non-empty `ref` in the file. Each ref is then stored as `refs[<provider>] = parseTrackRef(ref)`, so the known-ref strategy works when importing back into the same provider. If no provider or more than one qualifies, `source.provider` is `"unknown"`, refs are dropped, and stderr gets `sple: warning: could not tell which provider the CSV refs belong to; matching by metadata only`.
+- **CSV defaults:** `source.kind` is `playlist`; `playlist.name` is the file name without its extension (`--name` overrides it); `exportedAt` is the time of reading; `generator.version` is `unknown`.

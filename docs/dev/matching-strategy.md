@@ -1,5 +1,7 @@
 # Extending the Matching Engine
 
+> This guide describes the TypeScript code as it is today. The target behavior (`searchTracks`, normalization, scoring gates, error handling, report v1) is specified in [ADR 0009 Amendment 1](../adr/0009-matching-strategy.md#amendment-1-spec-review-for-ports); see `docs/requirements.md` §12 for the differences.
+
 ## Adding a New Strategy
 
 Strategies are plugins in the matching engine. Each implements the `MatchingStrategy` interface (`src/core/matching/types.ts`). Tests use `node:test`.

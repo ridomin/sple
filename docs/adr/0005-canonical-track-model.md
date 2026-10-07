@@ -1,6 +1,6 @@
 # ADR 0005: Canonical track model
 
-- **Status:** Accepted (2026-10-01)
+- **Status:** Accepted (2026-10-01); amended 2026-10-07 (Amendment 1)
 - **Date:** 2026-10-01
 - **Deciders:** project owner (user); architect (author)
 - **Related:** `docs/requirements.md` FR-MIG-1, FR-MIG-2, FR-MIG-4; ADR 0003 (Provider interface); ADR 0004 (Token store)
@@ -58,7 +58,7 @@ export interface CanonicalTrack {
 
 2. **Matched to another provider** (e.g., during migration to YouTube Music), the matching provider is added:
    ```json
-   { "refs": { "spotify": "spotify:track:abc123def456", "youtube-music": "ABCDefg-_1234" } }
+   { "refs": { "spotify": "spotify:track:abc123def456", "youtube-music": "dQw4w9WgXcQ" } }
    ```
 
 3. **Populated into a destination playlist**, the destination provider's track ref is used (not added to `refs` unless the track is re-queried).
@@ -131,3 +131,14 @@ Format: ISO 8601 UTC (e.g., `"2026-09-01T12:34:56Z"`).
 - Spotify ISRC deprecation (February 2026): https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide
 - ISRC standard: https://www.ifpi.org/isrc/
 - ISO 8601 date/time format: https://en.wikipedia.org/wiki/ISO_8601
+
+## Amendment 1 (spec review for ports)
+
+- **Date:** 2026-10-07
+
+| Change | Why |
+|---|---|
+| `refs` values use the canonical ref forms of ADR 0003 §3.1 (Spotify `spotify:track:<id>`, YouTube Music the bare 11-character video ID). The §2 example now uses a valid video ID. | Files written by one implementation must be readable by another, and CSV import infers the provider from the ref. |
+| Matching does not call `resolveTrack`. The strategy chain and scoring live in core (ADR 0009 Amendment 1) and call `Provider.searchTracks` (ADR 0003 Amendment 2). §3 and the `resolveTrack` consequence are superseded. | Review decision Q22. |
+| `isrc: null` means the source did not supply one. Spotify search and track objects still carry `external_ids.isrc` (spike S1), so the Spotify adapter sets `isrc` when present (#28). | Corrects §1/§5, which said Spotify never provides ISRC. |
+| Missing artists map to `["Unknown Artist"]`, a missing title to `"(untitled)"`. | Matches §4's fallback rule and the Spotify adapter. |
