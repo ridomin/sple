@@ -191,6 +191,7 @@ export async function run(argv: string[], opts: RunOptions = {}): Promise<number
           noBrowser: authParsed.values['no-browser'],
           manual: authParsed.values.manual,
           json: values.json,
+          quiet: values.quiet,
           all: authParsed.values.all,
         },
         io

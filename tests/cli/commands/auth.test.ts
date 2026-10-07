@@ -412,3 +412,21 @@ test('auth: unknown flags are usage errors; --help prints usage', async () => {
   assert.equal(help.code, 0)
   assert.match(help.out, /Usage: sple auth login/)
 })
+
+test('--quiet suppresses the stdout lines of auth login and logout (ADR-0007 §3.7, A10)', async () => {
+  const login = await exec(['--quiet', 'auth', 'login', '--provider', 'fake'])
+  assert.equal(login.code, 0)
+  assert.equal(login.out, '')
+  const logout = await exec(['auth', 'logout', '--provider', 'fake', '--quiet'])
+  assert.equal(logout.code, 0)
+  assert.equal(logout.out, '')
+})
+
+test('--quiet still reports logout failures on stderr', async () => {
+  const p = providerWith({ logout: async () => { throw new Error('revoke failed') } })
+  const { io, out, err } = makeIO()
+  const code = await run(['--quiet', 'auth', 'logout', '--provider', 'fake'], { io, registry: registryFor(p), env: {} })
+  assert.notEqual(code, 0)
+  assert.deepEqual(out, [])
+  assert.ok(err.some((m) => /revoke failed/.test(m)), err.join('\n'))
+})
