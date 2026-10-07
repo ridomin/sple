@@ -650,3 +650,42 @@ test('HTTP client', async (t) => {
     }
   })
 })
+
+test('beforeAttempt runs before every attempt, retries included, and can stop a request (#84)', async () => {
+  const original = globalThis.fetch
+  let fetches = 0
+  globalThis.fetch = (async () => {
+    fetches++
+    return fetches === 1 ? new Response('', { status: 503 }) : new Response('{}', { status: 200 })
+  }) as unknown as typeof fetch
+  try {
+    const seen: string[] = []
+    const client = new HttpClient({ providerId: 'youtube-music', beforeAttempt: (req) => { seen.push(req.method) } })
+    ;(client as unknown as { baseDelay: number }).baseDelay = 1
+    await client.request({ method: 'GET', url: 'https://example.com/x' })
+    assert.deepStrictEqual(seen, ['GET', 'GET'])
+    assert.strictEqual(fetches, 2)
+
+    const refusing = new HttpClient({ providerId: 'youtube-music', beforeAttempt: () => { throw new Error('over quota') } })
+    await assert.rejects(() => refusing.request({ method: 'GET', url: 'https://example.com/x' }), /over quota/)
+    assert.strictEqual(fetches, 2)
+  } finally {
+    globalThis.fetch = original
+  }
+})
+
+test('mapError receives the request that failed (#84)', async () => {
+  const original = globalThis.fetch
+  globalThis.fetch = (async () => new Response('{}', { status: 403 })) as unknown as typeof fetch
+  try {
+    let seenUrl: string | undefined
+    const client = new HttpClient({
+      providerId: 'youtube-music',
+      mapError: (_res, req) => { seenUrl = req?.url; return undefined },
+    })
+    await assert.rejects(() => client.request({ method: 'GET', url: 'https://example.com/search?q=a' }))
+    assert.strictEqual(seenUrl, 'https://example.com/search?q=a')
+  } finally {
+    globalThis.fetch = original
+  }
+})

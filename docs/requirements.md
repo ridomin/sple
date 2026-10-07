@@ -256,4 +256,4 @@ The specification (this file and the ADRs) is the target. This section lists whe
 
 | # | Spec | TypeScript today | Issue |
 |---|---|---|---|
-| D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: `quotaModel` is `rate-limited` (no daily ledger); `getLikedTracks` returns nothing; `search` ignores `--type`; `listPlaylists` ignores `--owned`/`--followed` and marks every playlist owned; no `docs/PRIVACY.md`; spikes S5–S7 not run | #65 |
+| D12 | YouTube values in ADR-0003 §5 and ADR-0002 (M4a/M4b) | Preview adapter: `getLikedTracks` returns nothing; `search` ignores `--type`; `listPlaylists` ignores `--owned`/`--followed` and marks every playlist owned; no `docs/PRIVACY.md`; spikes S5–S7 not run | #65 |

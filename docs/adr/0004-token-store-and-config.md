@@ -181,6 +181,7 @@ Token refresh is transparent to the `Provider` interface and CLI.
 | New variable `SPLE_ENABLE_FAKE_PROVIDER` | ADR 0003 Amendment 2. |
 | `StoredToken.displayName?: string` | Added in ADR 0003 Amendment 1 (M1-7); listed here so the token schema is in one place. |
 | Token refresh moved to ADR 0010 | §4's sketch is replaced by the exact retry, refresh and persistence rules. |
+| `quota.json` in the config directory | Daily quota ledger for `daily-buckets` providers (ADR 0002 Amendment 2). Not a secret, but written with mode `0600` like `tokens.json`. |
 
 ### `.env` syntax (subset ports must accept)
 

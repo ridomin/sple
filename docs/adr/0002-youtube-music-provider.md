@@ -305,3 +305,27 @@ How this serves FR-MIG-4/5:
 
 A **video decoration** is a `(…)` or `[…]` segment, with the whitespace before it, whose content is (case-insensitive, optional `official ` and `music ` prefixes) `video`, `audio`, `lyric`, `lyrics`, `lyric video`, `visualizer`/`visualiser`, `hd`, `hq` or `4k`. Segments such as `(Live)` or `(Remix)` are kept: they change the recording.
 
+## Amendment 2 (quota ledger, #84)
+
+- **Date:** 2026-10-07
+- **Why:** implement the §4.1 ledger for M4a. Owner decision: declare the values and enforce them now; the `migrate` cost estimate waits for `migrate`.
+
+**Declared model:** `quotaModel` is the §4.1 `daily-buckets` value (`units` 10,000 and `search` 100 per day, reset at midnight `America/Los_Angeles`), minus `writeLiked`. `getTrackDetails` has no cost entry because the TypeScript `ProviderOperation` type has no such operation; the `videos.list` call is part of `searchTracks`.
+
+**Cost per request** (what the ledger charges):
+
+| Request | Bucket | Amount |
+|---|---|---|
+| `GET …/search` (`search.list`) | `search` | 1 |
+| any other `GET` (`playlists.list`, `playlistItems.list`, `videos.list`, `channels.list`) | `units` | 1 |
+| `POST`, `PUT`, `DELETE` (inserts, updates, deletes) | `units` | 50 |
+
+**Ledger** (`src/core/quota/ledger.ts`):
+
+- **File:** `quota.json` in the config directory, next to `tokens.json`: `{ "schemaVersion": 1, "providers": { "<id>": { "day": "YYYY-MM-DD", "used": { "<bucket>": n } } } }`. It's written atomically with mode `0600`. A missing or unreadable file starts a new ledger.
+- **Day:** the calendar day in the buckets' reset time zone. A stored day that isn't today counts as zero usage.
+- **Charge before every attempt:** retries and the post-refresh retry included, because failed calls cost quota too (§2.1.2). The HTTP client's `beforeAttempt` hook calls it.
+- **Refusal:** a charge that would push a bucket past its daily limit is refused before the request with `QuotaExhaustedError(bucket, resetAt = next midnight Pacific)`, which exits 5. Exactly reaching the limit is allowed.
+- **Provider signal:** a 403 `quotaExceeded` or `dailyLimitExceeded` marks the request's bucket as used up for the rest of the day.
+- **Limits:** the ledger counts only sple's own calls, so other clients of the same Google Cloud project make it under-count. Google's 403 then still stops the run. Concurrent sple processes are not locked against, and the last write wins. User-overridable limits (§4.1 `dailyLimit` comment) are not implemented yet.
+
