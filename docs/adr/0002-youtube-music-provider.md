@@ -329,3 +329,15 @@ A **video decoration** is a `(…)` or `[…]` segment, with the whitespace befo
 - **Provider signal:** a 403 `quotaExceeded` or `dailyLimitExceeded` marks the request's bucket as used up for the rest of the day.
 - **Limits:** the ledger counts only sple's own calls, so other clients of the same Google Cloud project make it under-count. Google's 403 then still stops the run. Concurrent sple processes are not locked against, and the last write wins. User-overridable limits (§4.1 `dailyLimit` comment) are not implemented yet.
 
+## Amendment 3 (read gaps after spike S5, #85)
+
+- **Date:** 2026-10-07
+- **Why:** spike S5 ([report](../spikes/M4a-youtube-spikes.md)) showed that the Data API serves YouTube Music's "Liked Music" playlist `LM`. That contradicts §2.1.3 ("not documented") and R10 ("approximate"). Requirements §8 says a contradicting spike result updates the spec before coding.
+
+| Topic | Rule |
+|---|---|
+| Liked Songs read | `playlistItems.list?playlistId=LM` (`part=snippet,contentDetails`, `maxResults` ≤ 50, `pageToken`), then `videos.list` for metadata, as for any playlist. `addedAt` = item `snippet.publishedAt` (the like time). It is **not** filtered by category: LM already contains only YouTube Music likes, and S5 found liked songs outside category 10. `likedSongs` capability: `{ read: 'exact', write: false }` (no `readCap`; LM's limit is unknown). `LL` / `myRating=like` are not used. |
+| `search --type` | `track` → `search.list?type=video` (as before). `playlist` → `type=playlist`, giving `SearchItem` `{ type: 'playlist', id, ref: playlistId, name: title, url: https://www.youtube.com/playlist?list=<id>, owner: { id: channelId, displayName: channelTitle } }` with no `trackCount` (search doesn't return it). `artist` → `type=channel`, giving `{ type: 'artist', id, ref: channelId, name: title, url: https://www.youtube.com/channel/<id> }`. `album` → `UsageError` before any request (the Data API has no albums). Only `track` makes the extra `videos.list` call. |
+| `listPlaylists` filter | `playlists.list?mine=true` returns only the user's own playlists, so every item is `owned: true`, with or without `--owned`. `--followed` returns an empty page without a request, because the Data API doesn't expose saved playlists. |
+| `getPlaylist` ownership | `owned` is true only when the playlist's `snippet.channelId` equals the user's channel ID. The channel ID comes from `channels.list?mine=true&part=id` (1 unit), looked up once per run. |
+

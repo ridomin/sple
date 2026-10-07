@@ -235,7 +235,7 @@ Error types are defined in `src/core/provider/errors.ts` as a closed set; the CL
 | `maxSearchPageSize` | **10** | 50 | Spotify Feb 2026 |
 | `readPageSize` | `{ playlists: 50, playlistItems: 100, liked: 50 }` | `{ playlists: 50, playlistItems: 50, liked: 50 }` | Spotify: spike S3; YouTube: `maxResults` cap of `playlists.list` / `playlistItems.list` |
 | `playlistItemsAccess` | **`'owned-or-collaborator'`** | `'all'` | Spotify: spike S2 (2026-10-02); readability of non-owned playlists is probed at read time |
-| `likedSongs` | `{ read: 'exact', write: false }` | `{ read: 'approximate', write: false, readCap: 5000 }` | |
+| `likedSongs` | `{ read: 'exact', write: false }` | `{ read: 'exact', write: false }` | YouTube reads the `LM` playlist (spike S5, ADR 0002 Amendment 3) |
 | `isrcSearchMode` | `'filter'` (spike S1, 2026-10-02) | `'none'` | |
 | `searchReturnsDuration` | true | false | |
 | `musicAwareSearch` | true | false | |
@@ -243,7 +243,7 @@ Error types are defined in `src/core/provider/errors.ts` as a closed set; the CL
 | `supportsCollaborative` | true | false | |
 | `maxTracksPerRequest` | 100 (`POST /playlists/{id}/items`) | 1 (`playlistItems.insert`) | |
 | `maxPlaylistSize` | 10000 | undefined (handle 403 `playlistContainsMaximumNumberOfVideos`) | |
-| `quotaModel` | `{ kind: 'rate-limited' }` | `daily-buckets`, as specified in ADR 0002 §4.1 (minus `writeLiked`) | |
+| `quotaModel` | `{ kind: 'rate-limited' }` | `daily-buckets`, as specified in ADR 0002 §4.1 (minus `writeLiked`); ledger rules in ADR 0002 Amendment 2 | |
 
 The fake provider defaults to `paginationModel: 'offset'`, `maxSearchPageSize: 50`, `readPageSize: { 50, 100, 50 }`, `maxTracksPerRequest: 100`, `playlistItemsAccess: 'all'`, `isrcSearchMode: 'none'`, `canDeletePlaylist: true`, `supportsCollaborative: true`, `likedSongs: { read: 'exact', write: false }`, `quotaModel: { kind: 'rate-limited' }`, and every value can be overridden by tests.
 

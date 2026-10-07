@@ -55,6 +55,10 @@ async function fakeYouTubeApi(input: string | URL | Request, init?: RequestInit)
   if (path === '/playlistItems' && method === 'GET') {
     return listResponse([])
   }
+  // getPlaylist compares the playlist's channel with the user's (owned flag)
+  if (path === '/channels' && method === 'GET') {
+    return listResponse([{ id: CHANNEL_ID }])
+  }
   throw new Error(`unexpected request: ${method} ${url}`)
 }
 

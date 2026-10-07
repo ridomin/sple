@@ -35,7 +35,8 @@ export class YouTubeMusicHttpClient {
     )
 
     return {
-      items: body.items.map(p => this.youtubePlaylistToCanonical(p)),
+      // mine=true returns only the user's own playlists.
+      items: body.items.map(p => this.youtubePlaylistToCanonical(p, true)),
       nextPageToken: body.nextPageToken,
       totalResults: body.pageInfo.totalResults
     }
@@ -55,13 +56,28 @@ export class YouTubeMusicHttpClient {
     )
 
     if (!body.items.length) throw new NotFoundError(`Playlist not found: ${ref}`, 'playlist')
-    return this.youtubePlaylistToCanonical(body.items[0])
+    const playlist = body.items[0]
+    return this.youtubePlaylistToCanonical(playlist, playlist.snippet.channelId === (await this.getMyChannelId()))
   }
 
   async getPlaylistTracks(ref: string, page?: { limit?: number; cursor?: string }): Promise<{ items: CanonicalTrack[]; nextPageToken?: string; totalResults?: number }> {
     const playlistId = this.extractPlaylistId(ref)
     if (!playlistId) throw new Error(`Invalid playlist ref: ${ref}`)
+    return this.playlistItemsPage(playlistId, page)
+  }
 
+  /**
+   * Liked Songs: YouTube Music's "Liked Music" playlist `LM`. Not a documented
+   * ID, but the Data API serves it (spike S5); `addedAt` is the like time.
+   */
+  async getLikedTracks(page?: { limit?: number; cursor?: string }): Promise<{ items: CanonicalTrack[]; nextPageToken?: string; totalResults?: number }> {
+    return this.playlistItemsPage('LM', page)
+  }
+
+  private async playlistItemsPage(
+    playlistId: string,
+    page?: { limit?: number; cursor?: string }
+  ): Promise<{ items: CanonicalTrack[]; nextPageToken?: string; totalResults?: number }> {
     const maxResults = page?.limit ?? 50
     const url = new URL(this.baseUrl + '/playlistItems')
     url.searchParams.set('part', 'snippet,contentDetails')
@@ -150,6 +166,43 @@ export class YouTubeMusicHttpClient {
     }
   }
 
+  /** `search.list` for playlists or channels (`--type playlist` / `artist`); no extra `videos.list` call. */
+  async searchResources(
+    type: 'playlist' | 'channel',
+    text: string,
+    page?: { limit?: number; cursor?: string }
+  ): Promise<{ items: YouTubeTypes.YouTubeSearchResult[]; nextPageToken?: string; totalResults?: number }> {
+    const url = new URL(this.baseUrl + '/search')
+    url.searchParams.set('part', 'snippet')
+    url.searchParams.set('type', type)
+    url.searchParams.set('q', text)
+    url.searchParams.set('maxResults', String(page?.limit ?? 50))
+    if (page?.cursor) url.searchParams.set('pageToken', page.cursor)
+
+    const body = await this.httpClient.requestJson(
+      { method: 'GET', url: url.toString() },
+      (data: unknown) => data as YouTubeTypes.YouTubeListResponse<YouTubeTypes.YouTubeSearchResult>
+    )
+    return { items: body.items, nextPageToken: body.nextPageToken, totalResults: body.pageInfo.totalResults }
+  }
+
+  private myChannelId?: Promise<string | undefined>
+
+  /** The user's channel ID (`channels.list?mine=true`, 1 unit), looked up once per run. */
+  private getMyChannelId(): Promise<string | undefined> {
+    this.myChannelId ??= (async () => {
+      const url = new URL(this.baseUrl + '/channels')
+      url.searchParams.set('part', 'id')
+      url.searchParams.set('mine', 'true')
+      const body = await this.httpClient.requestJson(
+        { method: 'GET', url: url.toString() },
+        (data: unknown) => data as YouTubeTypes.YouTubeListResponse<{ id: string }>
+      )
+      return body.items[0]?.id
+    })()
+    return this.myChannelId
+  }
+
   async createPlaylist(input: {
     name: string
     description?: string
@@ -171,7 +224,7 @@ export class YouTubeMusicHttpClient {
       (data: unknown) => data as YouTubeTypes.YouTubePlaylist
     )
 
-    return this.youtubePlaylistToCanonical(body)
+    return this.youtubePlaylistToCanonical(body, true)
   }
 
   async removePlaylist(ref: string): Promise<{ action: 'deleted' | 'unfollowed' }> {
@@ -259,14 +312,14 @@ export class YouTubeMusicHttpClient {
     return body.items
   }
 
-  private youtubePlaylistToCanonical(playlist: YouTubeTypes.YouTubePlaylist): PlaylistSummary {
+  private youtubePlaylistToCanonical(playlist: YouTubeTypes.YouTubePlaylist, owned: boolean): PlaylistSummary {
     return {
       ref: playlist.id,
       id: playlist.id,
       name: playlist.snippet.title,
       description: playlist.snippet.description || undefined,
       owner: { id: playlist.snippet.channelId, displayName: playlist.snippet.channelTitle },
-      owned: true,
+      owned,
       itemsReadable: true,
       trackCount: playlist.contentDetails?.itemCount,
       public: playlist.status?.privacyStatus === 'public',
