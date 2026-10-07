@@ -22,16 +22,7 @@ export class KnownRefStrategy implements MatchingStrategy {
     if (track.refs && track.refs[targetProvider]) {
       // For now, assume the known ref is valid (no validation call)
       // In production, a second API call could verify, but we'll trust the cache
-      return {
-        trackRef: track.refs[targetProvider],
-        confidence: 1.0,
-        metadata: {
-          title: track.title,
-          artists: track.artists,
-          album: track.album,
-          duration: track.durationMs,
-        },
-      }
+      return { ref: track.refs[targetProvider], track, confidence: 1.0, strategy: 'known-ref' }
     }
 
     return null // No known ref

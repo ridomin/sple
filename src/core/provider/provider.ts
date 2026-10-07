@@ -44,6 +44,18 @@ export interface CanonicalTrack {
   addedAt?: string
 }
 
+/** Input to searchTracks. The adapter turns it into its own query syntax; core never builds provider query strings (ADR-0003 A2). */
+export type TrackQuery =
+  | { kind: 'isrc'; isrc: string }
+  | { kind: 'metadata'; title: string; artists: string[]; album?: string; durationMs?: number }
+
+/** One searchTracks result. `ref` is this provider's track ref. */
+export interface TrackHit {
+  ref: string
+  track: CanonicalTrack
+}
+
+/** The single candidate type, used by the matching engine and the match report (ADR-0009). */
 export interface MatchCandidate {
   ref: string
   track: CanonicalTrack
@@ -140,7 +152,8 @@ export interface Provider {
   ): Promise<PlaylistSummary>
 
   removePlaylist(ref: string): Promise<{ action: 'deleted' | 'unfollowed' }>
-  resolveTrack(track: CanonicalTrack, opts: { maxCandidates: number }): Promise<MatchCandidate[]>
+  /** Catalog track search for matching (ADR-0009). At most `limit` hits, in the provider's relevance order. */
+  searchTracks(query: TrackQuery, opts: { limit: number }): Promise<TrackHit[]>
 
   populatePlaylist(
     ref: string,

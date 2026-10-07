@@ -28,22 +28,14 @@ function makeFile(): CanonicalPlaylistFile {
   } as CanonicalPlaylistFile
 }
 
-function makeProvider(search: FakeProvider['search']): FakeProvider {
+function makeProvider(searchTracks: FakeProvider['searchTracks']): FakeProvider {
   const provider = new FakeProvider()
   ;(provider.capabilities as any).isrcSearchMode = 'lookup'
-  provider.search = search
+  provider.searchTracks = searchTracks
   return provider
 }
 
-const hit = (title: string) => ({
-  items: [{
-    type: 'track' as const,
-    id: 'x',
-    ref: 'x',
-    name: title,
-    track: { title, artists: ['A'], durationMs: 180000, refs: { fake: 'x' } },
-  }],
-})
+const hit = (title: string) => [{ ref: 'x', track: { title, artists: ['A'], durationMs: 180000, refs: { fake: 'x' } } }]
 
 describe('MatchingEngine errors', () => {
   const fatal: [string, () => Error, new (...args: any[]) => Error][] = [
@@ -69,8 +61,8 @@ describe('MatchingEngine errors', () => {
 
   test('a non-fatal strategy error falls through to the next strategy', async () => {
     const provider = makeProvider(async (q) => {
-      if (q.text.startsWith('isrc:')) throw new ProviderError('HTTP 500')
-      return hit(q.text.includes('Song 1') ? 'Song 1' : 'Song 2')
+      if (q.kind === 'isrc') throw new ProviderError('HTTP 500')
+      return hit(q.title)
     })
     const report = await new MatchingEngine().match(makeFile(), provider, provider.capabilities)
     assert.strictEqual(report.results[0].status, 'matched')
@@ -79,7 +71,7 @@ describe('MatchingEngine errors', () => {
 
   test('when every strategy errors, the track is unmatched with the last error message', async () => {
     const provider = makeProvider(async (q) => {
-      throw new ProviderError(q.text.startsWith('isrc:') ? 'isrc boom' : 'metadata boom')
+      throw new ProviderError(q.kind === 'isrc' ? 'isrc boom' : 'metadata boom')
     })
     const report = await new MatchingEngine().match(makeFile(), provider, provider.capabilities)
     assert.strictEqual(report.results[0].status, 'unmatched')

@@ -44,7 +44,7 @@ export class PlaylistCreator {
     const tracksToAdd: string[] = []
     for (const result of report.results) {
       if (result.status === 'matched' && result.candidate) {
-        tracksToAdd.push(result.candidate.trackRef)
+        tracksToAdd.push(result.candidate.ref)
       }
     }
 

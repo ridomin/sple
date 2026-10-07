@@ -55,6 +55,7 @@ const PLAYLIST_ID = '0FRr10mglUR3E0Pq8TqlxL'
 /** Each M1 command's provider call, with the scopes it needs. */
 const OPERATIONS: Array<{ name: string; call: (p: Provider) => Promise<unknown>; scopes: string[] }> = [
   { name: 'search', call: (p) => p.search({ text: 'x', type: 'track' }, page), scopes: [] },
+  { name: 'import matching (searchTracks)', call: (p) => p.searchTracks({ kind: 'isrc', isrc: 'X' }, { limit: 5 }), scopes: [] },
   {
     name: 'playlist list (listPlaylists)',
     call: (p) => p.listPlaylists(page),
@@ -97,6 +98,7 @@ test('scope table covers exactly the M1 operations', () => {
     'readLiked',
     'removePlaylist',
     'search',
+    'searchTracks',
   ])
   assert.deepEqual(SPOTIFY_OPERATION_SCOPES.search, [])
   assert.deepEqual(SPOTIFY_OPERATION_SCOPES.readLiked, ['user-library-read'])

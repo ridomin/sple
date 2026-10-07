@@ -1,4 +1,6 @@
-import type { CanonicalTrack, Provider } from '../provider/provider.js'
+import type { CanonicalTrack, MatchCandidate, Provider } from '../provider/provider.js'
+
+export type { MatchCandidate }
 import type { ProviderCapabilities } from '../provider/capabilities.js'
 
 // Result of a single match attempt
@@ -10,18 +12,6 @@ export interface MatchResult {
   confidence?: number // Confidence score (0-1)
   strategies?: string[] // Which strategies were tried
   error?: string // Error message if matching failed
-}
-
-// Candidate track match (from a strategy)
-export interface MatchCandidate {
-  trackRef: string // Provider-specific track reference
-  confidence: number // Confidence score (0-1)
-  metadata: {
-    title?: string
-    artists?: string[]
-    album?: string
-    duration?: number
-  } & Record<string, unknown>
 }
 
 // Collection of all match results for a playlist

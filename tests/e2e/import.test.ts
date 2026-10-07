@@ -42,27 +42,6 @@ describe('Import E2E (with fake provider)', () => {
       { id: 'f2', title: 'Imagine', artists: ['John Lennon'], album: 'Imagine', duration: 183000 },
     ]
     provider = new FakeProvider({ initialTracks: fakeTracks })
-    // The fake provider's search matches the whole query as a substring, which
-    // never hits for "Title Artist" queries; match on any query word instead.
-    provider.search = async (q) => {
-      const words = q.text.toLowerCase().split(/\s+/)
-      const items = fakeTracks
-        .filter((t) => words.some((w) => t.title.toLowerCase().includes(w)))
-        .map((t) => ({
-          type: 'track' as const,
-          id: t.id,
-          ref: t.id,
-          name: t.title,
-          track: {
-            title: t.title,
-            artists: t.artists,
-            album: t.album,
-            durationMs: t.duration,
-            refs: { fake: t.id },
-          },
-        }))
-      return { items }
-    }
   })
 
   afterEach(async () => {

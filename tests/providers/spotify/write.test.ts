@@ -306,26 +306,6 @@ test('Spotify write operations (M1-21)', async (t) => {
     assert.strictEqual(calls.length, 0)
   })
 
-  await t.test('resolveTrack throws UsageError with release message', async () => {
-    const provider = createSpotifyProvider('test-client', tempDir)
-
-    try {
-      await provider.resolveTrack(
-        {
-          title: 'Song',
-          artists: ['Artist'],
-          refs: { spotify: 'spotify:track:123' },
-          isrc: null,
-        },
-        { maxCandidates: 5 }
-      )
-      assert.fail('Should have thrown UsageError')
-    } catch (error) {
-      assert.ok(error instanceof UsageError)
-      assert.ok((error as Error).message.includes('not available'))
-    }
-  })
-
   await t.test('populatePlaylist throws UsageError with release message', async () => {
     const provider = createSpotifyProvider('test-client', tempDir)
 

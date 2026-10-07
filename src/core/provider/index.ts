@@ -16,6 +16,8 @@ export type {
   CanonicalTrack,
   PlaylistSummary,
   MatchCandidate,
+  TrackQuery,
+  TrackHit,
   AuthStatus,
   Page,
   PageRequest,

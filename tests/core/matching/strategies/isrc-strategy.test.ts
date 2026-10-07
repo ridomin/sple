@@ -1,17 +1,53 @@
 import { test, describe, beforeEach } from 'node:test'
 import * as assert from 'node:assert'
 import { IsrcStrategy } from '../../../../src/core/matching/strategies/isrc-strategy.js'
-import type { CanonicalTrack, Provider } from '../../../../src/core/provider/provider.js'
+import type { CanonicalTrack, Provider, TrackHit, TrackQuery } from '../../../../src/core/provider/provider.js'
+
+const CAPS = {
+  official: true,
+  requiresRiskAcknowledgement: false,
+  userSuppliedClientId: false,
+  requiresClientSecret: true,
+  supportsRefreshToken: true,
+  supportsRevocation: true,
+  paginationModel: 'cursor-forward' as const,
+  maxSearchPageSize: 50,
+  playlistItemsAccess: 'all' as const,
+  likedSongs: { read: 'exact' as const, write: false },
+  isrcSearchMode: 'lookup' as const,
+  searchReturnsDuration: true,
+  musicAwareSearch: true,
+  canDeletePlaylist: true,
+  supportsCollaborative: true,
+  maxTracksPerRequest: 100,
+  quotaModel: { kind: 'rate-limited' as const },
+}
+
+const request = (track: CanonicalTrack) => ({ track, position: 1, targetProvider: 'spotify', capabilities: CAPS })
+
+const hit = (ref: string, track: Partial<CanonicalTrack> & { title: string }): TrackHit => ({
+  ref,
+  track: { artists: [], refs: {}, ...track },
+})
+
+/** A provider whose searchTracks records its calls and returns `hits`. */
+function providerReturning(hits: TrackHit[] | Error) {
+  const calls: Array<{ query: TrackQuery; opts: { limit: number } }> = []
+  const provider = {
+    searchTracks: async (query: TrackQuery, opts: { limit: number }) => {
+      calls.push({ query, opts })
+      if (hits instanceof Error) throw hits
+      return hits
+    },
+  } as unknown as Provider
+  return { provider, calls }
+}
 
 describe('IsrcStrategy', () => {
   let strategy: IsrcStrategy
-  let mockProvider: Partial<Provider>
 
   beforeEach(() => {
     strategy = new IsrcStrategy()
-    mockProvider = {
-      search: async () => ({ items: [] }),
-    }
   })
 
   test('should have priority 2 (medium)', () => {
@@ -208,295 +244,42 @@ describe('IsrcStrategy', () => {
   })
 
   describe('execute', () => {
-    test('should return high-confidence match when ISRC search succeeds', async () => {
-      const track: CanonicalTrack = {
-        title: 'Imagine',
-        artists: ['John Lennon'],
-        album: 'Imagine',
-        durationMs: 183000,
-        isrc: 'USRC17607839',
-        refs: {},
-      }
+    const imagine: CanonicalTrack = {
+      title: 'Imagine',
+      artists: ['John Lennon'],
+      album: 'Imagine',
+      durationMs: 183000,
+      isrc: 'USRC17607839',
+      refs: {},
+    }
 
-      const request = {
-        track,
-        position: 1,
-        targetProvider: 'spotify',
-        capabilities: {
-          official: true,
-          requiresRiskAcknowledgement: false,
-          userSuppliedClientId: false,
-          requiresClientSecret: true,
-          supportsRefreshToken: true,
-          supportsRevocation: true,
-          paginationModel: 'cursor-forward' as const,
-          maxSearchPageSize: 50,
-          playlistItemsAccess: 'all' as const,
-          likedSongs: { read: 'exact' as const, write: false },
-          isrcSearchMode: 'lookup' as const,
-          searchReturnsDuration: true,
-          musicAwareSearch: true,
-          canDeletePlaylist: true,
-          supportsCollaborative: true,
-          maxTracksPerRequest: 100,
-          quotaModel: { kind: 'rate-limited' as const },
-        },
-      }
-
-      mockProvider.search = async () => ({
-        items: [
-          {
-            type: 'track' as const,
-            id: 'track123',
-            ref: 'spotify:track:456',
-            name: 'Imagine',
-            track: {
-              title: 'Imagine',
-              artists: ['John Lennon'],
-              album: 'Imagine',
-              durationMs: 183000,
-              refs: {},
-            },
-          },
-        ],
-      })
-
-      const result = await strategy.execute(request, mockProvider as Provider)
-      assert.notStrictEqual(result, null)
-      assert.strictEqual(result!.confidence, 0.95)
-      assert.strictEqual(result!.trackRef, 'spotify:track:456')
+    test('searches by ISRC through searchTracks (core builds no query string)', async () => {
+      const { provider, calls } = providerReturning([])
+      await strategy.execute(request(imagine), provider)
+      assert.deepStrictEqual(calls, [{ query: { kind: 'isrc', isrc: 'USRC17607839' }, opts: { limit: 5 } }])
     })
 
-    test('should return null when ISRC search returns no results', async () => {
-      const track: CanonicalTrack = {
-        title: 'Unknown Song',
-        artists: ['Unknown Artist'],
-        isrc: 'INVALIDISRC',
-        refs: {},
-      }
+    test('returns the first hit as a MatchCandidate with confidence 0.95', async () => {
+      const first = hit('spotify:track:456', { title: 'Imagine', artists: ['John Lennon'], album: 'Imagine', durationMs: 183000 })
+      const { provider } = providerReturning([first, hit('spotify:track:999', { title: 'Imagine (Live)' })])
+      const result = await strategy.execute(request(imagine), provider)
+      assert.deepStrictEqual(result, { ref: 'spotify:track:456', track: first.track, confidence: 0.95, strategy: 'isrc' })
+    })
 
-      const request = {
-        track,
-        position: 1,
-        targetProvider: 'spotify',
-        capabilities: {
-          official: true,
-          requiresRiskAcknowledgement: false,
-          userSuppliedClientId: false,
-          requiresClientSecret: true,
-          supportsRefreshToken: true,
-          supportsRevocation: true,
-          paginationModel: 'cursor-forward' as const,
-          maxSearchPageSize: 50,
-          playlistItemsAccess: 'all' as const,
-          likedSongs: { read: 'exact' as const, write: false },
-          isrcSearchMode: 'lookup' as const,
-          searchReturnsDuration: true,
-          musicAwareSearch: true,
-          canDeletePlaylist: true,
-          supportsCollaborative: true,
-          maxTracksPerRequest: 100,
-          quotaModel: { kind: 'rate-limited' as const },
-        },
-      }
-
-      mockProvider.search = async () => ({ items: [] })
-
-      const result = await strategy.execute(request, mockProvider as Provider)
-      assert.strictEqual(result, null)
+    test('returns null when there are no hits', async () => {
+      const { provider } = providerReturning([])
+      assert.strictEqual(await strategy.execute(request(imagine), provider), null)
     })
 
     test('should propagate search errors to the engine (ADR-0009 A1 §1.4)', async () => {
-      const track: CanonicalTrack = {
-        title: 'Song',
-        artists: ['Artist'],
-        isrc: 'USRC17607839',
-        refs: {},
-      }
-
-      const request = {
-        track,
-        position: 1,
-        targetProvider: 'spotify',
-        capabilities: {
-          official: true,
-          requiresRiskAcknowledgement: false,
-          userSuppliedClientId: false,
-          requiresClientSecret: true,
-          supportsRefreshToken: true,
-          supportsRevocation: true,
-          paginationModel: 'cursor-forward' as const,
-          maxSearchPageSize: 50,
-          playlistItemsAccess: 'all' as const,
-          likedSongs: { read: 'exact' as const, write: false },
-          isrcSearchMode: 'lookup' as const,
-          searchReturnsDuration: true,
-          musicAwareSearch: true,
-          canDeletePlaylist: true,
-          supportsCollaborative: true,
-          maxTracksPerRequest: 100,
-          quotaModel: { kind: 'rate-limited' as const },
-        },
-      }
-
-      mockProvider.search = async () => {
-        throw new Error('Quota exceeded')
-      }
-
-      await assert.rejects(() => strategy.execute(request, mockProvider as Provider), /Quota exceeded/)
+      const { provider } = providerReturning(new Error('Quota exceeded'))
+      await assert.rejects(() => strategy.execute(request(imagine), provider), /Quota exceeded/)
     })
 
-    test('should include track metadata in the result', async () => {
-      const track: CanonicalTrack = {
-        title: 'Dream On',
-        artists: ['Aerosmith'],
-        album: 'Aerosmith',
-        durationMs: 345000,
-        isrc: 'USIR27800001',
-        refs: {},
-      }
-
-      const request = {
-        track,
-        position: 2,
-        targetProvider: 'spotify',
-        capabilities: {
-          official: true,
-          requiresRiskAcknowledgement: false,
-          userSuppliedClientId: false,
-          requiresClientSecret: true,
-          supportsRefreshToken: true,
-          supportsRevocation: true,
-          paginationModel: 'cursor-forward' as const,
-          maxSearchPageSize: 50,
-          playlistItemsAccess: 'all' as const,
-          likedSongs: { read: 'exact' as const, write: false },
-          isrcSearchMode: 'lookup' as const,
-          searchReturnsDuration: true,
-          musicAwareSearch: true,
-          canDeletePlaylist: true,
-          supportsCollaborative: true,
-          maxTracksPerRequest: 100,
-          quotaModel: { kind: 'rate-limited' as const },
-        },
-      }
-
-      mockProvider.search = async () => ({
-        items: [
-          {
-            type: 'track' as const,
-            id: 'track789',
-            ref: 'spotify:track:789',
-            name: 'Dream On',
-            track: {
-              title: 'Dream On',
-              artists: ['Aerosmith'],
-              album: 'Aerosmith',
-              durationMs: 345000,
-              refs: {},
-            },
-          },
-        ],
-      })
-
-      const result = await strategy.execute(request, mockProvider as Provider)
-      assert.notStrictEqual(result, null)
-      assert.strictEqual(result!.metadata.title, 'Dream On')
-      assert.deepStrictEqual(result!.metadata.artists, ['Aerosmith'])
-      assert.strictEqual(result!.metadata.album, 'Aerosmith')
-      assert.strictEqual(result!.metadata.duration, 345000)
-    })
-
-    test('should handle search results with non-track items', async () => {
-      const track: CanonicalTrack = {
-        title: 'Song',
-        artists: ['Artist'],
-        isrc: 'USRC17607839',
-        refs: {},
-      }
-
-      const request = {
-        track,
-        position: 1,
-        targetProvider: 'spotify',
-        capabilities: {
-          official: true,
-          requiresRiskAcknowledgement: false,
-          userSuppliedClientId: false,
-          requiresClientSecret: true,
-          supportsRefreshToken: true,
-          supportsRevocation: true,
-          paginationModel: 'cursor-forward' as const,
-          maxSearchPageSize: 50,
-          playlistItemsAccess: 'all' as const,
-          likedSongs: { read: 'exact' as const, write: false },
-          isrcSearchMode: 'lookup' as const,
-          searchReturnsDuration: true,
-          musicAwareSearch: true,
-          canDeletePlaylist: true,
-          supportsCollaborative: true,
-          maxTracksPerRequest: 100,
-          quotaModel: { kind: 'rate-limited' as const },
-        },
-      }
-
-      // Return album and artist results, no track
-      mockProvider.search = async () => ({
-        items: [
-          {
-            type: 'album' as const,
-            id: 'album123',
-            ref: 'spotify:album:123',
-            name: 'Album',
-            artists: ['Artist'],
-          },
-          {
-            type: 'artist' as const,
-            id: 'artist123',
-            ref: 'spotify:artist:123',
-            name: 'Artist',
-          },
-        ],
-      })
-
-      const result = await strategy.execute(request, mockProvider as Provider)
-      assert.strictEqual(result, null)
-    })
-
-    test('should return null when track has no ISRC', async () => {
-      const track: CanonicalTrack = {
-        title: 'Song',
-        artists: ['Artist'],
-        refs: {},
-      }
-
-      const request = {
-        track,
-        position: 1,
-        targetProvider: 'spotify',
-        capabilities: {
-          official: true,
-          requiresRiskAcknowledgement: false,
-          userSuppliedClientId: false,
-          requiresClientSecret: true,
-          supportsRefreshToken: true,
-          supportsRevocation: true,
-          paginationModel: 'cursor-forward' as const,
-          maxSearchPageSize: 50,
-          playlistItemsAccess: 'all' as const,
-          likedSongs: { read: 'exact' as const, write: false },
-          isrcSearchMode: 'lookup' as const,
-          searchReturnsDuration: true,
-          musicAwareSearch: true,
-          canDeletePlaylist: true,
-          supportsCollaborative: true,
-          maxTracksPerRequest: 100,
-          quotaModel: { kind: 'rate-limited' as const },
-        },
-      }
-
-      const result = await strategy.execute(request, mockProvider as Provider)
-      assert.strictEqual(result, null)
+    test('returns null without searching when the track has no ISRC', async () => {
+      const { provider, calls } = providerReturning([hit('x', { title: 'Imagine' })])
+      assert.strictEqual(await strategy.execute(request({ ...imagine, isrc: undefined }), provider), null)
+      assert.strictEqual(calls.length, 0)
     })
   })
 })

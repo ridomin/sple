@@ -28,7 +28,7 @@ test('Provider Interface Compliance (E2E)', async (t) => {
       assert.strictEqual(typeof provider.getLikedTracks, 'function')
       assert.strictEqual(typeof provider.createPlaylist, 'function')
       assert.strictEqual(typeof provider.removePlaylist, 'function')
-      assert.strictEqual(typeof provider.resolveTrack, 'function')
+      assert.strictEqual(typeof provider.searchTracks, 'function')
       assert.strictEqual(typeof provider.populatePlaylist, 'function')
     })
 
@@ -65,7 +65,7 @@ test('Provider Interface Compliance (E2E)', async (t) => {
       assert.strictEqual(typeof provider.getLikedTracks, 'function')
       assert.strictEqual(typeof provider.createPlaylist, 'function')
       assert.strictEqual(typeof provider.removePlaylist, 'function')
-      assert.strictEqual(typeof provider.resolveTrack, 'function')
+      assert.strictEqual(typeof provider.searchTracks, 'function')
       assert.strictEqual(typeof provider.populatePlaylist, 'function')
     })
 

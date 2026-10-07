@@ -37,7 +37,7 @@ test('MatchReportWriter', async (t) => {
         position: 1,
         status: 'matched',
         confidence: 0.95,
-        candidate: { trackRef: 'tgt:1', confidence: 0.95, metadata: { title: 'Song 1' } },
+        candidate: { ref: 'tgt:1', track: { title: 'Song 1', artists: [], refs: {} }, confidence: 0.95, strategy: 'metadata' },
         strategies: ['metadata'],
       },
       {
@@ -45,7 +45,7 @@ test('MatchReportWriter', async (t) => {
         position: 2,
         status: 'low-confidence',
         confidence: 0.55,
-        candidate: { trackRef: 'tgt:2', confidence: 0.55, metadata: { title: 'Song 2 Remix' } },
+        candidate: { ref: 'tgt:2', track: { title: 'Song 2 Remix', artists: [], refs: {} }, confidence: 0.55, strategy: 'metadata' },
       },
       {
         track: { title: 'Song 3', artists: ['Artist 3'], album: 'Album', durationMs: 220000, refs: { src: 'src:3' } },
@@ -211,9 +211,10 @@ test('MatchReportWriter', async (t) => {
           status: 'low-confidence' as const,
           confidence: 0.5,
           candidate: {
-            trackRef: `tgt:${i + 1}`,
+            ref: `tgt:${i + 1}`,
+            track: { title: `Match ${i + 1}`, artists: [], refs: {} },
             confidence: 0.5,
-            metadata: { title: `Match ${i + 1}` },
+            strategy: 'metadata' as const,
           },
         })),
         summary: {

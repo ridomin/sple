@@ -36,138 +36,37 @@ describe('KnownRefStrategy', () => {
     assert.strictEqual(strategy.isApplicable(request), true)
   })
 
-  test('should return high-confidence match when track has known ref for target provider', async () => {
-    const track: CanonicalTrack = {
-      title: 'Song',
-      artists: ['Artist'],
-      album: 'Album',
-      durationMs: 180000,
-      refs: {
-        spotify: 'spotify:track:123',
-        'youtube-music': 'dQw4w9WgXcQ',
-      },
-    }
-
-    const request = {
-      track,
-      position: 1,
-      targetProvider: 'youtube-music',
-      capabilities: { paginationModel: 'page-offset', maxTracksPerRequest: 50 },
-    }
-
-    const result = await strategy.execute(request, mockProvider)
-    assert.notStrictEqual(result, null)
-    assert.strictEqual(result!.confidence, 1.0)
-    assert.strictEqual(result!.trackRef, 'dQw4w9WgXcQ')
+  const track: CanonicalTrack = {
+    title: 'Song',
+    artists: ['Artist'],
+    album: 'Album',
+    durationMs: 180000,
+    refs: {
+      spotify: 'spotify:track:123',
+      'youtube-music': 'dQw4w9WgXcQ',
+    },
+  }
+  const request = (t: CanonicalTrack, targetProvider = 'youtube-music') => ({
+    track: t,
+    position: 1,
+    targetProvider,
+    capabilities: { paginationModel: 'page-offset', maxTracksPerRequest: 50 },
   })
 
-  test('should return null when no known ref exists', async () => {
-    const track: CanonicalTrack = {
-      title: 'Song',
-      artists: ['Artist'],
-      album: 'Album',
-      durationMs: 180000,
-      refs: {
-        spotify: 'spotify:track:123',
-      },
-    }
-
-    const request = {
-      track,
-      position: 1,
-      targetProvider: 'youtube-music',
-      capabilities: { paginationModel: 'page-offset', maxTracksPerRequest: 50 },
-    }
-
-    const result = await strategy.execute(request, mockProvider)
-    assert.strictEqual(result, null)
+  test('returns the target ref as a MatchCandidate with confidence 1.0 and the source track', async () => {
+    const result = await strategy.execute(request(track), mockProvider)
+    assert.deepStrictEqual(result, { ref: 'dQw4w9WgXcQ', track, confidence: 1.0, strategy: 'known-ref' })
   })
 
-  test('should return null when refs is empty', async () => {
-    const track: CanonicalTrack = {
-      title: 'Song',
-      artists: ['Artist'],
-      album: 'Album',
-      durationMs: 180000,
-      refs: {},
-    }
-
-    const request = {
-      track,
-      position: 1,
-      targetProvider: 'spotify',
-      capabilities: { paginationModel: 'page-offset', maxTracksPerRequest: 50 },
-    }
-
-    const result = await strategy.execute(request, mockProvider)
-    assert.strictEqual(result, null)
+  test('picks the ref for the target provider', async () => {
+    assert.strictEqual((await strategy.execute(request(track, 'spotify'), mockProvider))!.ref, 'spotify:track:123')
   })
 
-  test('should include track metadata in the result', async () => {
-    const track: CanonicalTrack = {
-      title: 'My Song',
-      artists: ['Artist A', 'Artist B'],
-      album: 'My Album',
-      durationMs: 250000,
-      refs: {
-        'spotify': 'spotify:track:456',
-      },
-    }
-
-    const request = {
-      track,
-      position: 5,
-      targetProvider: 'spotify',
-      capabilities: { paginationModel: 'page-offset', maxTracksPerRequest: 50 },
-    }
-
-    const result = await strategy.execute(request, mockProvider)
-    assert.notStrictEqual(result, null)
-    assert.strictEqual(result!.metadata.title, 'My Song')
-    assert.deepStrictEqual(result!.metadata.artists, ['Artist A', 'Artist B'])
-    assert.strictEqual(result!.metadata.album, 'My Album')
-    assert.strictEqual(result!.metadata.duration, 250000)
+  test('returns null when no ref exists for the target provider', async () => {
+    assert.strictEqual(await strategy.execute(request({ ...track, refs: { spotify: 'spotify:track:123' } }), mockProvider), null)
   })
 
-  test('should handle multiple provider refs correctly', async () => {
-    const track: CanonicalTrack = {
-      title: 'Multi-Provider Song',
-      artists: ['Artist'],
-      refs: {
-        spotify: 'spotify:track:111',
-        'youtube-music': 'jNQXAC9IVRw',
-        'amazon-music': 'amzn:track:222',
-      },
-    }
-
-    // Test Spotify lookup
-    const spotifyRequest = {
-      track,
-      position: 1,
-      targetProvider: 'spotify',
-      capabilities: { paginationModel: 'page-offset', maxTracksPerRequest: 50 },
-    }
-    const spotifyResult = await strategy.execute(spotifyRequest, mockProvider)
-    assert.strictEqual(spotifyResult!.trackRef, 'spotify:track:111')
-
-    // Test YouTube Music lookup
-    const youtubeRequest = {
-      track,
-      position: 1,
-      targetProvider: 'youtube-music',
-      capabilities: { paginationModel: 'page-offset', maxTracksPerRequest: 50 },
-    }
-    const youtubeResult = await strategy.execute(youtubeRequest, mockProvider)
-    assert.strictEqual(youtubeResult!.trackRef, 'jNQXAC9IVRw')
-
-    // Test Amazon Music lookup
-    const amazonRequest = {
-      track,
-      position: 1,
-      targetProvider: 'amazon-music',
-      capabilities: { paginationModel: 'page-offset', maxTracksPerRequest: 50 },
-    }
-    const amazonResult = await strategy.execute(amazonRequest, mockProvider)
-    assert.strictEqual(amazonResult!.trackRef, 'amzn:track:222')
+  test('returns null when refs is empty', async () => {
+    assert.strictEqual(await strategy.execute(request({ ...track, refs: {} }), mockProvider), null)
   })
 })

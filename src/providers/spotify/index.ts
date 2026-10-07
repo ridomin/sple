@@ -327,9 +327,18 @@ export function createSpotifyProvider(
 
       return { action: 'unfollowed' }
     },
-    // Not M1 operations: no scope in the M1 table.
-    resolveTrack: () =>
-      Promise.reject(new UsageError('Track resolution is not available in this release')),
+    async searchTracks(query, opts) {
+      await guard('searchTracks')
+      // ADR-0003 A2 "Spotify endpoints used": the adapter owns the query syntax.
+      const q = query.kind === 'isrc' ? `isrc:${query.isrc}` : [query.title, query.artists[0]].filter(Boolean).join(' ')
+      const limit = Math.min(opts.limit, SPOTIFY_CAPABILITIES.maxSearchPageSize)
+      const params = new URLSearchParams({ q, type: 'track', limit: String(limit), offset: '0' })
+      const response = await getJson(`/search?${params.toString()}`, validateSpotifySearchResponse)
+      return mapSpotifySearchResults(response)
+        .flatMap((item) => (item.type === 'track' ? [{ ref: item.ref, track: item.track }] : []))
+        .slice(0, opts.limit)
+    },
+    // Not an M1 operation: no scope in the M1 table.
     populatePlaylist: () =>
       Promise.reject(new UsageError('Playlist population is not available in this release')),
   }

@@ -190,7 +190,7 @@ Capabilities become richer and are declared per adapter. Proposed additions to t
 ```ts
 // core/provider/capabilities.ts
 export type ProviderOperation =
-  | 'search' | 'resolveTrack' | 'getTrackDetails'
+  | 'search' | 'searchTracks' | 'getTrackDetails'   // 'resolveTrack' renamed (ADR 0003 Amendment 2)
   | 'listPlaylists' | 'getPlaylistItems'
   | 'createPlaylist' | 'removePlaylist' | 'populatePlaylist'
   | 'readLiked' | 'writeLiked';
@@ -239,7 +239,7 @@ quotaModel: {
   ],
   costs: {
     search:           [{ bucket: 'search', amount: 1, per: 'call' }],
-    resolveTrack:     [{ bucket: 'search', amount: 1, per: 'call' },
+    searchTracks:     [{ bucket: 'search', amount: 1, per: 'call' },
                        { bucket: 'units',  amount: 1, per: 'call' }],   // + videos.list for durations
     getTrackDetails:  [{ bucket: 'units',  amount: 1, per: 'page', pageSize: 50 }],
     listPlaylists:    [{ bucket: 'units',  amount: 1, per: 'page', pageSize: 50 }],
