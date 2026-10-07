@@ -7,7 +7,7 @@ import { run } from '../../../src/cli/commands/import.js'
 import type { CommandContext } from '../../../src/cli/cli.js'
 import type { CanonicalPlaylistFile } from '../../../src/core/export/format.js'
 import { EXIT_CODES } from '../../../src/cli/exit-codes.js'
-import { FakeProvider } from '../../../src/providers/fake/index.js'
+import { FakeProvider, parseFakeTrackRef } from '../../../src/providers/fake/index.js'
 import { AuthRequiredError, QuotaExhaustedError } from '../../../src/core/provider/errors.js'
 
 class MockIO {
@@ -34,6 +34,7 @@ function createTestContext(overrides?: Partial<CommandContext>): CommandContext 
     registry: {
       has: () => true,
       create: () => new FakeProvider({ pagination: 'cursor-forward', playlists: { access: ['owned'] } }),
+      trackRefParsers: () => ({ fake: parseFakeTrackRef }),
     } as any,
     config: { provider: 'spotify', verbose: false },
     io: {
@@ -64,7 +65,7 @@ function createTestFile(): CanonicalPlaylistFile {
         artists: ['Test Artist'],
         album: 'Test Album',
         durationMs: 180000,
-        ref: 'spotify:track:123',
+        refs: { spotify: 'spotify:track:123' },
       },
     ],
     unsupportedItems: [],
@@ -486,7 +487,8 @@ function makeCreationProvider(): FakeProvider {
 function withImportFile(tracks: CanonicalPlaylistFile['tracks'], fn: (path: string) => Promise<void>): Promise<void> {
   const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
   const filePath = join(tmpDir, 'test.json')
-  writeFileSync(filePath, JSON.stringify({ ...createTestFile(), tracks }))
+  const file = createTestFile()
+  writeFileSync(filePath, JSON.stringify({ ...file, playlist: { ...file.playlist, trackCount: tracks.length }, tracks }))
   return fn(filePath).finally(() => rmSync(tmpDir, { recursive: true }))
 }
 
@@ -500,9 +502,9 @@ async function createdTrackRefs(provider: FakeProvider): Promise<string[]> {
 
 test('import command: creates playlist with matched tracks and skips low-confidence ones', async () => {
   const provider = makeCreationProvider()
-  const isrcTrack = { position: 2, title: 'Song 2', artists: ['A'], durationMs: 180000, isrc: 'USRC10000002', refs: {} } as any
+  const isrcTrack = { position: 2, title: 'Song 2', artists: ['A'], durationMs: 180000, isrc: 'USRC10000002', refs: { spotify: 'spotify:track:source2' } } as any
   await withImportFile([knownRefTrack(1, 't1'), isrcTrack], async (filePath) => {
-    const ctx = createTestContext({ registry: { has: () => true, create: () => provider } as any })
+    const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({ fake: parseFakeTrackRef }) } as any })
     const result = await run(ctx, [filePath, '--yes', '--min-confidence', '0.99'])
 
     assert.equal(result, EXIT_CODES.SUCCESS)
@@ -514,7 +516,7 @@ test('import command: creates playlist with matched tracks and skips low-confide
 test('import command: exits non-zero and lists tracks the provider rejected', async () => {
   const provider = makeCreationProvider()
   await withImportFile([knownRefTrack(1, 't1'), knownRefTrack(2, 'gone')], async (filePath) => {
-    const ctx = createTestContext({ json: true, registry: { has: () => true, create: () => provider } as any })
+    const ctx = createTestContext({ json: true, registry: { has: () => true, create: () => provider, trackRefParsers: () => ({ fake: parseFakeTrackRef }) } as any })
     const result = await run(ctx, [filePath, '--yes'])
 
     assert.equal(result, EXIT_CODES.ERROR)
@@ -530,7 +532,7 @@ test('import command: names the created playlist and rethrows the provider error
   const provider = makeCreationProvider()
   provider.setQuotaBucket(0)
   await withImportFile([knownRefTrack(1, 't1')], async (filePath) => {
-    const ctx = createTestContext({ registry: { has: () => true, create: () => provider } as any })
+    const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({ fake: parseFakeTrackRef }) } as any })
 
     await assert.rejects(() => run(ctx, [filePath, '--yes']), QuotaExhaustedError)
     assert(ctx.mockIO.err.some((msg) => msg.includes('playlist 1 was created')), ctx.mockIO.err.join('\n'))
@@ -543,7 +545,7 @@ test('import command: auth errors from playlist creation are not turned into usa
     throw new AuthRequiredError('missing scope', 'missing-scope', 'playlist-modify')
   }
   await withImportFile([knownRefTrack(1, 't1')], async (filePath) => {
-    const ctx = createTestContext({ registry: { has: () => true, create: () => provider } as any })
+    const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({ fake: parseFakeTrackRef }) } as any })
     await assert.rejects(() => run(ctx, [filePath, '--yes']), AuthRequiredError)
   })
 })
@@ -559,10 +561,54 @@ test('import command: an auth error during matching stops the import before any 
     created = true
     return createPlaylist(...args)
   }
-  const isrcTrack = { position: 1, title: 'Song 2', artists: ['A'], durationMs: 180000, isrc: 'USRC10000002', refs: {} } as any
+  const isrcTrack = { position: 1, title: 'Song 2', artists: ['A'], durationMs: 180000, isrc: 'USRC10000002', refs: { spotify: 'spotify:track:source2' } } as any
   await withImportFile([isrcTrack, knownRefTrack(2, 't1')], async (filePath) => {
-    const ctx = createTestContext({ registry: { has: () => true, create: () => provider } as any })
+    const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({ fake: parseFakeTrackRef }) } as any })
     await assert.rejects(() => run(ctx, [filePath, '--yes']), AuthRequiredError)
     assert.equal(created, false)
   })
+})
+
+test('import command: CSV refs are inferred as fake refs, so the known-ref strategy adds them', async () => {
+  const provider = makeCreationProvider()
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  const filePath = join(tmpDir, 'Road Trip.csv')
+  writeFileSync(filePath, 'position,title,artists,album,duration_ms,added_at,isrc,ref\r\n1,Song 1,A,,180000,,,fake:track:t1\r\n')
+  try {
+    const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({ fake: parseFakeTrackRef }) } as any })
+    assert.equal(await run(ctx, [filePath, '--yes']), EXIT_CODES.SUCCESS)
+    assert.deepEqual(await createdTrackRefs(provider), ['fake:track:t1'])
+    assert(!ctx.mockIO.err.some((m) => m.includes('could not tell')), ctx.mockIO.err.join('\n'))
+    const page = await provider.listPlaylists({ limit: 50 })
+    assert(page.items.some((p) => p.name === 'Road Trip'), 'playlist named after the CSV file')
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: CSV refs from no single provider warn on stderr', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  const filePath = join(tmpDir, 'mixed.csv')
+  writeFileSync(filePath, 'position,title,artists,album,duration_ms,added_at,isrc,ref\r\n1,Song 1,A,,180000,,,something-else\r\n')
+  try {
+    const ctx = createTestContext()
+    await run(ctx, [filePath, '--dry-run'])
+    assert(
+      ctx.mockIO.err.includes('sple: warning: could not tell which provider the CSV refs belong to; matching by metadata only'),
+      ctx.mockIO.err.join('\n')
+    )
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
+})
+
+test('import command: an unsupported extension is a usage error', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'test-'))
+  const filePath = join(tmpDir, 'list.txt')
+  writeFileSync(filePath, 'x')
+  try {
+    await assert.rejects(() => run(createTestContext(), [filePath, '--dry-run']), /Unsupported file type '\.txt'/)
+  } finally {
+    rmSync(tmpDir, { recursive: true })
+  }
 })

@@ -1,148 +1,150 @@
 import { readFile } from 'fs/promises'
-import type { CanonicalPlaylistFile } from '../export/format.js'
+import { basename, extname } from 'path'
+import type { CanonicalPlaylistFile, PositionedTrack } from '../export/format.js'
+import { checkPlaylistFile } from '../export/format.js'
+import type { ProviderId } from '../provider/capabilities.js'
+
+/** A provider's pure `parseTrackRef` (ADR-0003 §3.1). */
+export type TrackRefParser = (input: string) => string | null
+
+export interface FileReaderOptions {
+  /** `parseTrackRef` of every registered provider, for CSV source inference. */
+  trackRefParsers?: Partial<Record<ProviderId, TrackRefParser>>
+  /** Receives warnings meant for stderr. */
+  onWarning?: (message: string) => void
+}
+
+export const CSV_SOURCE_UNKNOWN_WARNING =
+  'sple: warning: could not tell which provider the CSV refs belong to; matching by metadata only'
+
+const CSV_COLUMNS = ['position', 'title', 'artists', 'album', 'duration_ms', 'added_at', 'isrc', 'ref'] as const
 
 /**
- * Reads exported playlist files in JSON or CSV format and returns
- * CanonicalPlaylistFile for matching and import operations.
+ * Reads exported playlist files for `sple import` (ADR-0008 Amendment 1,
+ * "Reading"): `.json` must pass every v1 invariant; `.csv` is parsed per
+ * RFC 4180 and its source provider is inferred from the refs.
  */
 export class CanonicalFileReader {
-  /**
-   * Read a canonical playlist file, detecting format by extension.
-   * Supports JSON and CSV formats.
-   */
-  async readFile(path: string): Promise<CanonicalPlaylistFile> {
-    const ext = path.toLowerCase().endsWith('.json') ? 'json' : 'csv'
+  constructor(private options: FileReaderOptions = {}) {}
 
-    if (ext === 'json') {
-      return this.readJson(path)
-    } else {
-      return this.readCsv(path)
-    }
+  async readFile(path: string): Promise<CanonicalPlaylistFile> {
+    const ext = extname(path).toLowerCase()
+    if (ext === '.json') return this.readJson(path)
+    if (ext === '.csv') return this.readCsv(path)
+    throw new Error(`Unsupported file type '${extname(path)}'; use .json or .csv`)
   }
 
-  /**
-   * Read and validate a JSON canonical playlist export file.
-   * Validates schema version 1 and requires a tracks array.
-   */
   private async readJson(path: string): Promise<CanonicalPlaylistFile> {
-    const content = await readFile(path, 'utf-8')
-    const data = JSON.parse(content)
-
-    // Validate schema version
-    if (data.schemaVersion !== 1) {
+    let data: CanonicalPlaylistFile
+    try {
+      data = JSON.parse(await readFile(path, 'utf-8')) as CanonicalPlaylistFile
+    } catch (error) {
+      if (error instanceof SyntaxError) throw new Error(`Invalid JSON: ${error.message}`)
+      throw error
+    }
+    if (data?.schemaVersion !== 1) {
       throw new Error(
-        `Unsupported schema version: ${data.schemaVersion}. This version of sple supports v1 only.`
+        `Unsupported schema version: ${data?.schemaVersion}. This version of sple supports v1 only.`
       )
     }
-
-    // Validate structure
-    if (!data.tracks || !Array.isArray(data.tracks)) {
-      throw new Error('Invalid file: missing or invalid tracks array')
+    const problems = checkPlaylistFile(data)
+    if (problems.length > 0) {
+      throw new Error(`Invalid canonical playlist file: ${problems.join('; ')}`)
     }
-
-    return data as CanonicalPlaylistFile
+    return { ...data, tracks: [...data.tracks].sort((a, b) => a.position - b.position) }
   }
 
-  /**
-   * Read and parse a CSV canonical playlist export file.
-   * Expected columns: position, title, artists, album, duration_ms, added_at, isrc, ref
-   * Artists are semicolon-separated; fields may be quoted per RFC 4180.
-   */
   private async readCsv(path: string): Promise<CanonicalPlaylistFile> {
-    const content = await readFile(path, 'utf-8')
-    const lines = content.split(/\r?\n/)
-
-    if (lines.length < 2) {
-      throw new Error('CSV file is empty or has no header')
+    const [header, ...rows] = parseCsv((await readFile(path, 'utf-8')).replace(/^﻿/, ''))
+    const column = new Map((header ?? []).map((name, i) => [name.trim(), i]))
+    if (!CSV_COLUMNS.every((c) => column.has(c))) {
+      throw new Error(`CSV header must contain the columns ${CSV_COLUMNS.join(',')}`)
     }
 
-    const header = this.parseCsvLine(lines[0])
-    const expectedColumns = ['position', 'title', 'artists', 'album', 'duration_ms', 'added_at', 'isrc', 'ref']
+    const parsed: Array<{ track: PositionedTrack; ref: string }> = []
+    rows.forEach((row, i) => {
+      if (row.every((cell) => cell === '')) return
+      const cell = (name: (typeof CSV_COLUMNS)[number]) => row[column.get(name)!] ?? ''
+      const position = /^\d+$/.test(cell('position')) && Number(cell('position')) >= 1 ? Number(cell('position')) : i + 1
+      const artists = cell('artists').split(';').map((a) => a.trim()).filter(Boolean)
+      const track: PositionedTrack = {
+        position,
+        title: cell('title'),
+        artists: artists.length > 0 ? artists : ['Unknown Artist'],
+        refs: {},
+      }
+      if (cell('album')) track.album = cell('album')
+      if (/^\d+$/.test(cell('duration_ms'))) track.durationMs = Number(cell('duration_ms'))
+      if (cell('added_at')) track.addedAt = cell('added_at')
+      if (cell('isrc')) track.isrc = cell('isrc')
+      parsed.push({ track, ref: cell('ref').trim() })
+    })
 
-    if (!expectedColumns.every((col) => header.includes(col))) {
-      throw new Error(`CSV header missing required columns. Expected: ${expectedColumns.join(', ')}`)
+    const provider = this.inferSource(parsed.map((p) => p.ref).filter(Boolean))
+    if (provider) {
+      const parse = this.options.trackRefParsers![provider]!
+      for (const { track, ref } of parsed) if (ref) track.refs[provider] = parse(ref)!
+    } else {
+      this.options.onWarning?.(CSV_SOURCE_UNKNOWN_WARNING)
     }
 
-    const tracks: any[] = []
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue
-
-      const values = this.parseCsvLine(lines[i])
-      const row = this.mapCsvRowToObject(header, values)
-
-      // Parse artists as semicolon-separated list
-      const artists = row.artists ? row.artists.split(';').map((a: string) => a.trim()).filter(Boolean) : []
-
-      tracks.push({
-        position: parseInt(row.position) || i,
-        title: row.title,
-        artists,
-        album: row.album || '',
-        durationMs: parseInt(row.duration_ms) || undefined,
-        addedAt: row.added_at || undefined,
-        isrc: row.isrc || undefined,
-        // Create refs object with the ref value; since CSV doesn't indicate source provider,
-        // we use a generic key. The import command would need to know the actual source provider.
-        refs: row.ref ? { 'source': row.ref } : {},
-      })
-    }
-
+    const tracks = parsed.map((p) => p.track).sort((a, b) => a.position - b.position)
     return {
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
       generator: { name: 'sple', version: 'unknown' },
-      source: { provider: 'fake', kind: 'playlist' },
-      playlist: {
-        name: 'Imported Playlist',
-        trackCount: tracks.length,
-      },
+      source: { provider: provider ?? 'unknown', kind: 'playlist' },
+      playlist: { name: basename(path, extname(path)), trackCount: tracks.length },
       tracks,
       unsupportedItems: [],
     }
   }
 
-  /**
-   * Parse a single CSV line, handling quoted fields and escaped quotes per RFC 4180.
-   * Returns an array of unquoted field values.
-   */
-  private parseCsvLine(line: string): string[] {
-    const values: string[] = []
-    let current = ''
-    let inQuotes = false
+  /** The single registered provider whose parseTrackRef accepts every ref, else undefined. */
+  private inferSource(refs: string[]): ProviderId | undefined {
+    const parsers = Object.entries(this.options.trackRefParsers ?? {}) as Array<[ProviderId, TrackRefParser]>
+    const matching = parsers.filter(([, parse]) => refs.every((ref) => parse(ref) !== null))
+    return matching.length === 1 ? matching[0][0] : undefined
+  }
+}
 
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i]
+/** Parse RFC 4180 CSV into records; quoted fields may hold commas, quotes and line breaks. */
+export function parseCsv(text: string): string[][] {
+  const records: string[][] = []
+  let record: string[] = []
+  let field = ''
+  let inQuotes = false
 
-      if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          // Escaped quote: "" becomes "
-          current += '"'
-          i++
-        } else {
-          // Toggle quote state
-          inQuotes = !inQuotes
-        }
-      } else if (char === ',' && !inQuotes) {
-        // End of field
-        values.push(current)
-        current = ''
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuotes) {
+      if (c === '"' && text[i + 1] === '"') {
+        field += '"'
+        i++
+      } else if (c === '"') {
+        inQuotes = false
       } else {
-        current += char
+        field += c
       }
+    } else if (c === '"') {
+      inQuotes = true
+    } else if (c === ',') {
+      record.push(field)
+      field = ''
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++
+      record.push(field)
+      records.push(record)
+      record = []
+      field = ''
+    } else {
+      field += c
     }
-
-    values.push(current)
-    return values
   }
-
-  /**
-   * Map a CSV row (array of values) to an object using header column names.
-   */
-  private mapCsvRowToObject(header: string[], values: string[]): Record<string, string> {
-    const obj: Record<string, string> = {}
-    for (let i = 0; i < header.length; i++) {
-      obj[header[i]] = values[i] || ''
-    }
-    return obj
+  // A final record without a trailing line break
+  if (field !== '' || record.length > 0) {
+    record.push(field)
+    records.push(record)
   }
+  return records
 }

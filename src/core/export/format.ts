@@ -14,7 +14,8 @@ export interface CanonicalPlaylistFile {
   exportedAt: string
   generator: { name: 'sple'; version: string }
   source: {
-    provider: ProviderId
+    /** `unknown` only for a CSV whose refs name no single provider (ADR-0008 A1). */
+    provider: ProviderId | 'unknown'
     kind: ExportSourceKind
     userId?: string
   }

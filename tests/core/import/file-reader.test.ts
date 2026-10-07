@@ -3,321 +3,148 @@ import assert from 'node:assert/strict'
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { CanonicalFileReader } from '../../../src/core/import/file-reader.js'
+import { CanonicalFileReader, CSV_SOURCE_UNKNOWN_WARNING } from '../../../src/core/import/file-reader.js'
+import { parseSpotifyTrackRef } from '../../../src/providers/spotify/playlist-ref.js'
+import { parseYouTubeTrackRef } from '../../../src/providers/youtube-music/playlist-ref.js'
+import { parseFakeTrackRef } from '../../../src/providers/fake/index.js'
 
-function createTempDir(): string {
-  return mkdtempSync(join(tmpdir(), 'sple-reader-test-'))
-}
+// ADR-0008 Amendment 1, "Reading (import)".
 
-function cleanupTempDir(dir: string): void {
+const PARSERS = { spotify: parseSpotifyTrackRef, 'youtube-music': parseYouTubeTrackRef, fake: parseFakeTrackRef }
+const SPOTIFY_ID = '4uLU6hMCjMI75M1A2tKUQC'
+const HEADER = 'position,title,artists,album,duration_ms,added_at,isrc,ref'
+
+const validJson = () => ({
+  schemaVersion: 1,
+  exportedAt: '2026-10-05T12:00:00Z',
+  generator: { name: 'sple', version: '0.1.0' },
+  source: { provider: 'spotify', kind: 'playlist' },
+  playlist: { id: 'pl1', name: 'My Playlist', trackCount: 2 },
+  tracks: [
+    { position: 2, title: 'B', artists: ['X'], refs: { spotify: `spotify:track:${SPOTIFY_ID}` } },
+    { position: 1, title: 'A', artists: ['X'], refs: { spotify: `spotify:track:${SPOTIFY_ID}` } },
+  ],
+  unsupportedItems: [],
+})
+
+async function read(name: string, content: string | object) {
+  const dir = mkdtempSync(join(tmpdir(), 'sple-reader-'))
+  const path = join(dir, name)
+  writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content))
+  const warnings: string[] = []
   try {
+    const file = await new CanonicalFileReader({ trackRefParsers: PARSERS, onWarning: (w) => warnings.push(w) }).readFile(path)
+    return { file, warnings }
+  } finally {
     rmSync(dir, { recursive: true, force: true })
-  } catch {
-    // Ignore errors during cleanup
   }
 }
 
-test('CanonicalFileReader', async (t) => {
-  const reader = new CanonicalFileReader()
+test('format is chosen by extension, case-insensitive; others are rejected', async () => {
+  assert.equal((await read('a.JSON', validJson())).file.playlist.name, 'My Playlist')
+  assert.equal((await read('a.Csv', `${HEADER}\n1,T,A,,,,,\n`)).file.tracks.length, 1)
+  await assert.rejects(() => read('a.txt', `${HEADER}\n`), /Unsupported file type '\.txt'; use \.json or \.csv/)
+  await assert.rejects(() => read('noext', '{}'), /Unsupported file type/)
+})
 
-  await t.test('readFile (JSON)', async (t) => {
-    await t.test('should read valid JSON export file', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-export.json')
+test('JSON: tracks are returned in position order', async () => {
+  const { file } = await read('p.json', validJson())
+  assert.deepEqual(file.tracks.map((t) => t.title), ['A', 'B'])
+})
 
-        const content = {
-          schemaVersion: 1,
-          exportedAt: '2026-10-05T12:00:00Z',
-          generator: { name: 'sple', version: '0.1.0' },
-          source: { provider: 'spotify', kind: 'playlist' },
-          playlist: {
-            id: 'pl1',
-            name: 'My Playlist',
-            trackCount: 1,
-          },
-          tracks: [
-            {
-              position: 1,
-              title: 'Song',
-              artists: ['Artist'],
-              album: 'Album',
-              durationMs: 180000,
-              refs: { spotify: 'spotify:track:123' },
-            },
-          ],
-          unsupportedItems: [],
-        }
+test('JSON: an unsupported schema version has its own message', async () => {
+  await assert.rejects(
+    () => read('p.json', { ...validJson(), schemaVersion: 2 }),
+    /Unsupported schema version: 2\. This version of sple supports v1 only\./
+  )
+})
 
-        writeFileSync(filePath, JSON.stringify(content))
-
-        const result = await reader.readFile(filePath)
-        assert.equal(result.schemaVersion, 1)
-        assert.equal(result.tracks.length, 1)
-        assert.equal(result.tracks[0].title, 'Song')
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should reject unsupported schema version', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-export-v2.json')
-
-        const content = {
-          schemaVersion: 2,
-          tracks: [],
-        }
-
-        writeFileSync(filePath, JSON.stringify(content))
-
-        await assert.rejects(
-          async () => reader.readFile(filePath),
-          /Unsupported schema version: 2/
-        )
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should reject missing tracks array', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-export-no-tracks.json')
-
-        const content = {
-          schemaVersion: 1,
-          exportedAt: '2026-10-05T12:00:00Z',
-        }
-
-        writeFileSync(filePath, JSON.stringify(content))
-
-        await assert.rejects(
-          async () => reader.readFile(filePath),
-          /Invalid file: missing or invalid tracks array/
-        )
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
+test('JSON: every v1 invariant is checked and all problems are listed', async () => {
+  const bad = validJson()
+  bad.tracks[0].artists = []
+  bad.playlist.trackCount = 7
+  await assert.rejects(() => read('p.json', bad), (e: Error) => {
+    assert.match(e.message, /^Invalid canonical playlist file: /)
+    assert.match(e.message, /tracks\[0\]\.artists must be a non-empty array/)
+    assert.match(e.message, /playlist\.trackCount must equal/)
+    return true
   })
+})
 
-  await t.test('readFile (CSV)', async (t) => {
-    await t.test('should read valid CSV export file', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-export.csv')
+test('JSON: invalid JSON is rejected', async () => {
+  await assert.rejects(() => read('p.json', '{not json'), /JSON/)
+})
 
-        const content = 'position,title,artists,album,duration_ms,added_at,isrc,ref\n1,Song,Artist,Album,180000,2026-10-05T00:00:00Z,,spotify:track:123\n'
-        writeFileSync(filePath, content)
+test('CSV: RFC 4180 quoting, including commas, quotes and line breaks', async () => {
+  const csv = `${HEADER}\r\n1,"Hello, ""World""\nPart 2","A; B",,,,,\r\n`
+  const { file } = await read('q.csv', csv)
+  assert.equal(file.tracks.length, 1)
+  assert.equal(file.tracks[0].title, 'Hello, "World"\nPart 2')
+  assert.deepEqual(file.tracks[0].artists, ['A', 'B'])
+})
 
-        const result = await reader.readFile(filePath)
-        assert.equal(result.tracks.length, 1)
-        assert.equal(result.tracks[0].title, 'Song')
-        assert.deepEqual(result.tracks[0].artists, ['Artist'])
-        assert.equal(result.tracks[0].album, 'Album')
-        assert.equal(result.tracks[0].durationMs, 180000)
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
+test('CSV: columns in any order, extra columns ignored; missing columns rejected', async () => {
+  const { file } = await read('o.csv', `ref,extra,isrc,added_at,duration_ms,album,artists,title,position\n,zzz,USRC1,,180000,Alb,Art,Song,3\n`)
+  assert.equal(file.tracks[0].title, 'Song')
+  assert.equal(file.tracks[0].position, 3)
+  assert.equal(file.tracks[0].durationMs, 180000)
+  assert.equal(file.tracks[0].isrc, 'USRC1')
+  await assert.rejects(() => read('m.csv', 'position,title\n1,x\n'), /CSV header must contain/)
+})
 
-    await t.test('should handle quoted CSV fields with special characters', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-quoted.csv')
+test('CSV: row rules for position, artists, empty and invalid fields, empty rows', async () => {
+  const csv = [
+    HEADER,
+    ',First,,,abc,,,',
+    '',
+    ',,,,,,,',
+    '0,Second, ; ,Album,180000,2026-01-01T00:00:00Z,,',
+  ].join('\n')
+  const { file } = await read('r.csv', csv)
+  assert.equal(file.tracks.length, 2)
+  const [first, second] = file.tracks
+  assert.equal(first.position, 1, 'empty position → 1-based row number')
+  assert.deepEqual(first.artists, ['Unknown Artist'])
+  assert.equal(first.durationMs, undefined, 'non-integer duration → absent')
+  assert.equal(first.album, undefined)
+  assert.equal(first.addedAt, undefined)
+  assert.equal(first.isrc, undefined)
+  assert.equal(second.position, 4, 'position 0 is invalid → 1-based row number')
+  assert.deepEqual(second.artists, ['Unknown Artist'])
+  assert.equal(second.album, 'Album')
+  assert.equal(second.addedAt, '2026-01-01T00:00:00Z')
+})
 
-        const content = 'position,title,artists,album,duration_ms,added_at,isrc,ref\n1,"Song, Pt. 1","Artist A; Artist B",Album,180000,,,spotify:track:123\n'
-        writeFileSync(filePath, content)
+test('CSV: defaults (kind, name from the file name, generator, exportedAt)', async () => {
+  const { file } = await read('Road Trip.csv', `${HEADER}\n1,T,A,,,,,\n`)
+  assert.equal(file.source.kind, 'playlist')
+  assert.equal(file.playlist.name, 'Road Trip')
+  assert.deepEqual(file.generator, { name: 'sple', version: 'unknown' })
+  assert.match(file.exportedAt, /^\d{4}-\d{2}-\d{2}T.*Z$/)
+  assert.equal(file.playlist.trackCount, 1)
+})
 
-        const result = await reader.readFile(filePath)
-        assert.equal(result.tracks[0].title, 'Song, Pt. 1')
-        assert.deepEqual(result.tracks[0].artists, ['Artist A', 'Artist B'])
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
+test('CSV: the source provider is inferred from refs and refs are stored canonically', async () => {
+  const csv = `${HEADER}\n1,T,A,,,,,https://open.spotify.com/track/${SPOTIFY_ID}\n2,U,A,,,,,\n3,V,A,,,,,spotify:track:${SPOTIFY_ID}\n`
+  const { file, warnings } = await read('s.csv', csv)
+  assert.equal(file.source.provider, 'spotify')
+  assert.deepEqual(file.tracks[0].refs, { spotify: `spotify:track:${SPOTIFY_ID}` })
+  assert.deepEqual(file.tracks[1].refs, {})
+  assert.deepEqual(warnings, [])
 
-    await t.test('should handle escaped quotes in quoted fields', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-escaped-quotes.csv')
+  const yt = await read('y.csv', `${HEADER}\n1,T,A,,,,,https://youtu.be/dQw4w9WgXcQ\n`)
+  assert.equal(yt.file.source.provider, 'youtube-music')
+  assert.deepEqual(yt.file.tracks[0].refs, { 'youtube-music': 'dQw4w9WgXcQ' })
+})
 
-        const content = 'position,title,artists,album,duration_ms,added_at,isrc,ref\n1,"Song ""Special"" Edition",Artist,Album,180000,,,spotify:track:123\n'
-        writeFileSync(filePath, content)
+test('CSV: mixed or unknown refs → source "unknown", refs dropped, one warning', async () => {
+  const csv = `${HEADER}\n1,T,A,,,,,spotify:track:${SPOTIFY_ID}\n2,U,A,,,,,https://youtu.be/dQw4w9WgXcQ\n`
+  const { file, warnings } = await read('mixed.csv', csv)
+  assert.equal(file.source.provider, 'unknown')
+  assert.deepEqual(file.tracks.map((t) => t.refs), [{}, {}])
+  assert.deepEqual(warnings, [CSV_SOURCE_UNKNOWN_WARNING])
+  assert.equal(CSV_SOURCE_UNKNOWN_WARNING, 'sple: warning: could not tell which provider the CSV refs belong to; matching by metadata only')
 
-        const result = await reader.readFile(filePath)
-        assert.equal(result.tracks[0].title, 'Song "Special" Edition')
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should handle multiple artists separated by semicolons', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-multi-artist.csv')
-
-        const content = 'position,title,artists,album,duration_ms,added_at,isrc,ref\n1,Song,"Artist One; Artist Two; Artist Three",Album,180000,,,spotify:track:123\n'
-        writeFileSync(filePath, content)
-
-        const result = await reader.readFile(filePath)
-        assert.deepEqual(result.tracks[0].artists, ['Artist One', 'Artist Two', 'Artist Three'])
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should handle empty cells in CSV', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-empty-cells.csv')
-
-        const content = 'position,title,artists,album,duration_ms,added_at,isrc,ref\n1,Song,Artist,,,\n'
-        writeFileSync(filePath, content)
-
-        const result = await reader.readFile(filePath)
-        assert.equal(result.tracks[0].album, '')
-        assert.equal(result.tracks[0].durationMs, undefined)
-        assert.equal(result.tracks[0].addedAt, undefined)
-        assert.equal(result.tracks[0].isrc, undefined)
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should reject CSV with missing required columns', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-bad-header.csv')
-
-        const content = 'position,title,album\n1,Song,Album\n'
-        writeFileSync(filePath, content)
-
-        await assert.rejects(
-          async () => reader.readFile(filePath),
-          /CSV header missing required columns/
-        )
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should reject empty CSV file', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-empty.csv')
-        writeFileSync(filePath, '')
-
-        await assert.rejects(
-          async () => reader.readFile(filePath),
-          /CSV file is empty or has no header/
-        )
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should handle CSV with multiple data rows', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-multiple-rows.csv')
-
-        const content = 'position,title,artists,album,duration_ms,added_at,isrc,ref\n1,Song One,Artist A,Album,180000,,,spotify:track:1\n2,Song Two,Artist B,Album,200000,,,spotify:track:2\n3,Song Three,Artist C,Album,220000,,,spotify:track:3\n'
-        writeFileSync(filePath, content)
-
-        const result = await reader.readFile(filePath)
-        assert.equal(result.tracks.length, 3)
-        assert.equal(result.tracks[0].title, 'Song One')
-        assert.equal(result.tracks[1].title, 'Song Two')
-        assert.equal(result.tracks[2].title, 'Song Three')
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should handle CSV with blank lines', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test-blank-lines.csv')
-
-        const content = 'position,title,artists,album,duration_ms,added_at,isrc,ref\n1,Song One,Artist A,Album,180000,,,spotify:track:1\n\n2,Song Two,Artist B,Album,200000,,,spotify:track:2\n'
-        writeFileSync(filePath, content)
-
-        const result = await reader.readFile(filePath)
-        assert.equal(result.tracks.length, 2)
-        assert.equal(result.tracks[0].title, 'Song One')
-        assert.equal(result.tracks[1].title, 'Song Two')
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-  })
-
-  await t.test('extension detection', async (t) => {
-    await t.test('should detect JSON by extension', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test.json')
-
-        const content = {
-          schemaVersion: 1,
-          exportedAt: '2026-10-05T12:00:00Z',
-          generator: { name: 'sple', version: '0.1.0' },
-          source: { provider: 'spotify', kind: 'playlist' },
-          playlist: { name: 'Test', trackCount: 0 },
-          tracks: [],
-          unsupportedItems: [],
-        }
-
-        writeFileSync(filePath, JSON.stringify(content))
-
-        const result = await reader.readFile(filePath)
-        assert.equal(result.schemaVersion, 1)
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should detect CSV by extension', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test.csv')
-
-        const content = 'position,title,artists,album,duration_ms,added_at,isrc,ref\n1,Song,Artist,Album,180000,,,spotify:track:123\n'
-        writeFileSync(filePath, content)
-
-        const result = await reader.readFile(filePath)
-        assert.equal(result.tracks.length, 1)
-        assert.equal(result.tracks[0].title, 'Song')
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-
-    await t.test('should handle uppercase .JSON extension', async () => {
-      const tmpDir = createTempDir()
-      try {
-        const filePath = join(tmpDir, 'test.JSON')
-
-        const content = {
-          schemaVersion: 1,
-          exportedAt: '2026-10-05T12:00:00Z',
-          generator: { name: 'sple', version: '0.1.0' },
-          source: { provider: 'spotify', kind: 'playlist' },
-          playlist: { name: 'Test', trackCount: 0 },
-          tracks: [],
-          unsupportedItems: [],
-        }
-
-        writeFileSync(filePath, JSON.stringify(content))
-
-        const result = await reader.readFile(filePath)
-        assert.equal(result.schemaVersion, 1)
-      } finally {
-        cleanupTempDir(tmpDir)
-      }
-    })
-  })
+  const none = await read('n.csv', `${HEADER}\n1,T,A,,,,,something-else\n`)
+  assert.equal(none.file.source.provider, 'unknown')
 })

@@ -132,8 +132,8 @@ Providers drop unsupported items before the CLI sees them (ADR 0003 Amendment 2)
 
 - **Format** is chosen by extension, case-insensitive: `.json` → JSON, `.csv` → CSV, anything else → `UsageError` (exit 2).
 - **JSON:** the file must parse and pass every v1 invariant in §1/§2 (`checkPlaylistFile`: schema version, `exportedAt`, `generator`, `source`, the Liked Songs name rule, non-empty `artists`, at least one ref per track, unique positions, `trackCount`). `schemaVersion` other than 1 → `Unsupported schema version: <n>. This version of sple supports v1 only.` Any violation → exit 2 listing the problems. Tracks are processed in `position` order.
-- **CSV:** RFC 4180 as in §4 (quoted fields may contain commas, quotes and line breaks). The header must contain all eight columns `position,title,artists,album,duration_ms,added_at,isrc,ref`, in any order; extra columns are ignored. Per row:
-  - `position`: integer ≥ 1; if empty or invalid, the 1-based row number.
+- **CSV:** RFC 4180 as in §4 (quoted fields may contain commas, quotes and line breaks). A leading UTF-8 BOM is ignored, so files re-saved by spreadsheet apps still read. The header must contain all eight columns `position,title,artists,album,duration_ms,added_at,isrc,ref`, in any order; extra columns are ignored. Per row:
+  - `position`: integer ≥ 1; if empty or invalid, the 1-based row number (records after the header, counting skipped empty rows).
   - `artists`: split on `;`, each trimmed, empties dropped; if none, `["Unknown Artist"]`.
   - `album`, `added_at`, `isrc`: empty → absent. `duration_ms`: empty or not an integer → absent.
   - `ref`: see source inference.
