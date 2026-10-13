@@ -842,3 +842,76 @@ test('import --resume last picks the most recent unfinished import', async () =>
   assert.equal(await run(ctx, ['--resume', 'last', '--yes']), EXIT_CODES.SUCCESS)
   assert.match(ctx.mockIO.err[0], new RegExp(`^Resuming import ${runId}:`))
 })
+
+// ---- Quota estimate (ADR 0002 Amendment 5, #96) ----
+
+/** A fake target with YouTube's daily buckets, but only `search: 2` per day so tests can exceed it. */
+function quotaContext(usedSearch = 0) {
+  const r = resumableContext()
+  ;(r.provider as any).capabilities = {
+    ...r.provider.capabilities,
+    quotaModel: {
+      kind: 'daily-buckets',
+      buckets: [
+        { id: 'units', dailyLimit: 10_000, resetTimeZone: 'America/Los_Angeles' },
+        { id: 'search', dailyLimit: 2, resetTimeZone: 'America/Los_Angeles' },
+      ],
+      costs: {
+        searchTracks: [{ bucket: 'search', amount: 1, per: 'call' }, { bucket: 'units', amount: 1, per: 'call' }],
+        createPlaylist: [{ bucket: 'units', amount: 50, per: 'call' }],
+        populatePlaylist: [{ bucket: 'units', amount: 50, per: 'item' }],
+      },
+    },
+  }
+  if (usedSearch > 0) {
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date())
+    writeFileSync(
+      join(r.ctx.config.configDir!, 'quota.json'),
+      JSON.stringify({ schemaVersion: 1, providers: { fake: { day, used: { search: usedSearch } } } })
+    )
+  }
+  return r
+}
+
+test('import: prints the quota estimate before matching, and --json carries it', async () => {
+  const { ctx, filePath } = quotaContext(1)
+  assert.equal(await run({ ...ctx, json: true }, [filePath, '--dry-run']), EXIT_CODES.SUCCESS)
+  assert.equal(ctx.mockIO.err[0], 'Quota estimate for fake: units up to 3 (10000 of 10000 left today); search up to 3 (1 of 2 left today)')
+  assert.match(ctx.mockIO.err[1], /^That needs about 2 days of quota\. sple stops when today's quota runs out \(it resets at \d{4}-\d\d-\d\dT\d\d:00:00\.000Z\) and prints how to resume\.$/)
+  const output = JSON.parse(ctx.mockIO.out.at(-1)!)
+  assert.equal(output.estimate.days, 2)
+  assert.deepEqual(output.estimate.buckets[1], { bucket: 'search', need: 3, remainingToday: 1, dailyLimit: 2 })
+})
+
+test('import: a run that needs more than today’s quota asks first; declining sends nothing', async () => {
+  const { ctx, filePath, searched } = quotaContext()
+  const questions: string[] = []
+  const code = await run(ctx, [filePath], { stdinIsTTY: true, prompt: async (q) => (questions.push(q), false) })
+  assert.equal(code, EXIT_CODES.ERROR)
+  assert.deepEqual(questions, ['Start anyway?'])
+  assert.deepEqual(searched, [])
+  assert.deepEqual(runsIn(ctx), [])
+  assert.equal(ctx.mockIO.err.at(-1), 'Aborted; nothing was changed.')
+})
+
+test('import: --yes skips the quota question; a run that fits today is not asked about', async () => {
+  const { ctx, filePath } = quotaContext()
+  const questions: string[] = []
+  await run(ctx, [filePath, '--yes'], { prompt: async (q) => (questions.push(q), true) }).catch(() => undefined)
+  assert.deepEqual(questions, [])
+
+  const fits = resumableContext() // rate-limited fake: no estimate at all
+  assert.equal(await run(fits.ctx, [fits.filePath, '--dry-run']), EXIT_CODES.SUCCESS)
+  assert.ok(!fits.ctx.mockIO.err.some((l) => l.startsWith('Quota estimate')))
+})
+
+test('import --resume: the estimate covers only the work left', async () => {
+  const { ctx, filePath, failSearchWhen } = quotaContext()
+  failSearchWhen((title) => title === 'Song 2')
+  await assert.rejects(run(ctx, [filePath, '--yes', '--no-cache']), QuotaExhaustedError)
+  const runId = runIdFrom(ctx.mockIO.err)
+  failSearchWhen(() => false)
+  ctx.mockIO.reset()
+  await run(ctx, ['--resume', runId, '--yes']).catch(() => undefined)
+  assert.match(ctx.mockIO.err[1], /^Quota estimate for fake: units up to 202 \(10000 of 10000 left today\); search up to 2 /)
+})
