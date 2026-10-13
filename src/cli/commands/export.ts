@@ -58,7 +58,7 @@ export interface ExportDeps {
 }
 
 /** One thing to export, after resolution. */
-type Source =
+export type Source =
   | { kind: 'playlist'; input: string; playlist: PlaylistSummary }
   | { kind: 'liked'; input: string }
 
@@ -111,7 +111,7 @@ function serialize(file: CanonicalPlaylistFile, format: ExportFormat): string {
 }
 
 /** Errors that would fail every remaining item the same way (ADR 0007 §5). */
-function isFatal(error: unknown): boolean {
+export function isFatal(error: unknown): boolean {
   return (
     error instanceof AuthRequiredError ||
     error instanceof RateLimitError ||
@@ -119,7 +119,7 @@ function isFatal(error: unknown): boolean {
   )
 }
 
-function errorInfo(error: unknown): ErrorInfo {
+export function errorInfo(error: unknown): ErrorInfo {
   return {
     type: error instanceof Error ? error.constructor.name : 'Error',
     message: formatErrorMessage(error),
@@ -151,7 +151,7 @@ function isDirectory(path: string): boolean {
 }
 
 /** Read every track of one source, with progress. Throws for unreadable playlists. */
-async function readTracks(
+export async function readTracks(
   provider: Provider,
   source: Source,
   label: string,
@@ -182,7 +182,7 @@ async function readTracks(
   }
 }
 
-function buildFile(
+export function buildFile(
   provider: Provider,
   ctx: CommandContext,
   source: Source,

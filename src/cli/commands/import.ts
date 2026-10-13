@@ -8,13 +8,12 @@ import { CanonicalFileReader } from '../../core/import/file-reader.js'
 import { MatchingEngine } from '../../core/matching/matching-engine.js'
 import { MatchCache } from '../../core/matching/match-cache.js'
 import { MatchReportWriter } from '../../core/import/match-report-writer.js'
-import { PlaylistCreator, matchedRefs } from '../../core/import/playlist-creator.js'
-import { RunStore, newRunItem, type RunItem, type RunState } from '../../core/import/run-store.js'
-import { PlaylistAddTracksError } from '../../core/import/playlist-errors.js'
+import { RunStore, newRunItem, type RunState } from '../../core/import/run-store.js'
+import { matchRunItem, writeRunItem } from '../../core/import/run-steps.js'
+import { describeProgress, findRun, printEstimate, resumeHint, stopped } from './run-shared.js'
 import type { MatchReport } from '../../core/matching/types.js'
 import type { Provider } from '../../core/provider/provider.js'
-import { QuotaLedger } from '../../core/quota/ledger.js'
-import { countImportWork, estimateQuota, type QuotaEstimate } from '../../core/quota/estimate.js'
+import type { QuotaEstimate } from '../../core/quota/estimate.js'
 
 const USAGE = `Usage: sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--no-cache] [--dry-run] [--yes]
        sple import --resume <runId|last> [--report <path>] [--yes]`
@@ -44,47 +43,6 @@ const percent = (value: number, total: number) => (total === 0 ? 0 : Math.round(
 
 /** Flags that only make sense when starting an import. */
 const START_ONLY = ['name', 'min-confidence', 'no-cache', 'dry-run'] as const
-
-/** One line describing how far a run item has got. */
-export function describeProgress(item: RunItem): string {
-  switch (item.phase) {
-    case 'matching':
-      return `matched ${item.results.length} of ${item.file.tracks.length} tracks`
-    case 'matched':
-      return 'matched, playlist not created yet'
-    default:
-      return `added ${item.cursor} of ${item.toAdd.length} tracks`
-  }
-}
-
-/**
- * Print the quota the remaining work needs, for targets with a daily quota
- * (FR-MIG-5, ADR 0002 Amendment 5). Returns the estimate, if any.
- */
-function printEstimate(
-  ctx: CommandContext,
-  provider: Provider,
-  items: RunItem[],
-  cache: MatchCache | undefined,
-  dryRun: boolean
-): QuotaEstimate | undefined {
-  const caps = provider.capabilities
-  if (caps.quotaModel.kind !== 'daily-buckets') return undefined
-  const used = new QuotaLedger(provider.id, caps.quotaModel.buckets, { configDir: ctx.config.configDir }).used()
-  const estimate = estimateQuota(countImportWork(items, provider.id, caps, cache, { dryRun }), caps, used)
-  if (!estimate || estimate.days === 0) return estimate
-  const parts = estimate.buckets
-    .filter((b) => b.need > 0)
-    .map((b) => `${b.bucket} up to ${b.need} (${b.remainingToday} of ${b.dailyLimit} left today)`)
-  ctx.io.err(`Quota estimate for ${provider.id}: ${parts.join('; ')}`)
-  if (estimate.days > 1) {
-    ctx.io.err(
-      `That needs about ${estimate.days} days of quota. sple stops when today's quota runs out ` +
-        `(it resets at ${estimate.resetAt}) and prints how to resume.`
-    )
-  }
-  return estimate
-}
 
 /** `sple import` (ADR-0007 Amendment 1, A9; resumable runs: Amendment 4). */
 export async function run(ctx: CommandContext, args: string[], deps: ImportDeps = {}): Promise<number> {
@@ -166,20 +124,7 @@ Examples:
     for (const flag of START_ONLY) {
       if (parsed.values[flag] !== undefined) throw new UsageError(`--resume cannot be combined with --${flag}`)
     }
-    store.prune()
-    // `last`: the most recent unfinished import (the ID isn't printed after Ctrl-C or a crash).
-    state = resumeId === 'last' ? store.list().find((r) => r.kind === 'import') : store.load(resumeId)
-    if (!state && resumeId === 'last') throw new UsageError('There are no unfinished imports')
-    if (!state || state.kind !== 'import') {
-      if (state?.kind === 'migrate') {
-        throw new UsageError(`Run ${resumeId} is a migration; continue it with "sple migrate --resume ${resumeId}"`)
-      }
-      const runs = store.list().filter((r) => r.kind === 'import')
-      const listing = runs.map((r) => `\n  ${r.runId}  "${r.items[0].name}" → ${r.target} (${describeProgress(r.items[0])})`)
-      throw new UsageError(
-        `No unfinished import '${resumeId}'` + (runs.length > 0 ? `. Unfinished imports:${listing.join('')}` : '')
-      )
-    }
+    state = findRun(store, 'import', resumeId)
     const item = state.items[0]
     if (item.phase !== 'adding' && !yes && !stdinIsTTY) {
       throw new UsageError('Confirmation required but stdin is not a terminal. Use --yes to skip confirmation.')
@@ -267,33 +212,18 @@ Examples:
     }
   }
 
-  const resumeHint = (s: RunState) => ctx.io.err(`sple: import stopped; resume with: sple import --resume ${s.runId}`)
-
   if (state) {
     // 3. Match, checkpointing after every track so searches already spent are never repeated.
     const item = state.items[0]
     if (item.phase === 'matching') {
-      const s = state
-      const cache = s.options.cache ? new MatchCache({ configDir: ctx.config.configDir }) : undefined
-      log.info(`Matching ${item.file.tracks.length - item.results.length} tracks on ${s.target}`)
+      const cache = state.options.cache ? new MatchCache({ configDir: ctx.config.configDir }) : undefined
+      log.info(`Matching ${item.file.tracks.length - item.results.length} tracks on ${state.target}`)
       try {
-        item.report = await new MatchingEngine({ cache }).match(item.file, provider, provider.capabilities, {
-          minConfidence: s.options.minConfidence,
-          sourceFilePath: item.sourceFilePath,
-          targetPlaylistName: item.name,
-          previous: item.results,
-          onResult: (result) => {
-            item.results.push(result)
-            store.save(s)
-          },
-        })
+        await matchRunItem(provider, store, state, item, cache)
       } catch (error) {
-        resumeHint(s)
+        resumeHint(ctx, 'import', state)
         throw error
       }
-      item.phase = 'matched'
-      item.toAdd = matchedRefs(item.report)
-      store.save(s)
     }
     report = item.report!
   }
@@ -339,23 +269,12 @@ Examples:
   }
 
   // 7. Create the private playlist and add the matched tracks in position order, checkpointing each batch.
-  const reconcile = item.phase === 'adding'
-  item.phase = 'adding'
-  store.save(s)
   let result
   try {
-    result = await new PlaylistCreator().writeMatches(provider, item, name, { checkpoint: () => store.save(s), reconcile })
+    result = await writeRunItem(provider, store, s, item)
   } catch (error) {
-    if (error instanceof PlaylistAddTracksError) {
-      // The playlist exists; say where, then let the CLI report the provider error and its exit code.
-      ctx.io.err(`sple: playlist ${error.playlistUrl ?? error.playlistId} was created, but adding tracks failed`)
-      resumeHint(s)
-      throw error.cause ?? error
-    }
-    resumeHint(s)
-    throw error
+    throw stopped(ctx, 'import', s, error)
   }
-  item.phase = 'done'
   store.delete(s.runId)
 
   const requested = result.tracksAdded + result.tracksFailed
