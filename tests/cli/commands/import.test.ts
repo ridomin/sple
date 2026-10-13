@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { run } from '../../../src/cli/commands/import.js'
@@ -721,4 +721,124 @@ test('import command: --no-cache neither reads nor writes the cache', async () =
   const filled = searches()
   await run(ctx, [filePath, '--dry-run', '--no-cache'])
   assert.equal(searches(), filled + 1, 'searched again despite the cached entry')
+})
+
+// ---- Resumable runs (ADR 0007 Amendment 4, #95) ----
+
+function threeTracks(): CanonicalPlaylistFile {
+  const tracks = [1, 2, 3].map((n) => ({
+    position: n, title: `Song ${n}`, artists: ['A'], durationMs: 1000, refs: { spotify: `spotify:track:${n}` },
+  }))
+  return { ...createTestFile(), playlist: { name: 'Three', trackCount: 3 }, tracks }
+}
+
+/** One FakeProvider shared by every run of the returned context, adding one track per request. */
+function resumableContext() {
+  const provider = new FakeProvider({
+    capabilities: { maxTracksPerRequest: 1 },
+    initialTracks: [1, 2, 3].map((n) => ({ id: `t${n}`, title: `Song ${n}`, artists: ['A'], duration: 1000 })),
+  })
+  const searched: string[] = []
+  let failSearch: (title: string) => boolean = () => false
+  const search = provider.searchTracks.bind(provider)
+  provider.searchTracks = async (q, o) => {
+    const title = q.kind === 'metadata' ? q.title : q.isrc
+    searched.push(title)
+    if (failSearch(title)) throw new QuotaExhaustedError('Quota exhausted: search', 'search')
+    return search(q, o)
+  }
+  const ctx = createTestContext({ registry: { has: () => true, create: () => provider, trackRefParsers: () => ({}) } as any })
+  const dir = mkdtempSync(join(tmpdir(), 'sple-resume-'))
+  const filePath = join(dir, 'three.json')
+  writeFileSync(filePath, JSON.stringify(threeTracks()))
+  return { ctx, provider, searched, filePath, failSearchWhen: (f: (title: string) => boolean) => (failSearch = f) }
+}
+
+const runIdFrom = (err: string[]) => {
+  const m = err.join('\n').match(/resume with: sple import --resume (\d{8}-[0-9a-f]{6})/)
+  assert.ok(m, `no resume hint in: ${err.join(' | ')}`)
+  return m[1]
+}
+const runsIn = (ctx: CommandContext) => {
+  try {
+    return readdirSync(join(ctx.config.configDir!, 'runs'))
+  } catch {
+    return []
+  }
+}
+
+test('import: a quota stop while matching keeps the matches; --resume searches only the rest', async () => {
+  const { ctx, provider, searched, filePath, failSearchWhen } = resumableContext()
+  failSearchWhen((title) => title === 'Song 2')
+  await assert.rejects(run(ctx, [filePath, '--yes', '--no-cache']), QuotaExhaustedError)
+  const runId = runIdFrom(ctx.mockIO.err)
+  const state = JSON.parse(readFileSync(join(ctx.config.configDir!, 'runs', `${runId}.json`), 'utf8'))
+  assert.equal(state.items[0].phase, 'matching')
+  assert.equal(state.items[0].results.length, 1)
+  assert.equal((await provider.listPlaylists({ limit: 50 })).items.length, 0, 'nothing created')
+
+  failSearchWhen(() => false)
+  ctx.mockIO.reset()
+  assert.equal(await run(ctx, ['--resume', runId, '--yes']), EXIT_CODES.SUCCESS)
+  assert.deepEqual(searched, ['Song 1', 'Song 2', 'Song 2', 'Song 3'], 'Song 1 not searched again')
+  assert.match(ctx.mockIO.err[0], new RegExp(`^Resuming import ${runId}: "Three" → fake \\(matched 1 of 3 tracks\\)$`))
+  assert.match(ctx.mockIO.out.at(-1)!, /with 3 of 3 tracks$/)
+  assert.deepEqual(runsIn(ctx), [], 'finished run deleted')
+})
+
+test('import: a quota stop while adding is resumed without duplicates or a second playlist', async () => {
+  const { ctx, provider, filePath } = resumableContext()
+  provider.setQuotaBucket(1)
+  await assert.rejects(run(ctx, [filePath, '--yes']), QuotaExhaustedError)
+  assert.ok(ctx.mockIO.err.some((l) => /was created, but adding tracks failed/.test(l)))
+  const runId = runIdFrom(ctx.mockIO.err)
+
+  provider.setQuotaBucket(10)
+  ctx.mockIO.reset()
+  // Adding needs no confirmation: it was given when the run started.
+  assert.equal(await run(ctx, ['--resume', runId], { stdinIsTTY: false }), EXIT_CODES.SUCCESS)
+  const playlists = (await provider.listPlaylists({ limit: 50 })).items
+  assert.equal(playlists.length, 1)
+  const refs = (await provider.getPlaylistTracks(playlists[0].ref, { limit: 50 })).items.map((t) => t.refs.fake)
+  assert.deepEqual(refs, ['fake:track:t1', 'fake:track:t2', 'fake:track:t3'])
+  assert.match(ctx.mockIO.err[0], /\(added 1 of 3 tracks\)$/)
+})
+
+test('import: declining deletes the run; a dry run saves none', async () => {
+  const { ctx, filePath } = resumableContext()
+  assert.equal(await run(ctx, [filePath], { stdinIsTTY: true, prompt: async () => false }), EXIT_CODES.ERROR)
+  assert.deepEqual(runsIn(ctx), [])
+  assert.equal(await run(ctx, [filePath, '--dry-run']), EXIT_CODES.SUCCESS)
+  assert.deepEqual(runsIn(ctx), [])
+})
+
+test('import --resume: usage errors', async () => {
+  const { ctx, filePath, failSearchWhen } = resumableContext()
+  await assert.rejects(run(ctx, ['--resume', '20261007-abcdef']), /^UsageError: No unfinished import '20261007-abcdef'$/)
+
+  failSearchWhen(() => true)
+  await assert.rejects(run(ctx, [filePath, '--yes']), QuotaExhaustedError)
+  const runId = runIdFrom(ctx.mockIO.err)
+  await assert.rejects(
+    run(ctx, ['--resume', '20261007-abcdef']),
+    (e: Error) => e instanceof UsageError && e.message.includes(`Unfinished imports:\n  ${runId}  "Three" → fake (matched 0 of 3 tracks)`)
+  )
+  await assert.rejects(run(ctx, ['--resume', runId, filePath]), /--resume takes a run ID, not a file/)
+  for (const flag of [['--name', 'x'], ['--min-confidence', '0.7'], ['--no-cache'], ['--dry-run']]) {
+    await assert.rejects(run(ctx, ['--resume', runId, ...flag]), new RegExp(`--resume cannot be combined with ${flag[0]}`))
+  }
+  await assert.rejects(run(ctx, ['--resume', runId], { stdinIsTTY: false }), /Use --yes/)
+})
+
+test('import --resume last picks the most recent unfinished import', async () => {
+  const { ctx, filePath, failSearchWhen } = resumableContext()
+  await assert.rejects(run(ctx, ['--resume', 'last']), /^UsageError: There are no unfinished imports$/)
+  failSearchWhen(() => true)
+  await assert.rejects(run(ctx, [filePath, '--yes']), QuotaExhaustedError)
+  const runId = runIdFrom(ctx.mockIO.err)
+
+  failSearchWhen(() => false)
+  ctx.mockIO.reset()
+  assert.equal(await run(ctx, ['--resume', 'last', '--yes']), EXIT_CODES.SUCCESS)
+  assert.match(ctx.mockIO.err[0], new RegExp(`^Resuming import ${runId}:`))
 })

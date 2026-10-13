@@ -183,6 +183,7 @@ Token refresh is transparent to the `Provider` interface and CLI.
 | Token refresh moved to ADR 0010 | §4's sketch is replaced by the exact retry, refresh and persistence rules. |
 | `quota.json` in the config directory | Daily quota ledger for `daily-buckets` providers (ADR 0002 Amendment 2). Not a secret, but written with mode `0600` like `tokens.json`. |
 | `match-cache.json` in the config directory | Searched matches reused for 30 days (ADR 0009 Amendment 2, #94). Written with mode `0600` like `quota.json`. |
+| `runs/<runId>.json` in the config directory | Checkpoints of unfinished imports, kept up to 30 days (ADR 0007 Amendment 4, #95). Directory `0700`, files `0600`. |
 
 ### `.env` syntax (subset ports must accept)
 

@@ -489,3 +489,70 @@ Supersedes the "implemented in-house, no `debug` dependency" rule in §6 and the
 | A9 `import` | Usage gains `[--no-cache]`: neither reuse nor store matches. Step 3 runs the chain with the `cache` strategy unless `--no-cache` is given. |
 | A10 `auth logout` | After each provider's logout, the match-cache entries involving it are deleted. If any were, `match_cache` is added to the `Deleted: …` line (printed as `Deleted: match_cache` when the provider reported nothing else). |
 
+## Amendment 4 (resumable imports, #95)
+
+- **Date:** 2026-10-07
+- **Why:** FR-MIG-4. An interrupted import had to start over and created a second playlist. On YouTube only about 100 new tracks fit in a day's quota (ADR 0002 §2.1.2), so any larger import was interrupted.
+
+### Usage
+
+`sple import <file> [--name <name>] [--report <path>] [--min-confidence <0..1>] [--no-cache] [--dry-run] [--yes]`
+`sple import --resume <runId|last> [--report <path>] [--yes]`
+
+`--resume` takes no file and cannot be combined with `--name`, `--min-confidence`, `--no-cache` or `--dry-run` (exit 2: `--resume takes a run ID, not a file` / `--resume cannot be combined with --<flag>`). The run keeps its own target provider, options and source snapshot; `--provider` is ignored.
+
+### Run file
+
+`runs/<runId>.json` in the config directory (directory mode `0700`, file `0600`, written by temp file and rename). `runId` is `<UTC date YYYYMMDD>-<6 lowercase hex digits>`; anything else is never used as a path.
+
+```ts
+interface RunState {
+  schemaVersion: 1
+  runId: string
+  kind: 'import' | 'migrate'
+  target: ProviderId
+  createdAt: string                    // ISO 8601 UTC
+  updatedAt: string
+  options: { minConfidence: number; cache: boolean }
+  items: RunItem[]                     // one for import
+}
+interface RunItem {
+  file: CanonicalPlaylistFile          // snapshot of the source
+  name: string                         // target playlist name
+  sourceFilePath: string
+  phase: 'matching' | 'matched' | 'adding' | 'done'
+  results: MatchResult[]               // track results so far, position order
+  report?: MatchReport                 // set when matching ends
+  playlist?: { id: string; ref: string; name: string; url?: string }
+  toAdd: string[]                      // matched refs, position order
+  cursor: number                       // toAdd entries processed (added or failed)
+  added: number
+  failed: Array<{ ref: string; error: string }>
+}
+```
+
+A run is resumable for **30 days** after `createdAt`. After that it is ignored and deleted the next time an import starts, because it holds provider data (ADR 0002 §4.1).
+
+### Order of work (replaces A9 steps 3, 6 and 7 when not `--dry-run`)
+
+1. Steps 1–2 of A9, then delete expired runs and **create the run** (`phase: 'matching'`).
+2. Match. After **each** track, append its result and save the run, so a stop never repeats a search. On a resume, tracks that already have a result are not matched again.
+3. `phase: 'matched'`, `toAdd` = the matched refs. Report, `--report` and stderr counts as in A9.
+4. Confirm as in A9. Declining deletes the run.
+5. `phase: 'adding'`. If the run has no playlist, create it and **save before adding anything**. Then add `toAdd` from `cursor` in batches of `maxTracksPerRequest`, saving after each batch.
+6. On success, delete the run. Per-track failures are reported as in A9.
+
+**Stops:** any error after the run exists prints `sple: import stopped; resume with: sple import --resume <runId>` on stderr (after `… was created, but adding tracks failed` when that applies), then the error as usual, with its exit code (5 for quota).
+
+### Resuming
+
+1. Delete expired runs. Load the run; `last` means the unfinished `import` run with the latest `createdAt` (none → exit 2, `There are no unfinished imports`). If it is missing (or expired), exit 2 with `No unfinished import '<id>'`, followed by `. Unfinished imports:` and one line per run, `  <runId>  "<name>" → <target> (<progress>)`, when there are any. A `migrate` run → exit 2, `Run <id> is a migration; continue it with "sple migrate --resume <id>"`.
+2. The confirmation rule of A9 applies only while the run hasn't reached `adding`. Once adding has started, it was already confirmed.
+3. stderr: `Resuming import <runId>: "<name>" → <target> (<progress>)`. `<progress>` is `matched <n> of <total> tracks`, `matched, playlist not created yet` or `added <cursor> of <toAdd.length> tracks`.
+4. Continue at the run's phase. Output is the same as a fresh import, and the report is printed again.
+5. **Reconcile** (ADR 0002 §4.1): when resuming in `adding` with tracks left, read the playlist once (`getPlaylist`). If its `trackCount` is greater than `added`, the difference was added after the last save. Advance `cursor` and `added` by it (capped at the tracks left) and save, so those tracks aren't added twice.
+
+### Logout
+
+`auth logout` also deletes the runs whose `target` is the provider or whose snapshot's `source.provider` is the provider, and adds `runs` to the `Deleted:` line (Amendment 3).
+
