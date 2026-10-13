@@ -4,11 +4,11 @@ import type { Provider } from '../../provider/provider.js'
 /**
  * ISRC strategy: searches for tracks using their ISRC (International Standard Recording Code).
  * ISRC is a unique identifier for recordings and provides high-confidence matches.
- * Medium priority (2) - runs after known-ref but before metadata matching.
+ * Priority 3 - runs after known-ref and cache, before metadata matching.
  */
 export class IsrcStrategy implements MatchingStrategy {
   readonly name = 'isrc'
-  readonly priority = 2 // Medium priority
+  readonly priority = 3
 
   isApplicable(request: MatchRequest): boolean {
     const { track, capabilities } = request

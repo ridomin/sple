@@ -5,11 +5,11 @@ import { scoreMetadata } from '../normalizer.js'
 /**
  * Metadata strategy: searches by title and artists and scores each hit with
  * ADR-0009 A1 §4 (token overlap on normalized title and artists, plus duration).
- * Priority 3 (lowest) - runs after known-ref and ISRC matching.
+ * Priority 4 (lowest) - runs after known-ref, cache and ISRC matching.
  */
 export class MetadataStrategy implements MatchingStrategy {
   readonly name = 'metadata'
-  readonly priority = 3 // Lowest priority, fallback strategy
+  readonly priority = 4 // Lowest priority, fallback strategy
 
   isApplicable(request: MatchRequest): boolean {
     const { track } = request

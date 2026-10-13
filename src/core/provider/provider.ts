@@ -60,7 +60,7 @@ export interface MatchCandidate {
   ref: string
   track: CanonicalTrack
   confidence: number
-  strategy: 'known-ref' | 'isrc' | 'metadata'
+  strategy: 'known-ref' | 'cache' | 'isrc' | 'metadata'
 }
 
 export type SearchType = 'track' | 'album' | 'artist' | 'playlist'
