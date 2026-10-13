@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (YouTube Music M4a)
+## [M4a] 2026-10-07 — YouTube Music, read-only
 
 ### Added
 
