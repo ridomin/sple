@@ -85,7 +85,7 @@ if (tracks.length === 0) {
 const labels: Label[][] = tracks.map((t) => t.hits.map((h) => h.label as Label))
 const warning = ageWarning(fixture, dir)
 if (warning) console.error(warning)
-if (skipped > 0) console.error(`Skipping ${skipped} track(s) with unlabelled hits.`)
+if (skipped > 0) console.error(`Skipping ${skipped} track(s) with unlabelled hits or proposals still to review.`)
 
 const MIN_CONFIDENCES = [0.5, 0.8]
 

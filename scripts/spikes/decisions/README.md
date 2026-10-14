@@ -48,7 +48,7 @@ npx tsx scripts/spikes/decisions/evaluate.ts > s8-results.md
 
 ### label.ts
 
-`[--relabel] [--dir <dir>]`
+`[--relabel | --review] [--dir <dir>]`
 
 Shows the source track and all of its hits, with durations and the difference from the source.
 
@@ -57,9 +57,11 @@ Shows the source track and all of its hits, with durations and the difference fr
 | `s` | `same`: the same recording; only the upload's packaging differs (Official Video, Lyrics, Topic channel) |
 | `v` | `version`: the same song but another recording (live, remix, cover, acoustic, karaoke, sped up, re-recorded) |
 | `d` | `different`: a different song |
-| `D` | this hit and the rest of the track's unlabelled hits are `different` |
+| `D` | this result **and every later result of the track** are `different`. Only use it when none of the remaining results is the song |
 | `b` | back to the previous pair |
 | `q` | save and quit |
+
+`--review` walks a drafted relabel: the results whose `proposed` label (a field in the fixture) differs from yours. Each row shows `yours→proposed`. **Enter** accepts the proposal, **s/v/d** sets your own label, and **A** accepts every remaining proposal of the track. `evaluate.ts` skips tracks with proposals still waiting.
 
 ### evaluate.ts
 

@@ -12,7 +12,8 @@ export interface FixtureTrack {
   key: string
   source: SourceTrack
   searchedAt: string
-  hits: Array<Hit & { label?: Label }>
+  /** `proposed` and `reviewed` come from a drafted relabel that `label.ts --review` walks through. */
+  hits: Array<Hit & { label?: Label; proposed?: Label; reviewed?: boolean }>
 }
 
 export interface Fixture {
@@ -67,9 +68,11 @@ export function ageWarning(fixture: Fixture, dir: string, now = Date.now()): str
     : `The fixture is ${age} days old. Delete it by ${deadline} (YouTube III.E.4): rm -rf "${dir}"`
 }
 
-/** Tracks whose hits are all labelled; only these are evaluated. */
+/** Tracks whose hits are all labelled and have no proposal waiting for review; only these are evaluated. */
 export function labelledTracks(fixture: Fixture): FixtureTrack[] {
-  return fixture.tracks.filter((t) => t.hits.every((h) => h.label !== undefined))
+  return fixture.tracks.filter((t) =>
+    t.hits.every((h) => h.label !== undefined && (h.proposed === undefined || h.reviewed || h.proposed === h.label))
+  )
 }
 
 /** Judge responses keyed by a hash of the request body: only the first token's top log-probabilities and the model, no titles. */
