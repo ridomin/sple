@@ -429,11 +429,14 @@ Answer with the letter of the best option only.
 
 ### 4. Combining (in code)
 
-- The option with the highest `p` wins; ties go to the earlier letter.
-- **A hit `hi` wins:**
-  - The duration check passes when either `durationMs` is missing or `|Δ| ≤ D` with `D = 10000` ms†. Then `confidence = p(hi)`.
-  - Otherwise `confidence = min(p(hi), 0.45)`†.
+Let `p(none)` be the probability of the last letter, and `hi` the shortlisted hit with the highest `p`; ties go to the earlier letter.
+
+- **A hit wins when `p(none) < 0.5`.** The winner is `hi`, and its raw confidence is `1 − p(none)`†: the probability that some shortlisted hit is the same recording.
+  - Several uploads of one recording (official video, `- Topic`, lyric video) split the probability between them. In S8's first 21 labelled tracks the top hit was right in 19, but its own `p` never reached 0.5, while `1 − p(none)` gave 81% correct with no false accepts.
+  - The duration check passes when either `durationMs` is missing or `|Δ| ≤ D` with `D = 10000` ms†. Then `confidence = 1 − p(none)`.
+  - Otherwise `confidence = min(1 − p(none), 0.45)`†.
   - The result is `{ ref, track, confidence, strategy: 'local' }`.
+- **The alternative S8 also measures (`pick`):** the option with the highest `p` wins, hits and "none" alike, and a winning hit's raw confidence is its own `p(hi)`.
 - **"None" wins:** the result is the **A1 `metadata` result for the same 10 hits** with `confidence = min(c, 0.45)`† and `strategy: 'metadata'`, or `null` if A1 accepts no hit.†
   - The judge disagrees with the scorer, so the match is kept but reported as `low-confidence` at the default threshold.
   - S8 compares this with "unmatched" and with the uncapped A1 result.
@@ -463,18 +466,20 @@ The judge never stops a run, and its errors never take the A1 §1.4 path:
 
 ### 7. Test vectors
 
-These assume `minConfidence` 0.5 and the provisional constants, with three hits unless stated otherwise. "p" lists `p(A) / p(B) / p(C) / p(none)`; durations are in seconds (source / winning hit).
+These assume `minConfidence` 0.5 and the provisional constants (confidence `1 − p(none)`), with three hits unless stated otherwise. "p" lists `p(A) / p(B) / p(C) / p(none)`; durations are in seconds (source / winning hit).
 
 | p | Durations | A1 over the same hits | Result |
 |---|---|---|---|
-| 0.70 / 0.05 / 0.05 / 0.20 | 243 / 245 | – | `matched`, h1, 0.70, `local` |
-| 0.10 / 0.60 / 0.05 / 0.25 | 200 / 208 | – | `matched`, h2, 0.60, `local` |
+| 0.70 / 0.05 / 0.05 / 0.20 | 243 / 245 | – | `matched`, h1, 0.80, `local` |
+| 0.10 / 0.60 / 0.05 / 0.25 | 200 / 208 | – | `matched`, h2, 0.75, `local` |
 | 0.55 / 0.05 / 0.05 / 0.35 | 301 / 420 | – | `low-confidence`, h1, 0.45, `local` (Δ 119 s > D) |
-| 0.48 / 0.02 / 0.02 / 0.48 | – / 200 | – | `low-confidence`, h1, 0.48, `local` (tie, earlier letter) |
-| 0.40 / 0.40 / 0.10 / 0.10 | 200 / 200 | – | `low-confidence`, h1, 0.40, `local` |
+| 0.48 / 0.02 / 0.02 / 0.48 | – / 200 | – | `matched`, h1, 0.52, `local` (`p(none)` < 0.5) |
+| 0.40 / 0.40 / 0.10 / 0.10 | 200 / 200 | – | `matched`, h1, 0.90, `local` (tie, earlier letter) |
+| 0.25 / 0.22 / 0.20 / 0.33 | 200 / 200 | – | `matched`, h1, 0.67, `local` (three uploads split the probability) |
+| 0.20 / 0.20 / 0.10 / 0.50 | – | accepts h2 at 0.85 | `low-confidence`, h2, 0.45, `metadata` (`p(none)` ≥ 0.5 means "none") |
 | 0.05 / 0.05 / 0.05 / 0.85 | – | accepts h2 at 0.85 | `low-confidence`, h2, 0.45, `metadata` |
 | 0.05 / 0.05 / 0.05 / 0.85 | – | accepts nothing | `unmatched` |
-| two hits: 0.30 / 0.60 / none 0.10 | 200 / – | – | `matched`, h2, 0.60, `local` (options A, B, C = none) |
+| two hits: 0.30 / 0.60 / none 0.10 | 200 / – | – | `matched`, h2, 0.90, `local` (options A, B, C = none) |
 | letters carry `M` = 0.30 (the model began with `<think>`) | – | accepts h1 at 0.85 | `matched`, h1, 0.85, `metadata`, `error: 'local: …'` |
 | connection refused | – | accepts h1 at 0.85 | `matched`, h1, 0.85, `metadata`, `error: 'local: …'`; `local` is off for the rest of the run |
 

@@ -11,6 +11,7 @@
 | Can a local model in LM Studio return per-answer probabilities? | **Yes** (smoke test) | Only through `POST /v1/responses` with `top_logprobs`; see [LM Studio findings](#lm-studio-findings) |
 | Question shape: one rating per candidate, or one choice among the top hits? | **Choice** (smoke test) | One choice among the provider's top 3 plus "none". Per-candidate ratings scored 3–5/10; the choice made no wrong picks |
 | Does it beat the ADR 0009 scorer on Spotify → YouTube? | **Not run** | Gate for accepting ADR 0011 |
+| Confidence: the winning hit's own probability, or 1 − p(none)? | **1 − p(none)** (21 labelled tracks) | Several uploads of one recording split the probability; see [Early results](#early-results-21-tracks-2026-10-14) |
 | K, D, the cap and what "none" does | **Not run** | Filled in from the evaluation |
 
 ## Why
@@ -144,10 +145,13 @@ The harness in `scripts/spikes/decisions/` (branch `spike/s8-decisions-harness`)
 1. **Dataset.** Pick 150 Spotify tracks from one or two of the owner's playlists (`sple export`). The set should include at least 20 non-English titles, 15 tracks with live or remix versions in the catalogue, and 15 tracks whose artist name differs between services ("The Beatles" vs "Beatles", featured artists).
 2. **Hits.** Run the YouTube `searchTracks` call once per track with `limit: 10`. That is 150 searches, about 2 days of the 100-searches-per-day bucket. Save each track's hits in provider order to a local fixture outside the repo, so every later step is offline for YouTube.
 3. **Labels.** Hand-label every (track, hit) pair as `same`, `version` or `different`. A track's correct answer is any `same` hit, or "none" if there isn't one.
+   - `same`: the same studio performance. That includes remasters, mono or stereo mixes, lyric or "Topic" uploads, and uploads by other channels.
+   - `version`: a different performance or edit: live, re-recorded, covers, extended, disco or "long" versions, karaoke, sped up.
+   - `different`: a different song.
 4. **Runs.** All runs are offline against the fixture, with the model ID and LM Studio settings recorded:
    - `basic`: today's `MetadataStrategy` scoring.
-   - `local`: K ∈ {3, 5} × D ∈ {5, 10, 15} s × the "none" rule ∈ {unmatched, basic, basic capped at 0.45}.
-   - `local-a1`: the best `local` setting, but with the top K taken in A1 score order instead of provider order.
+   - `local-any` and `local-pick`: K ∈ {3, 5} × D ∈ {5, 10, 15} s × the "none" rule ∈ {unmatched, basic, basic capped at 0.45}, with confidence 1 − p(none) (`any`) or the winning hit's own probability (`pick`).
+   - `-a1`: the best setting, but with the top K taken in A1 score order instead of provider order.
    - `local-score`: the per-candidate three-level rating (the earlier design), for comparison.
    - Repeat the best run once to confirm the answers are deterministic at `temperature: 0`.
 5. **Measures,** each at `minConfidence` 0.5 (the default) and 0.8:
@@ -158,9 +162,23 @@ The harness in `scripts/spikes/decisions/` (branch `spike/s8-decisions-harness`)
    - judge failures, and the time per track.
 6. **Pass bar for ADR 0011:** false accepts ≤ `basic` **and** correct accepts at least 10 points above `basic` at the default threshold. If it fails, ADR 0011 is Rejected and this doc records why.
 
+## Early results (21 tracks, 2026-10-14)
+
+The first 21 fully labelled tracks, all from one classic-rock playlist (English titles, clean YouTube uploads), with `jevk5`. A few labels were still being corrected, so these numbers are indicative only.
+
+| Run (K = 3, D = 10 s, "none" → capped) | Correct accept | False accept | Low-conf | Missed `same` |
+|---|---|---|---|---|
+| basic | 95.2% (20) | 4.8% (1) | 0% | 0% |
+| local, confidence = the winning hit's own `p` | 0% | 0% | 100% (21) | 0% |
+| local, confidence = 1 − p(none) | **81.0% (17)** | **0%** | 19.0% (4) | 0% |
+
+- **The judge's top pick was labelled `same` in 19 of 21 tracks**, but each track had 3–5 `same` uploads in the top results. The probability spread over them (0.2–0.45 each), so no single pick reached 0.5, and "none" often had the largest single share.
+- **1 − p(none) fixes this.** It became the provisional rule (ADR 0009 A3 §4).
+- **`basic` is strong on clean English titles.** The judge has to earn its place on the noisier tracks (Spanish and flamenco titles, versions), which make up the rest of the dataset.
+
 ## Results
 
-_Evaluation not run yet; smoke tests above._
+_Full evaluation not run yet: 100 of 150 tracks collected, labelling in progress._
 
 | Run | K | D (s) | "none" | Correct accept | False accept | Low-conf | Missed `same` | Failures | Time/track |
 |---|---|---|---|---|---|---|---|---|---|

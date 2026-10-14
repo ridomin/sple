@@ -37,10 +37,10 @@ With `--matcher local`, the `metadata` slot (ADR 0009 A2 §1, #4) runs `local` i
 3. **Ask:** one request per track. The source track is the state, and there is one lettered option per shortlisted hit plus "None of these is the same recording.". The answer is one letter. Durations are **not** sent.
 4. **Read:** each option's probability comes from the first output token's top log-probabilities. If the letters carry less than half of the probability mass, that is a failure (§4).
 5. **Combine:**
-   - The most probable option wins; ties go to the earlier letter.
-   - If it is a hit that passes the duration check (|Δ| ≤ *D*, or a duration missing), its probability is the confidence. If it fails the check, the confidence is capped at 0.45, which makes it low-confidence at the default threshold.
+   - Unless "none" has probability 0.5 or more, the most probable hit wins (ties go to the earlier letter). Its confidence is 1 − p(none): the chance that some shortlisted hit is the right recording. Several uploads of one recording split the probability between them, so a single hit's own probability is too low a measure (S8).
+   - If the winner fails the duration check (|Δ| > *D*; a missing duration passes), its confidence is capped at 0.45, which makes it low-confidence at the default threshold.
    - If "none" wins, the strategy returns the A1 `metadata` result for the same hits, with its confidence capped at 0.45. A match the judge disagrees with is kept but flagged for review.
-6. **Constants:** *K*, *D*, the cap, the rule for "none" and the wording are **provisional** and will be filled in from S8. The starting points are K = 3 and D = 10 s. The exact template, rules and test vectors are in ADR 0009 Amendment 3.
+6. **Constants:** *K*, *D*, the cap, the confidence rule, the rule for "none" and the wording are **provisional** and will be filled in from S8. The starting points are K = 3 and D = 10 s. The exact template, rules and test vectors are in ADR 0009 Amendment 3.
 
 ### 4. Failures
 
