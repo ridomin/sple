@@ -237,7 +237,7 @@ Command grammar, output modes, `--json` shapes, error output, stdin input, parti
 | S3 | M1 | Current maximum `limit` on `GET /playlists/{id}/items` and `GET /me/tracks` (NFR-5 assumes 50). | **Resolved 2026-10-02:** 50 / 50 / 100; NFR-5 feasible. [Report](spikes/M1-spotify-spikes.md#s3-page-size-limits). |
 | S4 | M1 | What error does a Spotify login or first call produce when the app owner has no Premium? Needed for the FR-AUTH-2 message. | **Unverified 2026-10-02** (no non-Premium app); fallback: 403 with message matching `/premium/i`. [Report](spikes/M1-spotify-spikes.md#s4-premium-detection-unverified). |
 | S5–S7 | M4a | YouTube spikes from ADR-0002 §6: `LM` playlist access, Desktop-client token exchange with PKCE and without the secret, daily playlist-creation cap. | **Resolved 2026-10-07:** S5 `LM` works, Liked export exact (ADR-0002 Amendment 3). S6 the secret is required (HTTP 400 without it); FR-AUTH-1 unchanged. S7 not run (owner decision); the cap stays unknown. [Report](spikes/M4a-youtube-spikes.md). |
-| S8 | – | Does the OpenAI Decisions API, judging the metadata strategy's search hits, beat the ADR-0009 scorer on Spotify → YouTube? Gates [ADR-0011](adr/0011-openai-decisions-match-judge.md). | **Pending:** research done 2026-10-14, evaluation needs the owner's OpenAI key. [Report](spikes/decisions-matching-spike.md). |
+| S8 | – | Does a local decision model (LM Studio), choosing among the metadata search's top hits, beat the ADR-0009 scorer on Spotify → YouTube? Gates [ADR-0011](adr/0011-local-match-judge.md). | **Pending:** smoke tests done 2026-10-14 (choice among the top 3: no wrong picks in 18; per-candidate rating: 3–5/10); evaluation needs the labelled fixture. [Report](spikes/local-judge-spike.md). |
 
 ## 11. Milestones
 

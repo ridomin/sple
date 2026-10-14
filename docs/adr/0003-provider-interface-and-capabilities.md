@@ -367,15 +367,15 @@ Login requests `https://www.googleapis.com/auth/youtube https://www.googleapis.c
 **Logout** reports `revoked: true` only when Google's revoke endpoint accepted the token, and `deletedData: ['access_token', 'refresh_token']`. sple keeps no other YouTube data yet.
 
 
-## Amendment 4 (OpenAI Decisions matcher, Proposed with ADR 0011)
+## Amendment 4 (local judge matcher, Proposed with ADR 0011)
 
 - **Date:** 2026-10-14
-- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-openai-decisions-match-judge.md) is Accepted.
-- **Why:** the opt-in `openai` matcher (ADR 0009 Amendment 3) produces its own candidates.
+- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-local-match-judge.md) is Accepted.
+- **Why:** the opt-in `local` matcher (ADR 0009 Amendment 3) produces its own candidates.
 
 | Change | Rule |
 |---|---|
-| `MatchCandidate.strategy` | Gains `'openai'`: `'known-ref' \| 'cache' \| 'isrc' \| 'metadata' \| 'openai'`. |
+| `MatchCandidate.strategy` | Gains `'local'`: `'known-ref' \| 'cache' \| 'isrc' \| 'metadata' \| 'local'`. |
 | `TrackHit` | Unchanged. If S8 shows that the YouTube channel name helps, a later amendment adds an optional `channel?: string`, filled by the YouTube adapter from `snippet.channelTitle`. |
 
-Adapters are not involved: `openai` uses the same `searchTracks` call as `metadata`.
+Adapters are not involved: `local` uses the same `searchTracks` call as `metadata`, and keeps the provider's order of hits.

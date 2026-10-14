@@ -201,20 +201,19 @@ Token refresh is transparent to the `Provider` interface and CLI.
 - **Delete (logout):** remove the provider's entry entirely; other providers are untouched. A missing file is not an error.
 - Concurrent writers are not locked against; the last write wins.
 
-## Amendment 2 (OpenAI Decisions matcher, Proposed with ADR 0011)
+## Amendment 2 (local judge matcher, Proposed with ADR 0011)
 
 - **Date:** 2026-10-14
-- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-openai-decisions-match-judge.md) is Accepted.
-- **Why:** the opt-in `openai` matcher (ADR 0009 Amendment 3) needs the user's OpenAI API key.
+- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-local-match-judge.md) is Accepted.
+- **Why:** the opt-in `local` matcher (ADR 0009 Amendment 3) needs to know which model server and model to ask.
 
 **Variables** (added to the §1 table):
 
 | Variable | Required | Description | Example |
 |---|---|---|---|
-| `OPENAI_API_KEY` | Only for `--matcher openai` | The user's own OpenAI API key (platform.openai.com). It is a secret: keep it in `.env` (mode `0600`) or the environment, never in a flag. sple never writes it. | `sk-proj-…` |
-| `SPLE_OPENAI_DECISIONS_MODEL` | No | The Decisions model. Defaults to `gpt-6-luna`, currently the only supported model, with no dated snapshot. | `gpt-6-luna` |
+| `SPLE_LOCAL_JUDGE_MODEL` | Only for `--matcher local` | The model ID as the server lists it (`GET <url>/models`). There is no default: model IDs are whatever the user loaded. | `jevk5` |
+| `SPLE_LOCAL_JUDGE_URL` | No | The base URL of an OpenAI-compatible server that implements `POST /responses` with `top_logprobs`. Defaults to `http://localhost:1234/v1` (LM Studio). Must be `http:` or `https:`. | `http://172.19.192.1:1234/v1` (WSL to a Windows host) |
 
-- The name `OPENAI_API_KEY` is the SDK's own, so a key that is already set for other OpenAI tools works here too. Requests are billed to that key's project.
-- sple passes `apiKey`, `baseURL` (`https://api.openai.com/v1`), `maxRetries` (2), `timeout` (30 s) and `logLevel` (`warn`) to the SDK explicitly. As a result, `OPENAI_BASE_URL` and `OPENAI_LOG` have no effect: a stray environment setting can't redirect requests, and SDK debug logging can't be switched on. `OPENAI_ORG_ID` and `OPENAI_PROJECT_ID` are honoured as the SDK reads them.
-- The key is used only when the run's matcher is `openai`, and it is never written to a run file, report or log.
-- `process.loadEnvFile` (§1, Node 20.13+) is unaffected by the Node ≥ 22 minimum that ADR 0011 §6 introduces.
+- Neither value is a secret, and no API key is sent. A server that requires one is not supported.
+- Both are read only when the run's matcher is `local`. The run file stores `matcher`, not the URL or model, so a resume uses the values current at resume time.
+- The report records the model that answered (`judgeModel`), never the URL.

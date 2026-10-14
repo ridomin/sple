@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-05); amended 2026-10-07 (Amendment 1)
 - **Date:** 2026-10-05
 - **Deciders:** project owner, architect
-- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface), [ADR 0011](0011-openai-decisions-match-judge.md) (Proposed: opt-in OpenAI Decisions judge for metadata hits)
+- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface), [ADR 0011](0011-local-match-judge.md) (Proposed: opt-in local judge for metadata hits)
 
 ## Context
 
@@ -102,7 +102,7 @@ A quota hit therefore does not corrupt the match state.
 
 ### No External Dependencies
 
-> Narrowed by Amendment 3 (Proposed): this applies to the `basic` scorer. The opt-in `openai` matcher calls OpenAI's Decisions API through the `openai` SDK.
+> Narrowed by Amendment 3 (Proposed): this applies to the `basic` scorer. The opt-in `local` matcher asks a model on the user's own server (no new package).
 
 Matching uses no fuzzy-matching or NLP libraries (like leven, fuzzy-wuzzy, or jaro-winkler). Simple word overlap is sufficient because:
 - Provider search APIs already do the heavy lifting
@@ -359,110 +359,122 @@ An entry is fresh while `now − fetchedAt < 30 days` (YouTube API Developer Pol
 - `sple auth logout --provider X` (and `--all`) deletes every entry that targets `X` or whose key starts with `X|`, whether or not tokens were stored. When any were deleted, `match_cache` is appended to the `Deleted:` line (ADR 0007 Amendment 3).
 - Concurrent sple processes are not locked against; the last write wins.
 
-## Amendment 3 (OpenAI Decisions matcher, Proposed with ADR 0011)
+
+## Amendment 3 (local judge matcher, Proposed with ADR 0011)
 
 - **Date:** 2026-10-14
-- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-openai-decisions-match-judge.md) is Accepted, after spike S8 ([report](../spikes/decisions-matching-spike.md)). Until then sple matches as Amendments 1–2 say, and nothing here is implemented.
-- **Why:** On Spotify → YouTube, the metadata score can't tell a cover, live or lyric re-upload from the same recording, and it rejects correct hits whose artist was guessed wrongly. ADR 0011 adds an opt-in judge, OpenAI's Decisions API, that re-ranks the metadata search hits. This amendment is the spec ports implement. ADR 0011 has the reasons, the alternatives and the risks.
+- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-local-match-judge.md) is Accepted, after spike S8 ([report](../spikes/local-judge-spike.md)). Until then sple matches as Amendments 1–2 say, and nothing here is implemented.
+- **Why:** On Spotify → YouTube, the metadata score can't tell a cover, live or lyric re-upload from the same recording, and it rejects correct hits whose artist was guessed wrongly. ADR 0011 adds an opt-in judge: a decision model on the user's own server (LM Studio) picks the matching recording among the top search hits. This amendment is the spec ports implement. ADR 0011 has the reasons, the alternatives and the risks.
 
 Constants marked † are provisional. S8 sets them, and this amendment is updated before it is accepted.
 
 ### 1. Matcher
 
-A run has a `matcher`: `basic` (default) or `openai` (`--matcher`, ADR 0007 Amendment 7). With `basic`, the chain is A2 §1, unchanged. With `openai`, slot 4 runs `openai` instead of `metadata`:
+A run has a `matcher`: `basic` (default) or `local` (`--matcher`, ADR 0007 Amendment 7). With `basic`, the chain is A2 §1, unchanged. With `local`, slot 4 runs `local` instead of `metadata`:
 
 | # | Strategy | Applicable when | Call | Candidate |
 |---|---|---|---|---|
 | 1–3 | `known-ref`, `cache`, `isrc` | unchanged | unchanged | unchanged |
-| 4 | `openai` | `matcher` is `openai`, OpenAI is not switched off for the run (§5), and `track.title` is non-empty | the A1 §2 metadata search, then one Decisions request when the shortlist is non-empty | §4 |
+| 4 | `local` | `matcher` is `local`, the judge is not switched off for the run (§5), and `track.title` is non-empty | the A1 §2 metadata search, then one judge request when there is at least one hit | §4 |
 
-`MatchCandidate.strategy` gains `'openai'` (ADR 0003 Amendment 4).
+`MatchCandidate.strategy` gains `'local'` (ADR 0003 Amendment 4).
 
 ### 2. Shortlist
 
 1. Search exactly like `metadata`: `searchTracks({ kind: 'metadata', title, artists, album, durationMs }, { limit: 10 })`.
-2. Score every hit with A1 §4, which gives `t`, `a` and `confidence`.
-3. Keep the hits that pass the **relaxed gate** `t > 0 || a > 0`†. Sort them by A1 `confidence`, highest first; this sort is stable, so ties keep the provider's order. Keep the first `K = 5`† and number them `c1…cK` in that order.
-4. An empty shortlist means no candidate (`null`), and no request is made.
+2. The shortlist is the first `K = 3`† hits **in the provider's order**, `h1…hK`. Fewer hits give a shorter shortlist.
+3. No hits means no candidate (`null`), and no request is made.
 
-### 3. Decisions request
+### 3. Judge request
 
-One `POST https://api.openai.com/v1/decisions` per track, through the `openai` SDK (`client.decisions.create`, ADR 0011 §6), with `model` = `SPLE_OPENAI_DECISIONS_MODEL` or `gpt-6-luna`.
+One `POST <SPLE_LOCAL_JUDGE_URL>/responses` per track, with `fetch`, `content-type: application/json`, no credentials and a 30 s timeout. `SPLE_LOCAL_JUDGE_URL` defaults to `http://localhost:1234/v1`, with any trailing `/` removed.
 
 ```json
 {
-  "model": "gpt-6-luna",
-  "input": "<JSON.stringify({ source, candidates })>",
-  "questions": [
-    {
-      "type": "score",
-      "name": "c1",
-      "instructions": "The input is JSON with a source track and candidate tracks. How does candidate c1 relate to the source track as a recording? Ignore words that only describe the upload, such as 'Official Video', 'Lyrics', 'Audio', 'HD' or a channel suffix like 'VEVO' or '- Topic'.",
-      "levels": [
-        { "label": "different", "description": "A different song." },
-        { "label": "version", "description": "The same song but a different recording or version: live, remix, cover, acoustic, instrumental, karaoke, sped up or slowed, or re-recorded." },
-        { "label": "same", "description": "The same recording as the source; only the upload's packaging differs." }
-      ]
-    }
-  ]
+  "model": "<SPLE_LOCAL_JUDGE_MODEL>",
+  "input": "<prompt>",
+  "max_output_tokens": 2,
+  "temperature": 0,
+  "top_logprobs": 20,
+  "include": ["message.output_text.logprobs"],
+  "reasoning": { "effort": "none" }
 }
 ```
 
-- `input` is the compact `JSON.stringify` of:
-  - `source`: `{ service, title, artists, album? }`
-  - `candidates`: `{ c1: { service, title, artists, album? }, … }`
-  
-  The keys appear in that order, and `album` is left out when it is absent. Durations, refs, ISRCs, tokens and account data are never sent. `service` is the provider's display name (`Spotify`, `YouTube Music`).
-- There is one question per shortlisted candidate, in `c1…cK` order, with `name` equal to the candidate key. Every question uses the same instructions (with its own key) and the same levels. The wording is provisional†.
-- `safety_identifier` is not sent.
+**Prompt.** Option letters are `A`, `B`, … in shortlist order; the last letter (letter `K + 1` for a full shortlist) is "none". Lines are joined with `\n`:
+
+```
+State:
+<STATE>
+
+Question: <QUESTION>
+Options:
+[A] <option for h1>
+…
+[<none letter>] None of these is the same recording.
+
+Answer with the letter of the best option only.
+```
+
+- `STATE` is the compact `JSON.stringify` of `{ source: { service, title, artists, album? } }`, with the keys in that order and `album` left out when it is absent. `service` is the source provider's display name (`Spotify`).
+- `QUESTION`† is: `Which candidate is the same recording as the source track? Uploads that differ only in packaging (Official Video, Lyrics, Audio, HD, a '- Topic' or VEVO channel) count as the same recording. Live, remix, cover, karaoke, instrumental, sped up or re-recorded versions do not.`
+- A hit's option is `JSON.stringify(title)`, then ` by ` and the artists joined with `, ` when there are any, then ` from ` and `JSON.stringify(album)` when there is an album. In artist names every run of whitespace becomes one space, so a title or artist can't start a new line.
+- Durations, refs, ISRCs, tokens and account data are never sent.
+
+**Reading the answer.**
+1. Take the first `output` item of type `message`, then its first `output_text` content part, then the `top_logprobs` of that part's first `logprobs` entry: a list of `{ token, logprob }`.
+2. For each option letter `L`, `m(L)` is the sum of `exp(logprob)` over the entries whose `token`, trimmed and with one leading `[` removed, equals `L` exactly.
+3. `M` is the sum of `m(L)` over the option letters. If `M < 0.5`, or the path in step 1 is missing, the request has failed (§5).
+4. `p(L) = m(L) / M`. `judgeModel` is the response's top-level `model`.
 
 ### 4. Combining (in code)
 
-Answers are matched to candidates by `name`. For each shortlisted candidate `ci`, read its answer's `score` and `probabilities`:
-
-- `level = floor(score + 0.5)` (round half up), and `p2` = the `probability` of the entry whose `value` is 2.
-- **Duration check:** it passes when either `durationMs` is missing or `|Δ| ≤ D` with `D = 10000` ms†.
-- `level = 2` and the check passes → eligible, `confidence = p2`.
-- `level = 2` and the check fails, or `level = 1` → eligible, `confidence = min(p2, 0.45)`†. The cap keeps a different version or a duration mismatch below the default `minConfidence` (0.5), so it is reported as `low-confidence`. A user who lowers `--min-confidence` below the cap accepts such versions on purpose, just as with `basic`.
-- `level = 0` → rejected.
-- The eligible candidate with the highest `confidence` wins, and ties go to the lower `i`. The result is `{ ref, track, confidence, strategy: 'openai' }`. If nothing is eligible, the result is `null`, and the track is `unmatched` (the `basic` score is not consulted).
+- The option with the highest `p` wins; ties go to the earlier letter.
+- **A hit `hi` wins:**
+  - The duration check passes when either `durationMs` is missing or `|Δ| ≤ D` with `D = 10000` ms†. Then `confidence = p(hi)`.
+  - Otherwise `confidence = min(p(hi), 0.45)`†.
+  - The result is `{ ref, track, confidence, strategy: 'local' }`.
+- **"None" wins:** the result is the **A1 `metadata` result for the same 10 hits** with `confidence = min(c, 0.45)`† and `strategy: 'metadata'`, or `null` if A1 accepts no hit.†
+  - The judge disagrees with the scorer, so the match is kept but reported as `low-confidence` at the default threshold.
+  - S8 compares this with "unmatched" and with the uncapped A1 result.
+- The cap keeps doubtful picks below the default `minConfidence` (0.5). A user who lowers `--min-confidence` below the cap accepts them on purpose, as with `basic`.
 - Confidence is a double and is not rounded. The engine applies `minConfidence` as in A1 §1.2.
 
 ### 5. Failures
 
-OpenAI never stops a run, and its errors never take the A1 §1.4 path:
+The judge never stops a run, and its errors never take the A1 §1.4 path:
 
-- On any failure the strategy returns the **A1 `metadata` result for the same hits**, with `strategy: 'metadata'`, and the track's `MatchResult.error` is set to `openai: <message>` even when the fallback matched. A failure is any of:
-  - the request throws (connection error, a timeout, or an HTTP error after the SDK's retries);
-  - any answer is a `refusal`;
-  - an answer is missing for a candidate, or has no `probabilities` entry with `value` 2.
+- On any failure, the strategy returns the **A1 `metadata` result for the same hits, uncapped**, with `strategy: 'metadata'`. The track's `MatchResult.error` is set to `local: <message>` even when the fallback matched. A failure is any of:
+  - `fetch` throws: connection refused, DNS, or the 30 s timeout;
+  - the HTTP status is not 2xx;
+  - the body is not JSON, or the answer can't be read (§3, `M < 0.5` or a missing path).
 - The first failure in a run prints one warning on stderr (ADR 0007 Amendment 7).
-- These failures switch `openai` off for the rest of the run, so slot 4 runs `metadata`, because retrying can't fix them:
-  - HTTP 401 or 403;
-  - HTTP 404 (the model isn't available to the account);
-  - HTTP 429 whose `error.code` is `insufficient_quota`.
-- OpenAI errors are never `AuthRequiredError`, `QuotaExhaustedError` or `RateLimitError`, so an OpenAI 429 can't be mistaken for a provider quota stop.
+- These failures switch `local` off for the rest of the run, so slot 4 runs `metadata`:
+  - a connection failure: the server isn't running or the URL is wrong;
+  - HTTP 404: the endpoint doesn't exist or the model isn't available.
+- There are no retries, and judge errors are never `AuthRequiredError`, `QuotaExhaustedError` or `RateLimitError`.
 
 ### 6. Cache and report
 
-- **Cache (A2):** an `openai` candidate is written like an `isrc` or `metadata` one, and the entry's `strategy` may be `'openai'`. The key does not include the matcher. A fresh entry is reused by both matchers, and `--no-cache` forces a new decision.
-- **Report (A1 §6):** `MatchReport` gains `matcher?: 'basic' | 'openai'` (absent means `basic`) and `decisionsModel?: string`, the `model` field of the first Decisions response in the run. `strategies[]` lists `openai` when it ran.
-- **Text report:** when `matcher` is `openai`, `Matcher: openai (<decisionsModel>)` follows the `Imported at` line. `decisionsModel` is `not called` when no request was made.
+- **Cache (A2):** a `local` candidate is written like an `isrc` or `metadata` one, and the entry's `strategy` may be `'local'`. The key does not include the matcher. A fresh entry is reused by both matchers, and `--no-cache` forces a new decision.
+- **Report (A1 §6):** `MatchReport` gains `matcher?: 'basic' | 'local'` (absent means `basic`) and `judgeModel?: string`, the `model` of the first judge response in the run. `strategies[]` lists `local` when it ran.
+- **Text report:** when `matcher` is `local`, `Matcher: local (<judgeModel>)` follows the `Imported at` line. `judgeModel` is `not called` when no request was made.
 
 ### 7. Test vectors
 
-These assume `minConfidence` 0.5 and the provisional constants. Each candidate passed the shortlist. "Score" is the answer's `score`, "p2" is the probability for `value` 2, and the durations are in seconds.
+These assume `minConfidence` 0.5 and the provisional constants, with three hits unless stated otherwise. "p" lists `p(A) / p(B) / p(C) / p(none)`; durations are in seconds (source / winning hit).
 
-| Shortlist (score / p2 / source s / candidate s) | Result |
-|---|---|
-| c1: 1.90 / 0.92 / 243 / 245 | `matched`, c1, 0.92 |
-| c1: 1.20 / 0.30 / 243 / 243 | `low-confidence`, c1, 0.30 (level 1) |
-| c1: 1.80 / 0.85 / 301 / 420 | `low-confidence`, c1, 0.45 (duration cap) |
-| c1: 1.50 / 0.48 / – / 200 | `low-confidence`, c1, 0.48 (rounds to level 2, duration unknown) |
-| c1: 0.40 / 0.05 / 200 / 200 | `unmatched`, `null` (level 0) |
-| c1: 1.70 / 0.80 / 200 / 201; c2: 1.95 / 0.93 / 200 / 199 | `matched`, c2, 0.93 |
-| c1: 1.90 / 0.90 / 200 / 200; c2: 1.90 / 0.90 / 200 / 200 | `matched`, c1, 0.90 (tie, lower i) |
-| c1: 1.10 / 0.40 / 200 / 200; c2: 0.20 / 0.02 / 200 / 200 | `low-confidence`, c1, 0.40 |
-| c1: 1.99 / 0.97 / 200 / 230 | `low-confidence`, c1, 0.45 (Δ 30 s > D) |
-| c1 answered 1.90 / 0.92; c2 is a `refusal`; A1 accepts c1 at 0.85 | `matched`, c1, 0.85, `strategy: 'metadata'`, `error: 'openai: …'` |
-| request fails with HTTP 500 after retries; A1 accepts c2 at 0.85 | `matched`, c2, 0.85, `strategy: 'metadata'`, `error: 'openai: …'` |
+| p | Durations | A1 over the same hits | Result |
+|---|---|---|---|
+| 0.70 / 0.05 / 0.05 / 0.20 | 243 / 245 | – | `matched`, h1, 0.70, `local` |
+| 0.10 / 0.60 / 0.05 / 0.25 | 200 / 208 | – | `matched`, h2, 0.60, `local` |
+| 0.55 / 0.05 / 0.05 / 0.35 | 301 / 420 | – | `low-confidence`, h1, 0.45, `local` (Δ 119 s > D) |
+| 0.48 / 0.02 / 0.02 / 0.48 | – / 200 | – | `low-confidence`, h1, 0.48, `local` (tie, earlier letter) |
+| 0.40 / 0.40 / 0.10 / 0.10 | 200 / 200 | – | `low-confidence`, h1, 0.40, `local` |
+| 0.05 / 0.05 / 0.05 / 0.85 | – | accepts h2 at 0.85 | `low-confidence`, h2, 0.45, `metadata` |
+| 0.05 / 0.05 / 0.05 / 0.85 | – | accepts nothing | `unmatched` |
+| two hits: 0.30 / 0.60 / none 0.10 | 200 / – | – | `matched`, h2, 0.60, `local` (options A, B, C = none) |
+| letters carry `M` = 0.30 (the model began with `<think>`) | – | accepts h1 at 0.85 | `matched`, h1, 0.85, `metadata`, `error: 'local: …'` |
+| connection refused | – | accepts h1 at 0.85 | `matched`, h1, 0.85, `metadata`, `error: 'local: …'`; `local` is off for the rest of the run |
+
+**Readout.** The top log-probabilities give `A` 0.60, `[A` 0.10, `B` 0.15, `D` 0.08 and `<think>` 0.05, as probabilities. For three hits (options A–C, D = none): `M = 0.93`, `p(A) = 0.7527`, `p(B) = 0.1613`, `p(C) = 0`, `p(none) = 0.0860`. The answer is h1 (compare with a tolerance of 1e-4).
