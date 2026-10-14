@@ -1,16 +1,23 @@
-# Spike S8 harness: OpenAI Decisions as a match judge
+# Spike S8 harness: a local decision model as a match judge
 
-Scripts for running the [S8 evaluation](../../../docs/spikes/decisions-matching-spike.md#evaluation-protocol-to-run) of [ADR 0011](../../../docs/adr/0011-openai-decisions-match-judge.md).
+Scripts for running the [S8 evaluation](../../../docs/spikes/local-judge-spike.md#evaluation-protocol-to-run) of [ADR 0011](../../../docs/adr/0011-local-match-judge.md).
 They are never shipped and never run in CI. `tsc` skips them (`rootDir`/`include` is `src/`). The pure parts (`judge.ts`, `metrics.ts`) are unit-tested in `tests/scripts/decisions-*.test.ts`, including the ADR 0009 Amendment 3 §7 vectors.
 
-`openai` is a **devDependency** here, so `engines.node` and the runtime dependencies stay as they are until ADR 0011 is accepted. The SDK needs Node ≥ 22.
+The judge talks to an OpenAI-compatible server through `POST <url>/responses`. The tested setup is LM Studio. No package is added and no API key is used.
 
 ## Data handling
 
 - The fixture (`fixture.json`: source tracks, YouTube hits, your labels) and the response cache (`responses.json`) live in `<configDir>/spikes/s8/`, outside the repo. On Linux that is `~/.config/sple/spikes/s8/`. Use `--dir` to put them somewhere else.
 - **Delete the directory within 30 days of collection** (YouTube API Developer Policies III.E.4). Every script prints a reminder from day 25: `rm -rf ~/.config/sple/spikes/s8`.
-- `evaluate.ts` prints counts and rates only. Paste them into the spike doc; never paste titles or video IDs.
-- Requests to OpenAI carry only titles, artists and albums (ADR 0009 A3 §3). Durations, refs and IDs are never sent.
+- `evaluate.ts` prints counts and rates only. Paste them into the spike report; never paste titles or video IDs.
+- Prompts carry only titles, artists and albums (ADR 0009 A3 §3), and they go only to your server. The response cache stores only the answer token's top log-probabilities.
+
+## LM Studio
+
+1. Load the model (for example `jevk5`) and start the server (Developer tab).
+2. In the model's settings, switch **Repeat Penalty** off. The server ignores it per request.
+3. From WSL, use the Windows host's address instead of `localhost`: `ip route show default | awk '{print $3}'` gives it (for example `172.19.192.1`).
+4. Check that it answers: `curl http://<host>:1234/v1/models`.
 
 ## Run
 
@@ -25,16 +32,17 @@ npx tsx scripts/spikes/decisions/collect.ts s8-a.json s8-b.json --max-tracks 150
 # 3. Label every (track, hit) pair. Saves on every key press; rerun to continue.
 npx tsx scripts/spikes/decisions/label.ts
 
-# 4–6. Check what it will cost, then run basic, the K × D grid, pair mode and a fresh repeat
+# 4–6. Check the request count, then run everything
+export SPLE_LOCAL_JUDGE_URL=http://172.19.192.1:1234/v1 SPLE_LOCAL_JUDGE_MODEL=jevk5
 npx tsx scripts/spikes/decisions/evaluate.ts --dry-run
-OPENAI_API_KEY=sk-... npx tsx scripts/spikes/decisions/evaluate.ts > s8-results.md
+npx tsx scripts/spikes/decisions/evaluate.ts > s8-results.md
 ```
 
 ### collect.ts
 
 `<export.json|csv>... [--max-tracks 150] [--dir <dir>] [--target youtube-music]`
 
-- Runs exactly the `metadata` search (`limit: 10`) once per source track and saves the hits.
+- Runs exactly the `metadata` search (`limit: 10`) once per source track and saves the hits in provider order.
 - Tracks already in the fixture are skipped. When the search quota runs out, it saves and stops; rerun after the reset.
 - `--target fake` with `SPLE_ENABLE_FAKE_PROVIDER=1` exercises the script without spending quota.
 
@@ -55,15 +63,25 @@ Shows the source track and all of its hits, with durations and the difference fr
 
 ### evaluate.ts
 
-`[--k 3,5,8] [--d 5,10,15] [--cap 0.45] [--gate relaxed|none] [--skip-pair] [--skip-repeat] [--concurrency 4] [--dry-run] [--dir <dir>]`
+`[--model <id>] [--url <base>] [--k 3,5] [--d 5,10,15] [--none unmatched,basic,capped] [--cap 0.45] [--skip-a1] [--skip-score] [--skip-repeat] [--concurrency 1] [--dry-run] [--dir <dir>]`
 
+- `--model` and `--url` default to `SPLE_LOCAL_JUDGE_MODEL` and `SPLE_LOCAL_JUDGE_URL`, from the environment or the sple `.env`. The URL defaults to `http://localhost:1234/v1`.
 - Evaluates only tracks whose hits are all labelled.
-- **basic** is the A1 `MetadataStrategy` scoring over the saved hits.
-- **openai** runs the A3 judge for every K × D. The judge falls back to basic on a refusal or a failed request, as the shipped strategy would. D only changes the combination step, so the grid makes one request per track per K.
-- The best setting is the one with the most correct accepts at 0.5 among those with no more false accepts than basic. That setting is then rerun as **openai-pair** (one request per candidate) and as **openai (repeat)**, which calls the API again to check stability.
-- Responses are cached by request body in `responses.json`, so rerunning the grid (for example with another `--cap`) is free. The repeat is never cached.
-- Reads `OPENAI_API_KEY` and `SPLE_OPENAI_DECISIONS_MODEL` from the environment or the sple `.env`, and uses the SDK settings from ADR 0011 §6.
-- A 401, 403, 404 or `insufficient_quota` stops the run (exit 1); the responses so far are kept.
+
+Runs:
+
+| Run | What it does |
+|---|---|
+| `basic` | The A1 `MetadataStrategy` scoring over the saved hits |
+| `local` | The A3 judge for every K × D × "none" rule: one lettered choice among the first K hits plus "none" |
+| `local-a1` | The best `local` setting, with the top K taken in A1 score order |
+| `local-score` | The best setting with the earlier design: one three-level rating per candidate, shortlisted by the relaxed A1 gate |
+| `local (repeat)` | The best setting again with fresh requests, to confirm the answers are deterministic |
+
+- The best setting is the one with the most correct accepts at 0.5 among those with no more false accepts than `basic`.
+- **"none" rules:** `unmatched` gives no match. `basic` uses the A1 result. `capped` uses the A1 result capped at `--cap` (the ADR's provisional rule).
+- Responses are cached by request body in `responses.json`. D, the cap and the "none" rule only change the combination, so the grid makes one request per track per K, and reruns are instant. The repeat is never cached.
+- A failed request falls back to `basic` for that track and counts under **Failures**. If the server is unreachable or returns 404, the run stops (exit 1) and the responses so far are kept.
 
 Measures (protocol step 5), as a share of evaluated tracks:
 
@@ -71,6 +89,5 @@ Measures (protocol step 5), as a share of evaluated tracks:
 - **False accept:** `matched`, and the chosen hit is labelled `version` or `different`.
 - **Low-conf:** a candidate below `minConfidence`.
 - **Missed `same`:** `unmatched` although some hit is labelled `same`.
-- **Refusals:** tracks with a refusal (`+n failed` counts other fallbacks).
-- **Tokens:** input tokens.
-- **Time:** the sum of request latencies.
+- **Failures:** tracks where the judge failed.
+- **Time/track:** the mean judge latency per track, as first measured. Cached runs repeat it.

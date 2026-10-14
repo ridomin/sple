@@ -1,51 +1,73 @@
-// Spike S8, steps 4–6: run `basic` and the `openai` judge offline against the labelled fixture.
-// Usage: npx tsx scripts/spikes/decisions/evaluate.ts [--k 3,5,8] [--d 5,10,15] [--cap 0.45] [--gate relaxed|none]
-//          [--skip-pair] [--skip-repeat] [--concurrency 4] [--dry-run] [--dir <dir>]
-// Needs OPENAI_API_KEY (environment or <configDir>/.env) unless --dry-run. Responses are cached in
-// <dir>/responses.json, so rerunning the grid costs nothing; the stability repeat always calls the API.
-// Prints counts and rates only (Markdown), ready to paste into docs/spikes/decisions-matching-spike.md.
+// Spike S8, steps 4–6: run `basic` and the local judge offline against the labelled fixture.
+// Usage: npx tsx scripts/spikes/decisions/evaluate.ts [--model <id>] [--url <base>] [--k 3,5] [--d 5,10,15]
+//          [--none unmatched,basic,capped] [--cap 0.45] [--skip-a1] [--skip-score] [--skip-repeat]
+//          [--concurrency 1] [--dry-run] [--dir <dir>]
+// The model and URL default to SPLE_LOCAL_JUDGE_MODEL and SPLE_LOCAL_JUDGE_URL (environment or the sple .env;
+// URL default http://localhost:1234/v1). Responses are cached in <dir>/responses.json, so changing D, the cap or
+// the "none" rule never asks the model again; the stability repeat always does.
+// Prints counts and rates only (Markdown), ready to paste into docs/spikes/local-judge-spike.md.
 import { createHash } from 'node:crypto'
 import { parseArgs } from 'node:util'
-import OpenAI from 'openai'
 import { loadEnvFile } from '../../../src/cli/config.js'
 import { ageWarning, fixtureDir, labelledTracks, loadFixture, loadResponses, saveResponses, type FixtureTrack } from './fixture.js'
-import { basicPick, buildRequest, judgeTrack, shortlist, type Answer, type Ask, type JudgeSettings, type TrackOutcome } from './judge.js'
+import {
+  basicPick,
+  choiceRequest,
+  choiceShortlist,
+  JudgeError,
+  judgeTrack,
+  parseResponse,
+  scoreShortlist,
+  type Ask,
+  type JudgeRequest,
+  type JudgeSettings,
+  type NoneRule,
+} from './judge.js'
 import { chooseBest, measure, passes, row, TABLE_HEADER, type Label, type Measures, type RunTrack } from './metrics.js'
 
 const USAGE =
-  'Usage: npx tsx scripts/spikes/decisions/evaluate.ts [--k 3,5,8] [--d 5,10,15] [--cap 0.45] [--gate relaxed|none] ' +
-  '[--skip-pair] [--skip-repeat] [--concurrency 4] [--dry-run] [--dir <dir>]'
+  'Usage: npx tsx scripts/spikes/decisions/evaluate.ts [--model <id>] [--url <base>] [--k 3,5] [--d 5,10,15] ' +
+  '[--none unmatched,basic,capped] [--cap 0.45] [--skip-a1] [--skip-score] [--skip-repeat] [--concurrency 1] [--dry-run] [--dir <dir>]'
 
 const { values } = parseArgs({
   options: {
-    k: { type: 'string', default: '3,5,8' },
+    model: { type: 'string' },
+    url: { type: 'string' },
+    k: { type: 'string', default: '3,5' },
     d: { type: 'string', default: '5,10,15' },
+    none: { type: 'string', default: 'unmatched,basic,capped' },
     cap: { type: 'string', default: '0.45' },
-    gate: { type: 'string', default: 'relaxed' },
-    'skip-pair': { type: 'boolean', default: false },
+    'skip-a1': { type: 'boolean', default: false },
+    'skip-score': { type: 'boolean', default: false },
     'skip-repeat': { type: 'boolean', default: false },
-    concurrency: { type: 'string', default: '4' },
+    concurrency: { type: 'string', default: '1' },
     'dry-run': { type: 'boolean', default: false },
     dir: { type: 'string' },
   },
 })
 
-function numbers(s: string): number[] {
-  return s.split(',').map((x) => Number(x.trim()))
-}
-const ks = numbers(values.k)
-const ds = numbers(values.d)
+const list = (s: string) => s.split(',').map((x) => x.trim())
+const ks = list(values.k).map(Number)
+const ds = list(values.d).map(Number)
+const nones = list(values.none) as NoneRule[]
 const cap = Number(values.cap)
 const concurrency = Number(values.concurrency)
-const gate = values.gate
 if (
   !ks.every((k) => Number.isInteger(k) && k >= 1 && k <= 10) ||
   !ds.every((d) => Number.isFinite(d) && d >= 0) ||
+  !nones.every((n) => n === 'unmatched' || n === 'basic' || n === 'capped') ||
   !(cap >= 0 && cap <= 1) ||
-  !(Number.isInteger(concurrency) && concurrency >= 1) ||
-  (gate !== 'relaxed' && gate !== 'none')
+  !(Number.isInteger(concurrency) && concurrency >= 1)
 ) {
   console.error(USAGE)
+  process.exit(2)
+}
+
+loadEnvFile()
+const url = (values.url || process.env.SPLE_LOCAL_JUDGE_URL?.trim() || 'http://localhost:1234/v1').replace(/\/+$/, '')
+const model = values.model || process.env.SPLE_LOCAL_JUDGE_MODEL?.trim() || ''
+if (!/^https?:\/\//.test(url)) {
+  console.error('The judge URL must be an http(s) URL.')
   process.exit(2)
 }
 
@@ -68,79 +90,118 @@ interface Run {
   name: string
   k: string
   d: string
+  none: string
   withJudge: boolean
   outcomes: RunTrack[]
   measures: Measures // at the default threshold
   settings?: JudgeSettings
-  picks?: Array<number | null>
 }
 
-function toRun(name: string, k: string, d: string, outcomes: RunTrack[], withJudge: boolean, extra: Partial<Run> = {}): Run {
-  return { name, k, d, withJudge, outcomes, measures: measure(labels, outcomes, MIN_CONFIDENCES[0]), ...extra }
+function toRun(name: string, outcomes: RunTrack[], settings?: JudgeSettings): Run {
+  return {
+    name,
+    k: settings ? String(settings.k) : '–',
+    d: settings ? String(settings.durationToleranceMs / 1000) : '5',
+    none: settings?.mode === 'choice' ? settings.none : '–',
+    withJudge: settings !== undefined,
+    outcomes,
+    measures: measure(labels, outcomes, MIN_CONFIDENCES[0]),
+    settings,
+  }
 }
 
 const basic = toRun(
   'basic',
-  '–',
-  '5',
-  tracks.map((t) => ({ pick: basicPick(t.source, t.hits), refusal: false, failed: false, requests: 0, inputTokens: 0, ms: 0 })),
-  false
+  tracks.map((t) => ({ pick: basicPick(t.source, t.hits), failed: false, requests: 0, ms: 0 }))
 )
 
-const settingsFor = (k: number, d: number, pair = false): JudgeSettings => ({
+const settingsFor = (k: number, d: number, none: NoneRule, extra: Partial<JudgeSettings> = {}): JudgeSettings => ({
+  mode: 'choice',
   k,
+  order: 'provider',
   durationToleranceMs: d * 1000,
   cap,
-  gate: gate as JudgeSettings['gate'],
-  pair,
+  none,
+  ...extra,
 })
 
-loadEnvFile()
-const model = process.env.SPLE_OPENAI_DECISIONS_MODEL?.trim() || 'gpt-6-luna'
-
-if (values['dry-run']) {
-  // D only changes the combination step, so the grid needs one request set per K.
-  const cache = loadResponses(dir)
-  const plans = ks.map((k) => {
-    const bodies = tracks
-      .map((t) => ({ t, list: shortlist(t.source, t.hits, settingsFor(k, 0)) }))
-      .filter(({ list }) => list.length > 0)
-      .map(({ t, list }) => buildRequest(model, t.source, fixture.targetService, list))
-    const uncached = bodies.filter((b) => !(hash(b) in cache))
-    const chars = uncached.reduce((n, b) => n + JSON.stringify(b).length, 0)
-    return `K=${k}: ${bodies.length} requests, ${uncached.length} not cached, about ${Math.round(chars / 4)} input tokens`
-  })
-  console.log([`${tracks.length} labelled tracks; model ${model}.`, ...plans].join('\n'))
-  process.exit(0)
-}
-
-function hash(body: unknown): string {
+function hash(body: JudgeRequest): string {
   return createHash('sha256').update(JSON.stringify(body)).digest('hex')
 }
 
-const apiKey = process.env.OPENAI_API_KEY?.trim()
-if (!apiKey) {
-  console.error('Set OPENAI_API_KEY in the environment or in the sple .env file.')
+const cache = loadResponses(dir)
+
+if (values['dry-run']) {
+  // D, the cap and the "none" rule only change the combination step: one request set per K and order.
+  const plans = ks.map((k) => {
+    const bodies = tracks
+      .map((t) => ({ t, entries: choiceShortlist(t.source, t.hits, { k, order: 'provider' }) }))
+      .filter(({ entries }) => entries.length > 0)
+      .map(({ t, entries }) => choiceRequest(model || '<model>', t.source, entries))
+    return `local K=${k}: ${bodies.length} requests, ${bodies.filter((b) => !(hash(b) in cache)).length} not cached`
+  })
+  const scoreRequests = tracks.reduce((n, t) => n + scoreShortlist(t.source, t.hits, Math.max(...ks)).length, 0)
+  console.log(
+    [
+      `${tracks.length} labelled tracks; model ${model || '(unset)'} at ${url}.`,
+      ...plans,
+      `local-a1: up to ${tracks.length} requests per K; local-score: up to ${scoreRequests} requests; repeat: ${tracks.length}.`,
+    ].join('\n')
+  )
+  process.exit(0)
+}
+
+if (!model) {
+  console.error('Set the model: --model <id> or SPLE_LOCAL_JUDGE_MODEL (the ID as LM Studio lists it, e.g. jevk5).')
   process.exit(2)
 }
 
-// ADR 0011 §6: sple's explicit SDK settings.
-const client = new OpenAI({ apiKey, baseURL: 'https://api.openai.com/v1', maxRetries: 2, timeout: 30_000, logLevel: 'warn' })
-const cache = loadResponses(dir)
 let unsaved = 0
+function flush(): void {
+  saveResponses(dir, cache)
+  unsaved = 0
+}
+
+let warnedModel = false
+
+/** ADR 0009 A3 §3: one POST <url>/responses, 30 s timeout, no retries. */
+async function post(body: JudgeRequest) {
+  const started = performance.now()
+  let res: Response
+  try {
+    res = await fetch(`${url}/responses`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    })
+  } catch (error) {
+    const e = error as Error & { cause?: { code?: string; message?: string } }
+    if (e.name === 'TimeoutError') throw new JudgeError('timed out after 30 s')
+    throw new JudgeError(`cannot reach ${url} (${e.cause?.code ?? e.cause?.message ?? e.message})`, undefined, true)
+  }
+  if (!res.ok) throw new JudgeError(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`, res.status)
+  let json: unknown
+  try {
+    json = await res.json()
+  } catch {
+    throw new JudgeError('the response is not JSON')
+  }
+  const parsed = parseResponse(json)
+  if (!parsed) throw new JudgeError('no log-probabilities in the response')
+  // LM Studio answers an unknown model ID with whatever model is loaded (spike S8).
+  if (parsed.model !== model && !warnedModel) {
+    warnedModel = true
+    console.error(`Warning: asked for model ${model}, but ${parsed.model || 'an unnamed model'} answered.`)
+  }
+  return { ...parsed, ms: Math.round(performance.now() - started) }
+}
 
 function asker(fresh: boolean): Ask {
   return async (body) => {
     const key = hash(body)
     if (!fresh && cache[key]) return cache[key]
-    const started = performance.now()
-    const response = await client.decisions.create(body)
-    const result = {
-      answers: response.answers as Answer[],
-      model: response.model,
-      inputTokens: response.usage.input_tokens,
-      ms: Math.round(performance.now() - started),
-    }
+    const result = await post(body)
     // The stability repeat must not replace the responses the grid was measured on.
     if (!fresh) {
       cache[key] = result
@@ -148,11 +209,6 @@ function asker(fresh: boolean): Ask {
     }
     return result
   }
-}
-
-function flush(): void {
-  saveResponses(dir, cache)
-  unsaved = 0
 }
 
 async function pool<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -173,12 +229,10 @@ const models = new Set<string>()
 
 async function judgeAll(settings: JudgeSettings, fresh = false): Promise<RunTrack[]> {
   const ask = asker(fresh)
-  const outcomes = await pool(tracks, (t: FixtureTrack) =>
-    judgeTrack(t.source, t.hits, settings, { model, targetService: fixture.targetService, ask })
-  )
-  return outcomes.map((o: TrackOutcome) => {
+  const outcomes = await pool(tracks, (t: FixtureTrack) => judgeTrack(t.source, t.hits, settings, { model, targetService: fixture.targetService, ask }))
+  return outcomes.map((o) => {
     if (o.model) models.add(o.model)
-    return { pick: o.pick, refusal: o.refusal, failed: o.error !== undefined && !o.refusal, requests: o.requests, inputTokens: o.inputTokens, ms: o.ms }
+    return { pick: o.pick, failed: o.error !== undefined, requests: o.requests, ms: o.ms }
   })
 }
 
@@ -188,37 +242,40 @@ let stability = ''
 try {
   for (const k of ks) {
     for (const d of ds) {
-      const settings = settingsFor(k, d)
-      const outcomes = await judgeAll(settings)
-      runs.push(toRun('openai', String(k), String(d), outcomes, true, { settings }))
-      console.error(`openai K=${k} D=${d}: done`)
+      for (const none of nones) {
+        const settings = settingsFor(k, d, none)
+        runs.push(toRun('local', await judgeAll(settings), settings))
+      }
     }
+    console.error(`local K=${k}: done`)
   }
 
   const best = chooseBest(runs, basic.measures)
   if (best?.settings) {
-    const { k, durationToleranceMs } = best.settings
-    const d = durationToleranceMs / 1000
-    if (!values['skip-pair']) {
-      extras.push(toRun('openai-pair', String(k), String(d), await judgeAll(settingsFor(k, d, true)), true))
-      console.error('openai-pair: done')
+    const s = best.settings
+    if (!values['skip-a1']) {
+      const settings = { ...s, order: 'a1' as const }
+      extras.push(toRun('local-a1', await judgeAll(settings), settings))
+      console.error('local-a1: done')
+    }
+    if (!values['skip-score']) {
+      const settings = { ...s, mode: 'score' as const }
+      extras.push(toRun('local-score', await judgeAll(settings), settings))
+      console.error('local-score: done')
     }
     if (!values['skip-repeat']) {
-      const repeat = toRun('openai (repeat)', String(k), String(d), await judgeAll(best.settings, true), true)
+      const repeat = toRun('local (repeat)', await judgeAll(s, true), s)
       extras.push(repeat)
       const changed = repeat.outcomes.filter((o, i) => o.pick?.index !== best.outcomes[i].pick?.index).length
-      const flipped = repeat.outcomes.filter(
-        (o, i) => (o.pick?.confidence ?? 0) >= 0.5 !== (best.outcomes[i].pick?.confidence ?? 0) >= 0.5
-      ).length
-      stability = `**Stability (K=${k}, D=${d}, fresh requests):** ${changed} of ${tracks.length} tracks picked a different hit; ${flipped} crossed the 0.5 threshold.`
+      const drift = Math.max(0, ...repeat.outcomes.map((o, i) => Math.abs((o.pick?.confidence ?? 0) - (best.outcomes[i].pick?.confidence ?? 0))))
+      stability = `**Stability (best setting, fresh requests):** ${changed} of ${tracks.length} tracks picked a different hit; the largest confidence change was ${drift.toFixed(4)}.`
       console.error('repeat: done')
     }
   }
 } catch (error) {
-  // judgeTrack only rethrows the errors that would switch OpenAI off (A3 §5).
-  const status = (error as { status?: number }).status
-  console.error(`OpenAI stopped the evaluation (HTTP ${status}): ${(error as Error).message}`)
-  console.error('Fix the API key, model access or credit and rerun; responses so far are cached.')
+  // judgeTrack only rethrows the errors that switch the judge off (A3 §5).
+  console.error(`The local judge stopped the evaluation: ${(error as Error).message}`)
+  console.error('Check that LM Studio is running with the model loaded, then rerun; responses so far are cached.')
   process.exitCode = 1
 } finally {
   flush()
@@ -229,15 +286,16 @@ const best = chooseBest(runs, basic.measures)
 const all = [basic, ...runs, ...extras]
 const out: string[] = []
 for (const mc of MIN_CONFIDENCES) {
-  out.push(`**minConfidence ${mc}** (${tracks.length} tracks; tokens are input tokens, time is the sum of request latencies)`, '', TABLE_HEADER)
-  for (const r of all) out.push(row(r.name, r.k, r.d, measure(labels, r.outcomes, mc), r.withJudge))
+  out.push(`**minConfidence ${mc}** (${tracks.length} tracks; time is the mean judge latency per track)`, '', TABLE_HEADER)
+  for (const r of all) out.push(row(r.name, r.k, r.d, r.none, measure(labels, r.outcomes, mc), r.withJudge))
   out.push('')
 }
-out.push(`**Model and date:** ${[...models].join(', ') || model} · ${new Date().toISOString().slice(0, 10)}  `)
-out.push(`**Settings:** cap ${cap}, gate \`${gate === 'relaxed' ? 't > 0 || a > 0' : 'none'}\`  `)
+out.push(`**Model, settings and date:** ${[...models].join(', ') || model}, cap ${cap}, ${new Date().toISOString().slice(0, 10)}  `)
 if (best?.settings) {
   const verdict = passes(best.measures, basic.measures) ? '**passes**' : '**fails**'
-  out.push(`**Best setting:** K=${best.k}, D=${best.d} s; it ${verdict} the step 6 bar (false accepts ≤ basic and correct accepts ≥ basic + 10 points at 0.5).  `)
+  out.push(
+    `**Best setting:** K=${best.k}, D=${best.d} s, "none" → ${best.none}; it ${verdict} the step 6 bar (false accepts ≤ basic and correct accepts ≥ basic + 10 points at 0.5).  `
+  )
 }
 if (stability) out.push(stability)
 console.log(out.join('\n'))

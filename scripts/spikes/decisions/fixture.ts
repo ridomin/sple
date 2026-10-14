@@ -1,4 +1,4 @@
-// Spike S8: the local fixture (protocol steps 2–3) and the Decisions response cache.
+// Spike S8: the local fixture (protocol steps 2–3) and the judge response cache.
 // Both live outside the repo, under <configDir>/spikes/s8/, and are deleted within
 // 30 days of collection (YouTube API Developer Policies III.E.4).
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
@@ -72,7 +72,7 @@ export function labelledTracks(fixture: Fixture): FixtureTrack[] {
   return fixture.tracks.filter((t) => t.hits.every((h) => h.label !== undefined))
 }
 
-/** Decisions responses keyed by a hash of the request body. Answers carry candidate keys only, no titles. */
+/** Judge responses keyed by a hash of the request body: only the first token's top log-probabilities and the model, no titles. */
 export type ResponseCache = Record<string, AskResult>
 
 export function loadResponses(dir: string): ResponseCache {

@@ -5,11 +5,9 @@ export type Label = 'same' | 'version' | 'different'
 
 export interface RunTrack {
   pick: HitPick | null
-  refusal: boolean
-  /** Fell back to `basic` for a reason other than a refusal. */
+  /** The judge failed and the track fell back to `basic`. */
   failed: boolean
   requests: number
-  inputTokens: number
   ms: number
 }
 
@@ -22,10 +20,8 @@ export interface Measures {
   lowConfidence: number
   /** `unmatched` although some hit is labelled `same`. */
   missedSame: number
-  refusals: number
   failures: number
   requests: number
-  inputTokens: number
   ms: number
 }
 
@@ -37,10 +33,8 @@ export function measure(labels: Label[][], outcomes: RunTrack[], minConfidence: 
     falseAccept: 0,
     lowConfidence: 0,
     missedSame: 0,
-    refusals: 0,
     failures: 0,
     requests: 0,
-    inputTokens: 0,
     ms: 0,
   }
   outcomes.forEach((o, t) => {
@@ -53,10 +47,8 @@ export function measure(labels: Label[][], outcomes: RunTrack[], minConfidence: 
     } else {
       m.falseAccept++
     }
-    if (o.refusal) m.refusals++
     if (o.failed) m.failures++
     m.requests += o.requests
-    m.inputTokens += o.inputTokens
     m.ms += o.ms
   })
   return m
@@ -74,38 +66,38 @@ export function passes(candidate: Measures, basic: Measures): boolean {
 
 /**
  * The best setting at the default threshold: most correct accepts among those with
- * no more false accepts than `basic`, then fewest tokens. Falls back to the best
+ * no more false accepts than `basic`, then fewest false accepts. Falls back to the best
  * correct-minus-false when no setting keeps false accepts down.
  */
 export function chooseBest<T extends { measures: Measures }>(runs: T[], basic: Measures): T | undefined {
   const safe = runs.filter((r) => r.measures.falseAccept <= basic.falseAccept)
   const pool = safe.length > 0 ? safe : runs
   const value = (r: T) => (safe.length > 0 ? r.measures.correct : r.measures.correct - r.measures.falseAccept)
-  return [...pool].sort((a, b) => value(b) - value(a) || a.measures.inputTokens - b.measures.inputTokens)[0]
+  return [...pool].sort((a, b) => value(b) - value(a) || a.measures.falseAccept - b.measures.falseAccept)[0]
 }
 
 function pct(n: number, m: Measures): string {
   return `${rate(n, m).toFixed(1)}% (${n})`
 }
 
-/** One row of the spike's results table. */
-export function row(name: string, k: string, d: string, m: Measures, withJudge: boolean): string {
+/** One row of the spike's results table. Time is the mean judge latency per track. */
+export function row(name: string, k: string, d: string, none: string, m: Measures, withJudge: boolean): string {
   const cells = [
     name,
     k,
     d,
+    none,
     pct(m.correct, m),
     pct(m.falseAccept, m),
     pct(m.lowConfidence, m),
     pct(m.missedSame, m),
-    withJudge ? `${m.refusals}${m.failures ? ` (+${m.failures} failed)` : ''}` : '–',
-    withJudge ? `${m.inputTokens} (${m.requests} req)` : '–',
-    withJudge ? `${(m.ms / 1000).toFixed(1)} s` : '',
+    withJudge ? String(m.failures) : '–',
+    withJudge ? `${(m.tracks === 0 ? 0 : m.ms / m.tracks / 1000).toFixed(2)} s` : '–',
   ]
   return `| ${cells.join(' | ')} |`
 }
 
 export const TABLE_HEADER = [
-  '| Run | K | D (s) | Correct accept | False accept | Low-conf | Missed `same` | Refusals | Tokens | Time |',
+  '| Run | K | D (s) | "none" | Correct accept | False accept | Low-conf | Missed `same` | Failures | Time/track |',
   '|---|---|---|---|---|---|---|---|---|---|',
 ].join('\n')

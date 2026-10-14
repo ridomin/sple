@@ -2,231 +2,216 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   basicPick,
-  buildRequest,
-  combine,
+  choiceRequest,
+  choiceShortlist,
   isFatal,
+  JudgeError,
   judgeTrack,
-  shortlist,
-  type Answer,
+  optionText,
+  parseResponse,
+  readLetters,
+  type Ask,
   type Hit,
-  type Shortlisted,
+  type JudgeSettings,
   type SourceTrack,
+  type TopLogprob,
 } from '../../scripts/spikes/decisions/judge.js'
 
-const SETTINGS = { k: 5, durationToleranceMs: 10_000, cap: 0.45, gate: 'relaxed' as const }
+const SETTINGS: JudgeSettings = { mode: 'choice', k: 3, order: 'provider', durationToleranceMs: 10_000, cap: 0.45, none: 'capped' }
 
-function score(name: string, s: number, p2: number): Answer {
-  return {
-    type: 'score',
-    name,
-    score: s,
-    confidence: p2,
-    probabilities: [
-      { value: 0, label: 'different', probability: (1 - p2) / 2 },
-      { value: 1, label: 'version', probability: (1 - p2) / 2 },
-      { value: 2, label: 'same', probability: p2 },
+/** Top log-probabilities giving these letter probabilities (A, B, C, …). */
+function top(...ps: number[]): TopLogprob[] {
+  return ps.map((p, i) => ({ token: 'ABCDEFGHIJK'[i], logprob: Math.log(p) })).filter((t) => Number.isFinite(t.logprob))
+}
+
+function answering(...ps: number[]): Ask {
+  return async () => ({ top: top(...ps), model: 'jevk5', ms: 5 })
+}
+
+function run(source: SourceTrack, hits: Hit[], ask: Ask, settings: Partial<JudgeSettings> = {}) {
+  return judgeTrack(source, hits, { ...SETTINGS, ...settings }, { model: 'jevk5', targetService: 'YouTube Music', ask })
+}
+
+const near = (a: number | undefined, b: number) => assert.ok(Math.abs((a ?? NaN) - b) < 1e-9, `${a} ≠ ${b}`)
+
+function src(seconds?: number): SourceTrack {
+  return { service: 'Spotify', title: 'Song', artists: ['Artist'], ...(seconds === undefined ? {} : { durationMs: seconds * 1000 }) }
+}
+function hit(ref: string, seconds?: number, title = 'Unrelated', artists = ['Nobody']): Hit {
+  return { ref, title, artists, ...(seconds === undefined ? {} : { durationMs: seconds * 1000 }) }
+}
+
+// A1 §5: this hit scores 0.85 against "Don't Stop Me Now" / Queen / 209 s; the others are not accepted.
+const QUEEN: SourceTrack = { service: 'Spotify', title: 'Don’t Stop Me Now', artists: ['Queen'], durationMs: 209_000 }
+const REMASTER: Hit = { ref: 'q', title: "Don't Stop Me Now - 2011 Remaster", artists: ['Queen'], durationMs: 216_000 }
+const OTHER1 = hit('x1')
+const OTHER2 = hit('x2')
+
+test('ADR 0009 A3 §7: a hit wins', async () => {
+  const cases: Array<[number[], number | undefined, number | undefined, number, number]> = [
+    // p (A, B, C, none), source s, winning hit s, winning index, confidence
+    [[0.7, 0.05, 0.05, 0.2], 243, 245, 0, 0.7],
+    [[0.1, 0.6, 0.05, 0.25], 200, 208, 1, 0.6],
+    [[0.55, 0.05, 0.05, 0.35], 301, 420, 0, 0.45], // Δ 119 s > D
+    [[0.48, 0.02, 0.02, 0.48], undefined, 200, 0, 0.48], // tie with none: earlier letter
+    [[0.4, 0.4, 0.1, 0.1], 200, 200, 0, 0.4], // tie: earlier letter
+  ]
+  for (const [p, s, h, index, confidence] of cases) {
+    const hits = [hit('h1', index === 0 ? h : 1), hit('h2', index === 1 ? h : 1), hit('h3', 1)]
+    const outcome = await run(src(s), hits, answering(...p))
+    assert.equal(outcome.strategy, 'local')
+    assert.equal(outcome.pick?.index, index)
+    near(outcome.pick?.confidence, confidence)
+  }
+})
+
+test('ADR 0009 A3 §7: "none" keeps the A1 result capped, or nothing', async () => {
+  const capped = await run(QUEEN, [OTHER1, REMASTER, OTHER2], answering(0.05, 0.05, 0.05, 0.85))
+  assert.deepEqual(capped, { pick: { index: 1, confidence: 0.45 }, strategy: 'metadata', requests: 1, ms: 5, model: 'jevk5' })
+
+  const nothing = await run(QUEEN, [OTHER1, OTHER2, hit('x3')], answering(0.05, 0.05, 0.05, 0.85))
+  assert.equal(nothing.pick, null)
+})
+
+test('the other "none" rules: unmatched, or the A1 result uncapped', async () => {
+  const hits = [OTHER1, REMASTER, OTHER2]
+  const none = answering(0.05, 0.05, 0.05, 0.85)
+  assert.equal((await run(QUEEN, hits, none, { none: 'unmatched' })).pick, null)
+  near((await run(QUEEN, hits, none, { none: 'basic' })).pick?.confidence, 0.85)
+})
+
+test('ADR 0009 A3 §7: two hits give options A, B and C = none', async () => {
+  let input = ''
+  const outcome = await run(src(200), [hit('h1', 200), hit('h2')], async (body) => {
+    input = body.input
+    return { top: top(0.3, 0.6, 0.1), model: 'jevk5', ms: 1 }
+  })
+  assert.match(input, /\[C\] None of these is the same recording\.\n/)
+  assert.doesNotMatch(input, /\[D\]/)
+  assert.equal(outcome.pick?.index, 1)
+  near(outcome.pick?.confidence, 0.6)
+})
+
+test('ADR 0009 A3 §7: failures fall back to the A1 result uncapped', async () => {
+  const thinking = await run(QUEEN, [REMASTER, OTHER1, OTHER2], async () => ({
+    top: [{ token: '<think>', logprob: Math.log(0.7) }, ...top(0.3)],
+    model: 'jevk5',
+    ms: 1,
+  }))
+  assert.equal(thinking.strategy, 'metadata')
+  near(thinking.pick?.confidence, 0.85)
+  assert.equal(thinking.error, 'local: no letter answer')
+
+  const timeout = await run(QUEEN, [REMASTER], async () => {
+    throw new JudgeError('timed out after 30 s')
+  })
+  assert.equal(timeout.error, 'local: timed out after 30 s')
+  assert.equal(timeout.pick?.index, 0)
+})
+
+test('connection failures and HTTP 404 switch the judge off (rethrown)', async () => {
+  for (const error of [new JudgeError('connect ECONNREFUSED', undefined, true), new JudgeError('HTTP 404', 404)]) {
+    await assert.rejects(run(QUEEN, [REMASTER], async () => {
+      throw error
+    }))
+  }
+  assert.equal(isFatal(new JudgeError('HTTP 500', 500)), false)
+})
+
+test('ADR 0009 A3 §7 readout: letters and [letters] add up, other tokens are ignored', () => {
+  const p = readLetters(
+    [
+      { token: 'A', logprob: Math.log(0.6) },
+      { token: '[A', logprob: Math.log(0.1) },
+      { token: 'B', logprob: Math.log(0.15) },
+      { token: 'D', logprob: Math.log(0.08) },
+      { token: '<think>', logprob: Math.log(0.05) },
     ],
-  }
-}
-
-/** A shortlist entry with only the fields combine() reads. */
-function entry(i: number, durationS?: number): Shortlisted {
-  return {
-    key: `c${i}`,
-    index: i - 1,
-    hit: { ref: `r${i}`, title: 'Song', artists: ['A'], durationMs: durationS === undefined ? undefined : durationS * 1000 },
-    score: { title: 1, artist: 1, confidence: 1, accepted: true },
-  }
-}
-
-// ADR 0009 Amendment 3 §7. Each row: source s, [score, p2, candidate s] per candidate, expected [key, confidence] or null.
-const VECTORS: Array<[number | undefined, Array<[number, number, number]>, [string, number] | null]> = [
-  [243, [[1.9, 0.92, 245]], ['c1', 0.92]],
-  [243, [[1.2, 0.3, 243]], ['c1', 0.3]],
-  [301, [[1.8, 0.85, 420]], ['c1', 0.45]],
-  [undefined, [[1.5, 0.48, 200]], ['c1', 0.48]],
-  [200, [[0.4, 0.05, 200]], null],
-  [200, [[1.7, 0.8, 201], [1.95, 0.93, 199]], ['c2', 0.93]],
-  [200, [[1.9, 0.9, 200], [1.9, 0.9, 200]], ['c1', 0.9]],
-  [200, [[1.1, 0.4, 200], [0.2, 0.02, 200]], ['c1', 0.4]],
-  [200, [[1.99, 0.97, 230]], ['c1', 0.45]],
-]
-
-test('combine reproduces the ADR 0009 A3 §7 vectors', () => {
-  for (const [sourceS, cands, expected] of VECTORS) {
-    const list = cands.map(([, , cs], i) => entry(i + 1, cs))
-    const answers = cands.map(([s, p2], i) => score(`c${i + 1}`, s, p2))
-    const result = combine({ durationMs: sourceS === undefined ? undefined : sourceS * 1000 }, list, answers, SETTINGS)
-    assert.equal(result.ok, true)
-    if (!result.ok) continue
-    if (expected === null) {
-      assert.equal(result.pick, null)
-    } else {
-      assert.equal(result.pick?.key, expected[0])
-      assert.ok(Math.abs((result.pick?.confidence ?? -1) - expected[1]) < 1e-9, `${expected[0]}: ${result.pick?.confidence}`)
-    }
-  }
+    4
+  )
+  assert.ok(p)
+  const expected = [0.7527, 0.1613, 0, 0.086]
+  p.forEach((x, i) => assert.ok(Math.abs(x - expected[i]) < 1e-4, `${i}: ${x}`))
+  assert.equal(readLetters([{ token: 'A', logprob: Math.log(0.4) }], 4), null)
 })
 
-test('combine matches answers by name, not position', () => {
-  const list = [entry(1, 200), entry(2, 200)]
-  const result = combine({ durationMs: 200_000 }, list, [score('c2', 1.9, 0.9), score('c1', 0.1, 0.01)], SETTINGS)
-  assert.ok(result.ok)
-  assert.equal(result.pick?.key, 'c2')
-})
-
-test('combine fails on a refusal, a missing answer, or a missing value-2 entry', () => {
-  const list = [entry(1, 200), entry(2, 200)]
-  const refusal = combine({}, list, [score('c1', 1.9, 0.9), { type: 'refusal', name: 'c2' }], SETTINGS)
-  assert.deepEqual(refusal, { ok: false, refusal: true, message: 'refusal for c2' })
-
-  const missing = combine({}, list, [score('c1', 1.9, 0.9)], SETTINGS)
-  assert.deepEqual(missing, { ok: false, refusal: false, message: 'no answer for c2' })
-
-  const noP2 = score('c2', 1.9, 0.9)
-  if (noP2.type === 'score') noP2.probabilities = noP2.probabilities.filter((p) => p.value !== 2)
-  const noValue2 = combine({}, list, [score('c1', 1.9, 0.9), noP2], SETTINGS)
-  assert.deepEqual(noValue2, { ok: false, refusal: false, message: 'no probability for value 2 in c2' })
-})
-
-const SOURCE: SourceTrack = { service: 'Spotify', title: 'Hello', artists: ['Adele'], album: '25', durationMs: 295_000 }
-
-test('shortlist applies the relaxed gate, sorts stably by A1 confidence and keeps K', () => {
+test('the prompt follows the A3 §3 template', () => {
+  const source: SourceTrack = { service: 'Spotify', title: 'Hello', artists: ['Adele'], album: '25', durationMs: 295_000 }
   const hits: Hit[] = [
-    { ref: 'a', title: 'Goodbye', artists: ['Someone'] }, // t = 0, a = 0: dropped
-    { ref: 'b', title: 'Hello (Live)', artists: ['Adele'], durationMs: 295_000 },
-    { ref: 'c', title: 'Hello', artists: ['Adele'], durationMs: 295_000 },
-    { ref: 'd', title: 'Rolling in the Deep', artists: ['Adele'] }, // a > 0 only
-    { ref: 'e', title: 'Hello', artists: ['Adele'], durationMs: 295_000 }, // ties c, keeps provider order
+    { ref: 'yt1', title: 'Adele - Hello (Live at the BBC)', artists: ['Adele'], durationMs: 300_000 },
+    { ref: 'yt2', title: 'Hello "Lyrics"', artists: ['Lyric\nChannel', ' '] },
   ]
-  const list = shortlist(SOURCE, hits, { ...SETTINGS, k: 3 })
-  assert.deepEqual(list.map((s) => [s.key, s.hit.ref, s.index]), [['c1', 'c', 2], ['c2', 'e', 4], ['c3', 'b', 1]])
-
-  assert.equal(shortlist(SOURCE, hits, { ...SETTINGS, gate: 'none' }).length, 5)
-  assert.deepEqual(shortlist(SOURCE, [hits[0]], SETTINGS), [])
-})
-
-test('buildRequest sends title, artists and album only, one score question per candidate', () => {
-  const hits: Hit[] = [
-    { ref: 'yt1', title: 'Adele - Hello (Official Music Video)', artists: ['Adele'], durationMs: 367_000 },
-    { ref: 'yt2', title: 'Hello', artists: ['Adele'], album: '25' },
-  ]
-  const list = shortlist(SOURCE, hits, SETTINGS)
-  const body = buildRequest('gpt-6-luna', SOURCE, 'YouTube Music', list)
-
-  assert.equal(body.model, 'gpt-6-luna')
+  const body = choiceRequest('jevk5', source, choiceShortlist(source, hits, SETTINGS))
   assert.equal(
     body.input,
-    JSON.stringify({
-      source: { service: 'Spotify', title: 'Hello', artists: ['Adele'], album: '25' },
-      candidates: {
-        c1: { service: 'YouTube Music', title: 'Hello', artists: ['Adele'], album: '25' },
-        c2: { service: 'YouTube Music', title: 'Adele - Hello (Official Music Video)', artists: ['Adele'] },
-      },
-    })
+    [
+      'State:',
+      '{"source":{"service":"Spotify","title":"Hello","artists":["Adele"],"album":"25"}}',
+      '',
+      "Question: Which candidate is the same recording as the source track? Uploads that differ only in packaging (Official Video, Lyrics, Audio, HD, a '- Topic' or VEVO channel) count as the same recording. Live, remix, cover, karaoke, instrumental, sped up or re-recorded versions do not.",
+      'Options:',
+      '[A] "Adele - Hello (Live at the BBC)" by Adele',
+      '[B] "Hello \\"Lyrics\\"" by Lyric Channel',
+      '[C] None of these is the same recording.',
+      '',
+      'Answer with the letter of the best option only.',
+    ].join('\n')
   )
-  assert.equal(body.questions.length, 2)
-  assert.deepEqual(body.questions.map((q) => q.name), ['c1', 'c2'])
-  const q = body.questions[1]
-  assert.equal(q.type, 'score')
-  assert.match(q.instructions, /candidate c2 relate/)
-  assert.deepEqual(q.levels.map((l) => l.label), ['different', 'version', 'same'])
-  assert.ok(!('safety_identifier' in body))
-  assert.doesNotMatch(body.input, /yt1|367000|295000/)
+  assert.deepEqual({ ...body, input: '' }, {
+    model: 'jevk5',
+    input: '',
+    max_output_tokens: 2,
+    temperature: 0,
+    top_logprobs: 20,
+    include: ['message.output_text.logprobs'],
+    reasoning: { effort: 'none' },
+  })
+  assert.doesNotMatch(body.input, /yt1|295000|300000/)
+  assert.equal(optionText({ title: 'T', artists: [], album: 'X' }), '"T" from "X"')
 })
 
-// A1 §5: this candidate scores 0.85 against "Don't Stop Me Now" / Queen / 209 s.
-const QUEEN: SourceTrack = { service: 'Spotify', title: 'Don’t Stop Me Now', artists: ['Queen'], durationMs: 209_000 }
-const REMASTER: Hit = { ref: 'q1', title: "Don't Stop Me Now - 2011 Remaster", artists: ['Queen'], durationMs: 216_000 }
-const LIVE: Hit = { ref: 'q0', title: 'Stop (Live)', artists: ['Queen'], durationMs: 400_000 }
+test('the shortlist is the first K hits in provider order, or by A1 score for local-a1', () => {
+  const hits = [OTHER1, OTHER2, REMASTER, hit('x3')]
+  assert.deepEqual(choiceShortlist(QUEEN, hits, { k: 3, order: 'provider' }).map((e) => e.index), [0, 1, 2])
+  assert.deepEqual(choiceShortlist(QUEEN, hits, { k: 2, order: 'a1' }).map((e) => e.index), [2, 0])
+})
+
+test('no hits means no request', async () => {
+  let calls = 0
+  const outcome = await run(QUEEN, [], async () => {
+    calls++
+    return { top: top(1), model: 'm', ms: 0 }
+  })
+  assert.equal(outcome.pick, null)
+  assert.equal(calls, 0)
+})
+
+test('score mode asks one three-level question per gated candidate', async () => {
+  const inputs: string[] = []
+  const outcome = await run(QUEEN, [hit('x', 209), REMASTER], async (body) => {
+    inputs.push(body.input)
+    return { top: top(0.05, 0.1, 0.85), model: 'jevk5', ms: 2 }
+  }, { mode: 'score' })
+  assert.equal(inputs.length, 1) // "Unrelated" by Nobody fails the relaxed gate
+  assert.match(inputs[0], /"candidate":\{"service":"YouTube Music"/)
+  assert.deepEqual(outcome.pick, { index: 1, confidence: 0.85 })
+})
+
+test('parseResponse reads LM Studio /v1/responses bodies', () => {
+  const body = {
+    model: 'jevk5',
+    output: [
+      { type: 'reasoning', content: [] },
+      { type: 'message', content: [{ type: 'output_text', text: 'B', logprobs: [{ token: 'B', logprob: -0.1, top_logprobs: [{ token: 'B', logprob: -0.1 }] }] }] },
+    ],
+  }
+  assert.deepEqual(parseResponse(body), { top: [{ token: 'B', logprob: -0.1 }], model: 'jevk5' })
+  assert.equal(parseResponse({ output: [{ type: 'message', content: [{ type: 'output_text', text: 'B' }] }] }), null)
+  assert.equal(parseResponse('nope'), null)
+})
 
 test('basicPick is the A1 metadata result', () => {
-  const pick = basicPick(QUEEN, [LIVE, REMASTER])
+  const pick = basicPick(QUEEN, [OTHER1, REMASTER])
   assert.equal(pick?.index, 1)
-  assert.ok(Math.abs((pick?.confidence ?? 0) - 0.85) < 1e-9)
-})
-
-test('judgeTrack falls back to the A1 result on a refusal', async () => {
-  const outcome = await judgeTrack(QUEEN, [REMASTER, LIVE], SETTINGS, {
-    model: 'gpt-6-luna',
-    targetService: 'YouTube Music',
-    ask: async () => ({ answers: [score('c1', 1.9, 0.92), { type: 'refusal', name: 'c2' }], model: 'gpt-6-luna', inputTokens: 300, ms: 5 }),
-  })
-  assert.equal(outcome.strategy, 'metadata')
-  assert.equal(outcome.pick?.index, 0)
-  assert.ok(Math.abs((outcome.pick?.confidence ?? 0) - 0.85) < 1e-9)
-  assert.equal(outcome.refusal, true)
-  assert.match(outcome.error ?? '', /^openai: /)
-  assert.equal(outcome.inputTokens, 300)
-})
-
-test('judgeTrack falls back to the A1 result when the request fails', async () => {
-  const outcome = await judgeTrack(QUEEN, [LIVE, REMASTER], SETTINGS, {
-    model: 'gpt-6-luna',
-    targetService: 'YouTube Music',
-    ask: async () => {
-      throw Object.assign(new Error('500 Internal Server Error'), { status: 500 })
-    },
-  })
-  assert.equal(outcome.strategy, 'metadata')
-  assert.equal(outcome.pick?.index, 1)
-  assert.equal(outcome.refusal, false)
-  assert.equal(outcome.error, 'openai: 500 Internal Server Error')
-})
-
-test('judgeTrack rethrows errors that switch OpenAI off for the run', async () => {
-  for (const err of [{ status: 401 }, { status: 403 }, { status: 404 }, { status: 429, code: 'insufficient_quota' }]) {
-    await assert.rejects(
-      judgeTrack(QUEEN, [REMASTER], SETTINGS, {
-        model: 'm',
-        targetService: 'YouTube Music',
-        ask: async () => {
-          throw Object.assign(new Error('nope'), err)
-        },
-      })
-    )
-  }
-  assert.equal(isFatal(Object.assign(new Error('slow down'), { status: 429, code: 'rate_limit_exceeded' })), false)
-})
-
-test('judgeTrack picks with the openai strategy, maps back to provider order, and skips empty shortlists', async () => {
-  let calls = 0
-  const ask = async () => {
-    calls++
-    return { answers: [score('c1', 1.95, 0.93)], model: 'gpt-6-luna', inputTokens: 200, ms: 7 }
-  }
-  const outcome = await judgeTrack(QUEEN, [{ ref: 'x', title: 'Other', artists: ['Nobody'] }, REMASTER], SETTINGS, {
-    model: 'gpt-6-luna',
-    targetService: 'YouTube Music',
-    ask,
-  })
-  assert.equal(outcome.strategy, 'openai')
-  assert.deepEqual(outcome.pick, { index: 1, confidence: 0.93 })
-  assert.equal(outcome.model, 'gpt-6-luna')
-
-  const empty = await judgeTrack(QUEEN, [{ ref: 'x', title: 'Other', artists: ['Nobody'] }], SETTINGS, {
-    model: 'gpt-6-luna',
-    targetService: 'YouTube Music',
-    ask,
-  })
-  assert.equal(empty.pick, null)
-  assert.equal(calls, 1)
-})
-
-test('judgeTrack in pair mode asks one question per request and combines the answers', async () => {
-  const bodies: string[] = []
-  const outcome = await judgeTrack(QUEEN, [LIVE, REMASTER], { ...SETTINGS, pair: true }, {
-    model: 'gpt-6-luna',
-    targetService: 'YouTube Music',
-    ask: async (body) => {
-      bodies.push(body.input as string)
-      const name = body.questions[0].name ?? ''
-      return { answers: [name === 'c1' ? score('c1', 1.9, 0.9) : score('c2', 1.0, 0.2)], model: 'gpt-6-luna', inputTokens: 100, ms: 3 }
-    },
-  })
-  assert.equal(bodies.length, 2)
-  assert.ok(bodies.every((b) => Object.keys(JSON.parse(b).candidates).length === 1))
-  assert.deepEqual(outcome.pick, { index: 1, confidence: 0.9 }) // c1 is the remaster (higher A1 score)
-  assert.equal(outcome.inputTokens, 200)
-  assert.equal(outcome.ms, 6)
+  near(pick?.confidence, 0.85)
 })
