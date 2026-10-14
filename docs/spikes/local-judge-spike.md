@@ -1,7 +1,7 @@
 # Local match-judge spike (S8)
 
 - **Date:** 2026-10-14 (research, smoke tests and evaluation)
-- **Status:** **Evaluation run on 100 tracks: the judge does not beat `basic`; it fails the pass bar.** The decision on ADR 0011 is the owner's (see [Results](#results))
+- **Status:** **Closed (2026-10-14).** On 100 tracks the judge did not beat `basic` and failed the pass bar. The owner rejected ADR 0011 and kept `basic` matching (see [Results](#results))
 - **Related:** [ADR 0011](../adr/0011-local-match-judge.md) (Proposed), [ADR 0009 Amendment 1 §4](../adr/0009-matching-strategy.md#4-metadata-score) (metadata score), [ADR 0009 Amendment 3](../adr/0009-matching-strategy.md#amendment-3-local-judge-matcher-proposed-with-adr-0011) (the spec), [ADR 0002](../adr/0002-youtube-music-provider.md) (YouTube quota and policies), [requirements FR-MIG-2, NFR-9](../requirements.md)
 - **Data handling:** results record counts and rates only. Labelled pairs (titles, artists, video IDs) stay in a local fixture outside the repo, and that fixture is deleted within 30 days (YouTube API Developer Policies III.E.4). The smoke-test cases below are hand-written from well-known songs, not YouTube API data.
 
@@ -235,7 +235,7 @@ Selected rows (`evaluate.ts` output). Percentages are of the 100 tracks.
 - **Where the judge did help:** non-English titles and live/session uploads, the cases `basic` gets wrong. It isn't reliable enough there either: it fixed 4 of `basic`'s 7 errors but added 3 of its own.
 - **Revisiting it** would need a model that knows the music better, or a narrower role (for example, only flagging likely live or session uploads), plus a fresh S8 run. The harness supports both.
 
-**Owner decision:** pending.
+**Owner decision (2026-10-14):** rejected. ADR 0011 and its five amendments are marked Rejected, and `basic` stays the only matcher. The local fixture (YouTube data) is deleted by 2026-11-13 at the latest.
 
 ## Sources
 

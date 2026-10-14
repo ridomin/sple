@@ -386,7 +386,7 @@ YouTube example: 120 tracks to search and add, with 96 searches left today, need
 ## Amendment 6 (YouTube data and the local judge matcher, Proposed with ADR 0011)
 
 - **Date:** 2026-10-14
-- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-local-match-judge.md) is Accepted.
+- **Status:** **Rejected** (2026-10-14) together with [ADR 0011](0011-local-match-judge.md), after spike S8 showed the local judge doesn't beat `basic` matching. Kept as a record; nothing here is implemented.
 - **Why:** with `--matcher local` (ADR 0009 Amendment 3), the titles and guessed artists of the top YouTube search results are sent to a model server, so that it can pick the match. That is a new use of YouTube API data and needs to be squared with the Developer Policies cited in §4.1.
 
 | Topic | Rule |

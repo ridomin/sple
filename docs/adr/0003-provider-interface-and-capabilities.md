@@ -370,7 +370,7 @@ Login requests `https://www.googleapis.com/auth/youtube https://www.googleapis.c
 ## Amendment 4 (local judge matcher, Proposed with ADR 0011)
 
 - **Date:** 2026-10-14
-- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-local-match-judge.md) is Accepted.
+- **Status:** **Rejected** (2026-10-14) together with [ADR 0011](0011-local-match-judge.md), after spike S8 showed the local judge doesn't beat `basic` matching. Kept as a record; nothing here is implemented.
 - **Why:** the opt-in `local` matcher (ADR 0009 Amendment 3) produces its own candidates.
 
 | Change | Rule |

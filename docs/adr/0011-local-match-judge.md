@@ -1,6 +1,6 @@
 # ADR 0011: A local decision model as an opt-in judge for metadata matches
 
-- **Status:** Proposed (2026-10-14). Accept only after the [S8 evaluation](../spikes/local-judge-spike.md#evaluation-protocol-to-run) meets its pass bar; otherwise Rejected.
+- **Status:** **Rejected** (2026-10-14, owner decision). [Spike S8](../spikes/local-judge-spike.md#results) evaluated the judge on 100 of the owner's tracks: `basic` matching got 93% correct with 5% false accepts, and the best judge setting 84% / 4%, so the pass bar (`basic` + 10 points) failed. sple keeps `basic` as its only matcher. The five amendments below are rejected with it.
 - **Date:** 2026-10-14
 - **Deciders:** project owner (user); architect (author)
 - **Related:** FR-MIG-2, FR-MIG-3, NFR-1, NFR-9; ADR 0009 Amendments 1–2 (strategy chain, score, match cache); ADR 0003 §3 (`MatchCandidate`); ADR 0004 §1 (`.env`); ADR 0007 Amendments 4 and 6 (`import --resume`, `migrate`); ADR 0002 Amendment 5 (quota estimate); [spike S8](../spikes/local-judge-spike.md)
@@ -17,7 +17,9 @@ The scorer can't tell "same song, different recording" from "same recording", an
 
 "Decision" models answer a typed question about an input with a probability for each answer instead of generated text. Two hosted ones were considered first: TypeSafe's Jev, which needs a subscription, and OpenAI's Decisions API, which needs an API key the owner doesn't have. Both were dropped. The owner runs a Jev-style model locally in [LM Studio](https://lmstudio.ai) instead. Spike S8 showed that LM Studio's OpenAI-compatible `/v1/responses` endpoint returns token log-probabilities, so a lettered multiple-choice question yields a probability per option. In smoke tests, one choice among YouTube's top three hits made no wrong picks, while one rating per candidate did poorly. The details are in [spike S8](../spikes/local-judge-spike.md).
 
-## Decision
+## Decision (as proposed)
+
+> Rejected; kept as the record of what was evaluated. See the status above and [Outcome](#outcome).
 
 ### 1. Opt-in
 
@@ -95,7 +97,7 @@ The judge is an improvement layer. A failure never stops a run or changes provid
 
 ## Amendments to other ADRs
 
-These amendments were written with this ADR and are also **Proposed**. They take effect together when this ADR is accepted.
+These amendments were written with this ADR and were **rejected** with it (2026-10-14). They are kept as a record; none of them is in effect.
 
 | ADR | Amendment | What it adds |
 |---|---|---|
@@ -105,7 +107,15 @@ These amendments were written with this ADR and are also **Proposed**. They take
 | [0007](0007-cli-conventions.md#amendment-7---matcher-proposed-with-adr-0011) | Amendment 7 | `--matcher` usage, validation, the run-file option, stderr lines and help |
 | [0002](0002-youtube-music-provider.md#amendment-6-youtube-data-and-the-local-judge-matcher-proposed-with-adr-0011) | Amendment 6 | What YouTube data is sent and where, the Developer Policies reading (the III.E.4.h question), quota unaffected |
 
-## On acceptance
+## Outcome
+
+Spike S8 ran the full protocol on 2026-10-14 (100 tracks, 993 labelled YouTube results, `jevk5` in LM Studio):
+
+- `basic` was already strong: 93% correct at the default threshold, and 100% on the 72 English-language tracks.
+- The judge only helped on Spanish-language and flamenco tracks, where `basic` made all 7 of its mistakes. It fixed 4 of them but made 3 new wrong matches, and it lost matches on English titles.
+- The owner rejected the ADR and kept `basic` matching. The harness (`scripts/spikes/decisions/`) stays, so S8 can be rerun if a model with better music knowledge, or a narrower role for the judge, comes along.
+
+## On acceptance (not applicable: rejected)
 
 When S8 passes, in the PR that flips this ADR to Accepted:
 

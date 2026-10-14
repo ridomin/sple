@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-05); amended 2026-10-07 (Amendment 1)
 - **Date:** 2026-10-05
 - **Deciders:** project owner, architect
-- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface), [ADR 0011](0011-local-match-judge.md) (Proposed: opt-in local judge for metadata hits)
+- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface), [ADR 0011](0011-local-match-judge.md) (Rejected: opt-in local judge for metadata hits)
 
 ## Context
 
@@ -102,7 +102,7 @@ A quota hit therefore does not corrupt the match state.
 
 ### No External Dependencies
 
-> Narrowed by Amendment 3 (Proposed): this applies to the `basic` scorer. The opt-in `local` matcher asks a model on the user's own server (no new package).
+> Amendment 3 proposed an opt-in local judge alongside the `basic` scorer; it was rejected after spike S8, so this section applies unchanged.
 
 Matching uses no fuzzy-matching or NLP libraries (like leven, fuzzy-wuzzy, or jaro-winkler). Simple word overlap is sufficient because:
 - Provider search APIs already do the heavy lifting
@@ -363,7 +363,7 @@ An entry is fresh while `now − fetchedAt < 30 days` (YouTube API Developer Pol
 ## Amendment 3 (local judge matcher, Proposed with ADR 0011)
 
 - **Date:** 2026-10-14
-- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-local-match-judge.md) is Accepted, after spike S8 ([report](../spikes/local-judge-spike.md)). Until then sple matches as Amendments 1–2 say, and nothing here is implemented.
+- **Status:** **Rejected** (2026-10-14) together with [ADR 0011](0011-local-match-judge.md). Spike S8 ([report](../spikes/local-judge-spike.md#results)) measured `basic` at 93% correct with 5% false accepts and the best judge setting at 84% / 4%, so sple keeps matching as Amendments 1–2 say. This amendment is kept as the record of what was evaluated; nothing here is implemented.
 - **Why:** On Spotify → YouTube, the metadata score can't tell a cover, live or lyric re-upload from the same recording, and it rejects correct hits whose artist was guessed wrongly. ADR 0011 adds an opt-in judge: a decision model on the user's own server (LM Studio) picks the matching recording among the top search hits. This amendment is the spec ports implement. ADR 0011 has the reasons, the alternatives and the risks.
 
 Constants marked † are provisional. S8 sets them, and this amendment is updated before it is accepted.
