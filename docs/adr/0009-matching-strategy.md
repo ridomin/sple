@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-05); amended 2026-10-07 (Amendment 1)
 - **Date:** 2026-10-05
 - **Deciders:** project owner, architect
-- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface), [ADR 0011](0011-jev-match-judge.md) (Proposed: opt-in Jev judge for metadata hits)
+- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface), [ADR 0011](0011-openai-decisions-match-judge.md) (Proposed: opt-in OpenAI Decisions judge for metadata hits)
 
 ## Context
 
@@ -102,7 +102,7 @@ A quota hit therefore does not corrupt the match state.
 
 ### No External Dependencies
 
-> Narrowed by Amendment 3 (Proposed): this applies to the `basic` scorer. The opt-in `jev` matcher calls the TypeSafe API through its SDK.
+> Narrowed by Amendment 3 (Proposed): this applies to the `basic` scorer. The opt-in `openai` matcher calls OpenAI's Decisions API through the `openai` SDK.
 
 Matching uses no fuzzy-matching or NLP libraries (like leven, fuzzy-wuzzy, or jaro-winkler). Simple word overlap is sufficient because:
 - Provider search APIs already do the heavy lifting
@@ -359,91 +359,99 @@ An entry is fresh while `now − fetchedAt < 30 days` (YouTube API Developer Pol
 - `sple auth logout --provider X` (and `--all`) deletes every entry that targets `X` or whose key starts with `X|`, whether or not tokens were stored. When any were deleted, `match_cache` is appended to the `Deleted:` line (ADR 0007 Amendment 3).
 - Concurrent sple processes are not locked against; the last write wins.
 
-## Amendment 3 (Jev matcher, Proposed with ADR 0011)
+## Amendment 3 (OpenAI Decisions matcher, Proposed with ADR 0011)
 
 - **Date:** 2026-10-14
-- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-jev-match-judge.md) is Accepted, after spike S8 ([report](../spikes/jev-matching-spike.md)). Until then sple matches as Amendments 1–2 say, and nothing here is implemented.
-- **Why:** On Spotify → YouTube, the metadata score can't tell a cover, live or lyric re-upload from the same recording, and it rejects correct hits whose artist was guessed wrongly. ADR 0011 adds an opt-in judge, TypeSafe's Jev model, that re-ranks the metadata search hits. This amendment is the spec ports implement. ADR 0011 has the reasons, the alternatives and the risks.
+- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-openai-decisions-match-judge.md) is Accepted, after spike S8 ([report](../spikes/decisions-matching-spike.md)). Until then sple matches as Amendments 1–2 say, and nothing here is implemented.
+- **Why:** On Spotify → YouTube, the metadata score can't tell a cover, live or lyric re-upload from the same recording, and it rejects correct hits whose artist was guessed wrongly. ADR 0011 adds an opt-in judge, OpenAI's Decisions API, that re-ranks the metadata search hits. This amendment is the spec ports implement. ADR 0011 has the reasons, the alternatives and the risks.
 
 Constants marked † are provisional. S8 sets them, and this amendment is updated before it is accepted.
 
 ### 1. Matcher
 
-A run has a `matcher`: `basic` (default) or `jev` (`--matcher`, ADR 0007 Amendment 7). With `basic`, the chain is A2 §1, unchanged. With `jev`, slot 4 runs `jev` instead of `metadata`:
+A run has a `matcher`: `basic` (default) or `openai` (`--matcher`, ADR 0007 Amendment 7). With `basic`, the chain is A2 §1, unchanged. With `openai`, slot 4 runs `openai` instead of `metadata`:
 
 | # | Strategy | Applicable when | Call | Candidate |
 |---|---|---|---|---|
 | 1–3 | `known-ref`, `cache`, `isrc` | unchanged | unchanged | unchanged |
-| 4 | `jev` | `matcher` is `jev`, Jev is not switched off for the run (§5), and `track.title` is non-empty | the A1 §2 metadata search, then one Jev request when the shortlist is non-empty | §4 |
+| 4 | `openai` | `matcher` is `openai`, OpenAI is not switched off for the run (§5), and `track.title` is non-empty | the A1 §2 metadata search, then one Decisions request when the shortlist is non-empty | §4 |
 
-`MatchCandidate.strategy` gains `'jev'` (ADR 0003 Amendment 4).
+`MatchCandidate.strategy` gains `'openai'` (ADR 0003 Amendment 4).
 
 ### 2. Shortlist
 
 1. Search exactly like `metadata`: `searchTracks({ kind: 'metadata', title, artists, album, durationMs }, { limit: 10 })`.
 2. Score every hit with A1 §4, which gives `t`, `a` and `confidence`.
 3. Keep the hits that pass the **relaxed gate** `t > 0 || a > 0`†. Sort them by A1 `confidence`, highest first; this sort is stable, so ties keep the provider's order. Keep the first `K = 5`† and number them `c1…cK` in that order.
-4. An empty shortlist means no candidate (`null`), and no Jev request is made.
+4. An empty shortlist means no candidate (`null`), and no request is made.
 
-### 3. Jev request
+### 3. Decisions request
 
-One `POST https://api.typesafe.ai/v1/systemone` per track, through the TypeSafe SDK (ADR 0011 §6), with `model` = `SPLE_JEV_MODEL` or `jev-1.13.0`.
+One `POST https://api.openai.com/v1/decisions` per track, through the `openai` SDK (`client.decisions.create`, ADR 0011 §6), with `model` = `SPLE_OPENAI_DECISIONS_MODEL` or `gpt-6-luna`.
 
 ```json
 {
-  "model": "jev-1.13.0",
-  "state": {
-    "source":     { "service": "<source display name>", "title": "…", "artists": ["…"], "album": "…" },
-    "candidates": { "c1": { "service": "<target display name>", "title": "…", "artists": ["…"], "album": "…" } }
-  },
-  "questions": {
-    "c1": {
+  "model": "gpt-6-luna",
+  "input": "<JSON.stringify({ source, candidates })>",
+  "questions": [
+    {
       "type": "score",
-      "instructions": "How does candidate c1 relate to the source track as a recording? Ignore words that only describe the upload, such as 'Official Video', 'Lyrics', 'Audio', 'HD' or a channel suffix like 'VEVO' or '- Topic'.",
-      "criteria": [
-        "A different song.",
-        "The same song but a different recording or version: live, remix, cover, acoustic, instrumental, karaoke, sped up or slowed, or re-recorded.",
-        "The same recording as the source; only the upload's packaging differs."
+      "name": "c1",
+      "instructions": "The input is JSON with a source track and candidate tracks. How does candidate c1 relate to the source track as a recording? Ignore words that only describe the upload, such as 'Official Video', 'Lyrics', 'Audio', 'HD' or a channel suffix like 'VEVO' or '- Topic'.",
+      "levels": [
+        { "label": "different", "description": "A different song." },
+        { "label": "version", "description": "The same song but a different recording or version: live, remix, cover, acoustic, instrumental, karaoke, sped up or slowed, or re-recorded." },
+        { "label": "same", "description": "The same recording as the source; only the upload's packaging differs." }
       ]
     }
-  }
+  ]
 }
 ```
 
-- There is one question per shortlisted candidate, with the id equal to the candidate key. Every question uses the same instructions (with its own id) and the same criteria. The wording is provisional†.
-- `album` is left out when it is absent. Durations, refs, ISRCs, tokens and account data are never sent.
-- `service` is the provider's display name (`Spotify`, `YouTube Music`).
+- `input` is the compact `JSON.stringify` of:
+  - `source`: `{ service, title, artists, album? }`
+  - `candidates`: `{ c1: { service, title, artists, album? }, … }`
+  
+  The keys appear in that order, and `album` is left out when it is absent. Durations, refs, ISRCs, tokens and account data are never sent. `service` is the provider's display name (`Spotify`, `YouTube Music`).
+- There is one question per shortlisted candidate, in `c1…cK` order, with `name` equal to the candidate key. Every question uses the same instructions (with its own key) and the same levels. The wording is provisional†.
+- `safety_identifier` is not sent.
 
 ### 4. Combining (in code)
 
-For each shortlisted candidate `ci`, read its answer's `score` and `probabilities`:
+Answers are matched to candidates by `name`. For each shortlisted candidate `ci`, read its answer's `score` and `probabilities`:
 
-- `level = floor(score + 0.5)` (round half up), and `p2 = probabilities[2]`.
+- `level = floor(score + 0.5)` (round half up), and `p2` = the `probability` of the entry whose `value` is 2.
 - **Duration check:** it passes when either `durationMs` is missing or `|Δ| ≤ D` with `D = 10000` ms†.
 - `level = 2` and the check passes → eligible, `confidence = p2`.
-- `level = 2` and the check fails, or `level = 1` → eligible, `confidence = min(p2, 0.45)`†. The cap keeps a variant or a duration mismatch below the default `minConfidence` (0.5), so it is reported as `low-confidence`. A user who lowers `--min-confidence` below the cap accepts variants on purpose, just as with `basic`.
+- `level = 2` and the check fails, or `level = 1` → eligible, `confidence = min(p2, 0.45)`†. The cap keeps a different version or a duration mismatch below the default `minConfidence` (0.5), so it is reported as `low-confidence`. A user who lowers `--min-confidence` below the cap accepts such versions on purpose, just as with `basic`.
 - `level = 0` → rejected.
-- The eligible candidate with the highest `confidence` wins, and ties go to the lower `i`. The result is `{ ref, track, confidence, strategy: 'jev' }`. If nothing is eligible, the result is `null`, and the track is `unmatched` (the `basic` score is not consulted).
+- The eligible candidate with the highest `confidence` wins, and ties go to the lower `i`. The result is `{ ref, track, confidence, strategy: 'openai' }`. If nothing is eligible, the result is `null`, and the track is `unmatched` (the `basic` score is not consulted).
 - Confidence is a double and is not rounded. The engine applies `minConfidence` as in A1 §1.2.
 
-### 5. Jev errors
+### 5. Failures
 
-Jev never stops a run, and its errors never take the A1 §1.4 path:
+OpenAI never stops a run, and its errors never take the A1 §1.4 path:
 
-- On any Jev failure the strategy returns the **A1 `metadata` result for the same hits**, with `strategy: 'metadata'`. That covers no response, a timeout, HTTP 401, 422, 429 or 529 after the SDK's retries, or an answer missing a question or `probabilities[2]`. The track's `MatchResult.error` is set to `jev: <message>` even when the fallback matched.
+- On any failure the strategy returns the **A1 `metadata` result for the same hits**, with `strategy: 'metadata'`, and the track's `MatchResult.error` is set to `openai: <message>` even when the fallback matched. A failure is any of:
+  - the request throws (connection error, a timeout, or an HTTP error after the SDK's retries);
+  - any answer is a `refusal`;
+  - an answer is missing for a candidate, or has no `probabilities` entry with `value` 2.
 - The first failure in a run prints one warning on stderr (ADR 0007 Amendment 7).
-- After a **401**, `jev` is not applicable for the rest of the run, so slot 4 runs `metadata`.
-- Jev errors are never `AuthRequiredError`, `QuotaExhaustedError` or `RateLimitError`, so a TypeSafe 429 can't be mistaken for a provider quota stop.
+- These failures switch `openai` off for the rest of the run, so slot 4 runs `metadata`, because retrying can't fix them:
+  - HTTP 401 or 403;
+  - HTTP 404 (the model isn't available to the account);
+  - HTTP 429 whose `error.code` is `insufficient_quota`.
+- OpenAI errors are never `AuthRequiredError`, `QuotaExhaustedError` or `RateLimitError`, so an OpenAI 429 can't be mistaken for a provider quota stop.
 
 ### 6. Cache and report
 
-- **Cache (A2):** a `jev` candidate is written like an `isrc` or `metadata` one, and the entry's `strategy` may be `'jev'`. The key does not include the matcher. A fresh entry is reused by both matchers, and `--no-cache` forces a new decision.
-- **Report (A1 §6):** `MatchReport` gains `matcher?: 'basic' | 'jev'` (absent means `basic`) and `jevModel?: string`, the `model` field of the first Jev response in the run. `strategies[]` lists `jev` when it ran.
-- **Text report:** when `matcher` is `jev`, `Matcher: jev (<jevModel>)` follows the `Imported at` line. `jevModel` is `not called` when no Jev request was made.
+- **Cache (A2):** an `openai` candidate is written like an `isrc` or `metadata` one, and the entry's `strategy` may be `'openai'`. The key does not include the matcher. A fresh entry is reused by both matchers, and `--no-cache` forces a new decision.
+- **Report (A1 §6):** `MatchReport` gains `matcher?: 'basic' | 'openai'` (absent means `basic`) and `decisionsModel?: string`, the `model` field of the first Decisions response in the run. `strategies[]` lists `openai` when it ran.
+- **Text report:** when `matcher` is `openai`, `Matcher: openai (<decisionsModel>)` follows the `Imported at` line. `decisionsModel` is `not called` when no request was made.
 
 ### 7. Test vectors
 
-These assume `minConfidence` 0.5 and the provisional constants. Each candidate passed the shortlist. "Score" and "p2" are Jev's answer, and the durations are in seconds.
+These assume `minConfidence` 0.5 and the provisional constants. Each candidate passed the shortlist. "Score" is the answer's `score`, "p2" is the probability for `value` 2, and the durations are in seconds.
 
 | Shortlist (score / p2 / source s / candidate s) | Result |
 |---|---|
@@ -456,4 +464,5 @@ These assume `minConfidence` 0.5 and the provisional constants. Each candidate p
 | c1: 1.90 / 0.90 / 200 / 200; c2: 1.90 / 0.90 / 200 / 200 | `matched`, c1, 0.90 (tie, lower i) |
 | c1: 1.10 / 0.40 / 200 / 200; c2: 0.20 / 0.02 / 200 / 200 | `low-confidence`, c1, 0.40 |
 | c1: 1.99 / 0.97 / 200 / 230 | `low-confidence`, c1, 0.45 (Δ 30 s > D) |
-| request fails with 529 after retries; A1 accepts c2 at 0.85 | `matched`, c2, 0.85, `strategy: 'metadata'`, `error: 'jev: …'` |
+| c1 answered 1.90 / 0.92; c2 is a `refusal`; A1 accepts c1 at 0.85 | `matched`, c1, 0.85, `strategy: 'metadata'`, `error: 'openai: …'` |
+| request fails with HTTP 500 after retries; A1 accepts c2 at 0.85 | `matched`, c2, 0.85, `strategy: 'metadata'`, `error: 'openai: …'` |

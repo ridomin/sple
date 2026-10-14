@@ -367,15 +367,15 @@ Login requests `https://www.googleapis.com/auth/youtube https://www.googleapis.c
 **Logout** reports `revoked: true` only when Google's revoke endpoint accepted the token, and `deletedData: ['access_token', 'refresh_token']`. sple keeps no other YouTube data yet.
 
 
-## Amendment 4 (Jev matcher, Proposed with ADR 0011)
+## Amendment 4 (OpenAI Decisions matcher, Proposed with ADR 0011)
 
 - **Date:** 2026-10-14
-- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-jev-match-judge.md) is Accepted.
-- **Why:** the opt-in `jev` matcher (ADR 0009 Amendment 3) produces its own candidates.
+- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-openai-decisions-match-judge.md) is Accepted.
+- **Why:** the opt-in `openai` matcher (ADR 0009 Amendment 3) produces its own candidates.
 
 | Change | Rule |
 |---|---|
-| `MatchCandidate.strategy` | Gains `'jev'`: `'known-ref' \| 'cache' \| 'isrc' \| 'metadata' \| 'jev'`. |
-| `TrackHit` | Unchanged for now. If S8 shows that the YouTube channel name helps Jev, a later amendment adds an optional `channel?: string`, filled by the YouTube adapter from `snippet.channelTitle`. |
+| `MatchCandidate.strategy` | Gains `'openai'`: `'known-ref' \| 'cache' \| 'isrc' \| 'metadata' \| 'openai'`. |
+| `TrackHit` | Unchanged. If S8 shows that the YouTube channel name helps, a later amendment adds an optional `channel?: string`, filled by the YouTube adapter from `snippet.channelTitle`. |
 
-Adapters are not involved: `jev` uses the same `searchTracks` call as `metadata`.
+Adapters are not involved: `openai` uses the same `searchTracks` call as `metadata`.

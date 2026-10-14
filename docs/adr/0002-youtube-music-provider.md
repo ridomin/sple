@@ -383,16 +383,16 @@ YouTube example: 120 tracks to search and add, with 96 searches left today, need
 `--max-days` (§4.1) isn't implemented: a run simply stops at the quota and is resumed.
 
 
-## Amendment 6 (YouTube data and the Jev matcher, Proposed with ADR 0011)
+## Amendment 6 (YouTube data and the OpenAI Decisions matcher, Proposed with ADR 0011)
 
 - **Date:** 2026-10-14
-- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-jev-match-judge.md) is Accepted.
-- **Why:** with `--matcher jev` (ADR 0009 Amendment 3), the titles and guessed artists of YouTube search results are sent to a third party, TypeSafe, to judge the match. That is a new use of YouTube API data and needs to be squared with the Developer Policies cited in §4.1.
+- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-openai-decisions-match-judge.md) is Accepted.
+- **Why:** with `--matcher openai` (ADR 0009 Amendment 3), the titles and guessed artists of YouTube search results are sent to a third party, OpenAI, to judge the match. That is a new use of YouTube API data and needs to be squared with the Developer Policies cited in §4.1.
 
 | Topic | Rule |
 |---|---|
-| What is sent | For each shortlisted search hit: the video title and the artist names derived from it, with no video ID, channel ID, thumbnail or statistics. It is sent only with `--matcher jev`, and only with the user's own TypeSafe key. |
-| III.A.2.e (privacy policy must explain sharing) | PRIVACY.md names TypeSafe, what is sent, and that it is opt-in, **before** the matcher ships. |
-| III.E.4 (storage) | Unchanged. Jev's answer is kept only as the match `confidence`, in the match cache and run files, under their existing 30-day limits. |
+| What is sent | For each shortlisted search hit: the video title and the artist names derived from it, with no video ID, channel ID, thumbnail, duration or statistics. It is sent only with `--matcher openai`, and only with the user's own OpenAI key. |
+| III.A.2.e (privacy policy must explain sharing) | PRIVACY.md names OpenAI, what is sent, OpenAI's retention (abuse-monitoring logs for 30 days, no training on API data by default), and that it is opt-in, **before** the matcher ships. |
+| III.E.4 (storage) | Unchanged. The model's answer is kept only as the match `confidence`, in the match cache and run files, under their existing 30-day limits. |
 | III.E.4.h (no "new or derived data or metrics") | The answer is used only to pick the matching track, as the `basic` score (A1 R3, ADR 0009) already does. It is not aggregated, published or used for any other purpose. **Open: the owner confirms this reading before ADR 0011 is accepted.** |
-| Quota | Jev uses no YouTube quota. The search is the one `metadata` already makes, so Amendment 5's estimate is unchanged. The Jev request count is printed separately (ADR 0007 Amendment 7). |
+| Quota | The Decisions API uses no YouTube quota. The search is the one `metadata` already makes, so Amendment 5's estimate is unchanged. The request count is printed separately (ADR 0007 Amendment 7). |
