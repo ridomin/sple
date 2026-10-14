@@ -32,6 +32,11 @@ export interface JudgeSettings {
   durationToleranceMs: number
   cap: number
   none: NoneRule
+  /**
+   * Choice confidence: `any` = 1 − p(none), the chance that some shortlisted hit is the
+   * same recording (A3 §4, provisional); `pick` = the winning letter's own probability.
+   */
+  confidence: 'any' | 'pick'
 }
 
 export interface TopLogprob {
@@ -215,19 +220,27 @@ function durationOk(source: SourceTrack, hit: Hit, toleranceMs: number): boolean
   )
 }
 
-/** A3 §4. `p` has one entry per shortlisted hit plus "none" last. */
+/**
+ * A3 §4. `p` has one entry per shortlisted hit plus "none" last.
+ * `any`: "none" wins when p(none) ≥ 0.5; otherwise the most probable hit wins with 1 − p(none).
+ * `pick`: the most probable option wins (hits and "none" alike) with its own probability.
+ * Several uploads of one recording split the probability between them, which is why `any` exists.
+ */
 export function combineChoice(
   source: SourceTrack,
   hits: Hit[],
   list: Entry[],
   p: number[],
-  settings: Pick<JudgeSettings, 'durationToleranceMs' | 'cap' | 'none'>
+  settings: Pick<JudgeSettings, 'durationToleranceMs' | 'cap' | 'none' | 'confidence'>
 ): Pick<TrackOutcome, 'pick' | 'strategy'> {
-  let win = 0
-  for (let i = 1; i < p.length; i++) if (p[i] > p[win]) win = i
-  if (win < list.length) {
-    const { hit, index } = list[win]
-    const confidence = durationOk(source, hit, settings.durationToleranceMs) ? p[win] : Math.min(p[win], settings.cap)
+  const pNone = p[list.length]
+  let best = 0
+  for (let i = 1; i < list.length; i++) if (p[i] > p[best]) best = i
+  const hitWins = settings.confidence === 'any' ? pNone < 0.5 : p[best] >= pNone
+  if (hitWins) {
+    const { hit, index } = list[best]
+    const raw = settings.confidence === 'any' ? 1 - pNone : p[best]
+    const confidence = durationOk(source, hit, settings.durationToleranceMs) ? raw : Math.min(raw, settings.cap)
     return { pick: { index, confidence }, strategy: 'local' }
   }
   if (settings.none === 'unmatched') return { pick: null, strategy: 'local' }

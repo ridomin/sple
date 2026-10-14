@@ -63,7 +63,7 @@ Shows the source track and all of its hits, with durations and the difference fr
 
 ### evaluate.ts
 
-`[--model <id>] [--url <base>] [--k 3,5] [--d 5,10,15] [--none unmatched,basic,capped] [--cap 0.45] [--skip-a1] [--skip-score] [--skip-repeat] [--concurrency 1] [--dry-run] [--dir <dir>]`
+`[--model <id>] [--url <base>] [--k 3,5] [--d 5,10,15] [--none unmatched,basic,capped] [--confidence any,pick] [--cap 0.45] [--skip-a1] [--skip-score] [--skip-repeat] [--concurrency 1] [--dry-run] [--dir <dir>]`
 
 - `--model` and `--url` default to `SPLE_LOCAL_JUDGE_MODEL` and `SPLE_LOCAL_JUDGE_URL`, from the environment or the sple `.env`. The URL defaults to `http://localhost:1234/v1`.
 - Evaluates only tracks whose hits are all labelled.
@@ -73,12 +73,15 @@ Runs:
 | Run | What it does |
 |---|---|
 | `basic` | The A1 `MetadataStrategy` scoring over the saved hits |
-| `local` | The A3 judge for every K × D × "none" rule: one lettered choice among the first K hits plus "none" |
-| `local-a1` | The best `local` setting, with the top K taken in A1 score order |
+| `local-any`, `local-pick` | The A3 judge for every K × D × "none" rule × confidence rule: one lettered choice among the first K hits plus "none" |
+| `local-…-a1` | The best setting, with the top K taken in A1 score order |
 | `local-score` | The best setting with the earlier design: one three-level rating per candidate, shortlisted by the relaxed A1 gate |
-| `local (repeat)` | The best setting again with fresh requests, to confirm the answers are deterministic |
+| `local-… (repeat)` | The best setting again with fresh requests, to confirm the answers are deterministic |
 
 - The best setting is the one with the most correct accepts at 0.5 among those with no more false accepts than `basic`.
+- **Confidence rules:**
+  - `any`, the provisional default: 1 − p(none), the chance that some shortlisted hit is the recording. The most probable hit wins unless p(none) ≥ 0.5.
+  - `pick`: the winning letter's own probability. It suffers when several uploads of the same recording split the probability (21-track check: 0% correct against 81% for `any`).
 - **"none" rules:** `unmatched` gives no match. `basic` uses the A1 result. `capped` uses the A1 result capped at `--cap` (the ADR's provisional rule).
 - Responses are cached by request body in `responses.json`. D, the cap and the "none" rule only change the combination, so the grid makes one request per track per K, and reruns are instant. The repeat is never cached.
 - A failed request falls back to `basic` for that track and counts under **Failures**. If the server is unreachable or returns 404, the run stops (exit 1) and the responses so far are kept.

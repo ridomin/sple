@@ -17,7 +17,7 @@ import {
   type TopLogprob,
 } from '../../scripts/spikes/decisions/judge.js'
 
-const SETTINGS: JudgeSettings = { mode: 'choice', k: 3, order: 'provider', durationToleranceMs: 10_000, cap: 0.45, none: 'capped' }
+const SETTINGS: JudgeSettings = { mode: 'choice', k: 3, order: 'provider', durationToleranceMs: 10_000, cap: 0.45, none: 'capped', confidence: 'any' }
 
 /** Top log-probabilities giving these letter probabilities (A, B, C, …). */
 function top(...ps: number[]): TopLogprob[] {
@@ -47,22 +47,49 @@ const REMASTER: Hit = { ref: 'q', title: "Don't Stop Me Now - 2011 Remaster", ar
 const OTHER1 = hit('x1')
 const OTHER2 = hit('x2')
 
-test('ADR 0009 A3 §7: a hit wins', async () => {
-  const cases: Array<[number[], number | undefined, number | undefined, number, number]> = [
-    // p (A, B, C, none), source s, winning hit s, winning index, confidence
-    [[0.7, 0.05, 0.05, 0.2], 243, 245, 0, 0.7],
-    [[0.1, 0.6, 0.05, 0.25], 200, 208, 1, 0.6],
-    [[0.55, 0.05, 0.05, 0.35], 301, 420, 0, 0.45], // Δ 119 s > D
-    [[0.48, 0.02, 0.02, 0.48], undefined, 200, 0, 0.48], // tie with none: earlier letter
-    [[0.4, 0.4, 0.1, 0.1], 200, 200, 0, 0.4], // tie: earlier letter
-  ]
+type HitCase = [number[], number | undefined, number | undefined, number, number]
+
+async function hitWins(cases: HitCase[], settings: Partial<JudgeSettings> = {}) {
+  // p (A, B, C, none), source s, winning hit s, winning index, confidence
   for (const [p, s, h, index, confidence] of cases) {
     const hits = [hit('h1', index === 0 ? h : 1), hit('h2', index === 1 ? h : 1), hit('h3', 1)]
-    const outcome = await run(src(s), hits, answering(...p))
-    assert.equal(outcome.strategy, 'local')
-    assert.equal(outcome.pick?.index, index)
+    const outcome = await run(src(s), hits, answering(...p), settings)
+    assert.equal(outcome.strategy, 'local', `${p}`)
+    assert.equal(outcome.pick?.index, index, `${p}`)
     near(outcome.pick?.confidence, confidence)
   }
+}
+
+test('ADR 0009 A3 §7 (confidence any): the most probable hit wins with 1 − p(none)', async () => {
+  await hitWins([
+    [[0.7, 0.05, 0.05, 0.2], 243, 245, 0, 0.8],
+    [[0.1, 0.6, 0.05, 0.25], 200, 208, 1, 0.75],
+    [[0.55, 0.05, 0.05, 0.35], 301, 420, 0, 0.45], // Δ 119 s > D
+    [[0.48, 0.02, 0.02, 0.48], undefined, 200, 0, 0.52],
+    [[0.4, 0.4, 0.1, 0.1], 200, 200, 0, 0.9], // tie: earlier letter
+    [[0.25, 0.22, 0.2, 0.33], 200, 200, 0, 0.67], // several uploads split the probability
+  ])
+})
+
+test('ADR 0009 A3 §7 (confidence any): p(none) ≥ 0.5 means "none"', async () => {
+  const outcome = await run(QUEEN, [OTHER1, REMASTER, OTHER2], answering(0.2, 0.2, 0.1, 0.5))
+  assert.deepEqual(outcome.pick, { index: 1, confidence: 0.45 })
+  assert.equal(outcome.strategy, 'metadata')
+})
+
+test('confidence pick: the most probable option wins with its own probability', async () => {
+  await hitWins(
+    [
+      [[0.7, 0.05, 0.05, 0.2], 243, 245, 0, 0.7],
+      [[0.1, 0.6, 0.05, 0.25], 200, 208, 1, 0.6],
+      [[0.55, 0.05, 0.05, 0.35], 301, 420, 0, 0.45],
+      [[0.48, 0.02, 0.02, 0.48], undefined, 200, 0, 0.48], // tie with none: earlier letter
+      [[0.4, 0.4, 0.1, 0.1], 200, 200, 0, 0.4],
+    ],
+    { confidence: 'pick' }
+  )
+  const split = await run(QUEEN, [OTHER1, REMASTER, OTHER2], answering(0.25, 0.22, 0.2, 0.33), { confidence: 'pick', none: 'unmatched' })
+  assert.equal(split.pick, null)
 })
 
 test('ADR 0009 A3 §7: "none" keeps the A1 result capped, or nothing', async () => {
@@ -89,7 +116,7 @@ test('ADR 0009 A3 §7: two hits give options A, B and C = none', async () => {
   assert.match(input, /\[C\] None of these is the same recording\.\n/)
   assert.doesNotMatch(input, /\[D\]/)
   assert.equal(outcome.pick?.index, 1)
-  near(outcome.pick?.confidence, 0.6)
+  near(outcome.pick?.confidence, 0.9)
 })
 
 test('ADR 0009 A3 §7: failures fall back to the A1 result uncapped', async () => {

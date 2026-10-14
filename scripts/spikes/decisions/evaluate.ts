@@ -1,6 +1,6 @@
 // Spike S8, steps 4–6: run `basic` and the local judge offline against the labelled fixture.
 // Usage: npx tsx scripts/spikes/decisions/evaluate.ts [--model <id>] [--url <base>] [--k 3,5] [--d 5,10,15]
-//          [--none unmatched,basic,capped] [--cap 0.45] [--skip-a1] [--skip-score] [--skip-repeat]
+//          [--none unmatched,basic,capped] [--confidence any,pick] [--cap 0.45] [--skip-a1] [--skip-score] [--skip-repeat]
 //          [--concurrency 1] [--dry-run] [--dir <dir>]
 // The model and URL default to SPLE_LOCAL_JUDGE_MODEL and SPLE_LOCAL_JUDGE_URL (environment or the sple .env;
 // URL default http://localhost:1234/v1). Responses are cached in <dir>/responses.json, so changing D, the cap or
@@ -27,7 +27,7 @@ import { chooseBest, measure, passes, row, TABLE_HEADER, type Label, type Measur
 
 const USAGE =
   'Usage: npx tsx scripts/spikes/decisions/evaluate.ts [--model <id>] [--url <base>] [--k 3,5] [--d 5,10,15] ' +
-  '[--none unmatched,basic,capped] [--cap 0.45] [--skip-a1] [--skip-score] [--skip-repeat] [--concurrency 1] [--dry-run] [--dir <dir>]'
+  '[--none unmatched,basic,capped] [--confidence any,pick] [--cap 0.45] [--skip-a1] [--skip-score] [--skip-repeat] [--concurrency 1] [--dry-run] [--dir <dir>]'
 
 const { values } = parseArgs({
   options: {
@@ -36,6 +36,7 @@ const { values } = parseArgs({
     k: { type: 'string', default: '3,5' },
     d: { type: 'string', default: '5,10,15' },
     none: { type: 'string', default: 'unmatched,basic,capped' },
+    confidence: { type: 'string', default: 'any,pick' },
     cap: { type: 'string', default: '0.45' },
     'skip-a1': { type: 'boolean', default: false },
     'skip-score': { type: 'boolean', default: false },
@@ -50,12 +51,14 @@ const list = (s: string) => s.split(',').map((x) => x.trim())
 const ks = list(values.k).map(Number)
 const ds = list(values.d).map(Number)
 const nones = list(values.none) as NoneRule[]
+const confidences = list(values.confidence) as Array<JudgeSettings['confidence']>
 const cap = Number(values.cap)
 const concurrency = Number(values.concurrency)
 if (
   !ks.every((k) => Number.isInteger(k) && k >= 1 && k <= 10) ||
   !ds.every((d) => Number.isFinite(d) && d >= 0) ||
   !nones.every((n) => n === 'unmatched' || n === 'basic' || n === 'capped') ||
+  !confidences.every((c) => c === 'any' || c === 'pick') ||
   !(cap >= 0 && cap <= 1) ||
   !(Number.isInteger(concurrency) && concurrency >= 1)
 ) {
@@ -115,15 +118,18 @@ const basic = toRun(
   tracks.map((t) => ({ pick: basicPick(t.source, t.hits), failed: false, requests: 0, ms: 0 }))
 )
 
-const settingsFor = (k: number, d: number, none: NoneRule, extra: Partial<JudgeSettings> = {}): JudgeSettings => ({
+const settingsFor = (k: number, d: number, none: NoneRule, confidence: JudgeSettings['confidence']): JudgeSettings => ({
   mode: 'choice',
   k,
   order: 'provider',
   durationToleranceMs: d * 1000,
   cap,
   none,
-  ...extra,
+  confidence,
 })
+
+/** Run names carry the confidence rule: `local-any`, `local-pick`, `local-any-a1`, … */
+const nameFor = (s: JudgeSettings, suffix = '') => `local-${s.confidence}${suffix}`
 
 function hash(body: JudgeRequest): string {
   return createHash('sha256').update(JSON.stringify(body)).digest('hex')
@@ -243,8 +249,10 @@ try {
   for (const k of ks) {
     for (const d of ds) {
       for (const none of nones) {
-        const settings = settingsFor(k, d, none)
-        runs.push(toRun('local', await judgeAll(settings), settings))
+        for (const confidence of confidences) {
+          const settings = settingsFor(k, d, none, confidence)
+          runs.push(toRun(nameFor(settings), await judgeAll(settings), settings))
+        }
       }
     }
     console.error(`local K=${k}: done`)
@@ -255,7 +263,7 @@ try {
     const s = best.settings
     if (!values['skip-a1']) {
       const settings = { ...s, order: 'a1' as const }
-      extras.push(toRun('local-a1', await judgeAll(settings), settings))
+      extras.push(toRun(nameFor(settings, '-a1'), await judgeAll(settings), settings))
       console.error('local-a1: done')
     }
     if (!values['skip-score']) {
@@ -264,7 +272,7 @@ try {
       console.error('local-score: done')
     }
     if (!values['skip-repeat']) {
-      const repeat = toRun('local (repeat)', await judgeAll(s, true), s)
+      const repeat = toRun(nameFor(s, ' (repeat)'), await judgeAll(s, true), s)
       extras.push(repeat)
       const changed = repeat.outcomes.filter((o, i) => o.pick?.index !== best.outcomes[i].pick?.index).length
       const drift = Math.max(0, ...repeat.outcomes.map((o, i) => Math.abs((o.pick?.confidence ?? 0) - (best.outcomes[i].pick?.confidence ?? 0))))
@@ -294,7 +302,7 @@ out.push(`**Model, settings and date:** ${[...models].join(', ') || model}, cap 
 if (best?.settings) {
   const verdict = passes(best.measures, basic.measures) ? '**passes**' : '**fails**'
   out.push(
-    `**Best setting:** K=${best.k}, D=${best.d} s, "none" → ${best.none}; it ${verdict} the step 6 bar (false accepts ≤ basic and correct accepts ≥ basic + 10 points at 0.5).  `
+    `**Best setting:** K=${best.k}, D=${best.d} s, "none" → ${best.none}, confidence ${best.settings.confidence}; it ${verdict} the step 6 bar (false accepts ≤ basic and correct accepts ≥ basic + 10 points at 0.5).  `
   )
 }
 if (stability) out.push(stability)
