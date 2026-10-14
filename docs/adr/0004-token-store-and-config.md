@@ -200,3 +200,20 @@ Token refresh is transparent to the `Provider` interface and CLI.
 - **Write:** create the config directory if needed, read the current file (or start a new v1 document), replace `accounts[0]` for the provider, and write the whole file as UTF-8 JSON with 2-space indentation. On POSIX the file must be created with mode `0600` (never readable by others, even briefly): write a temp file in the same directory with mode `0600`, then rename it over `tokens.json`. Delete rewrites the file the same way.
 - **Delete (logout):** remove the provider's entry entirely; other providers are untouched. A missing file is not an error.
 - Concurrent writers are not locked against; the last write wins.
+
+## Amendment 2 (Jev matcher, Proposed with ADR 0011)
+
+- **Date:** 2026-10-14
+- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-jev-match-judge.md) is Accepted.
+- **Why:** the opt-in `jev` matcher (ADR 0009 Amendment 3) needs the user's TypeSafe API key.
+
+**Variables** (added to the §1 table):
+
+| Variable | Required | Description | Example |
+|---|---|---|---|
+| `TYPESAFE_API_KEY` | Only for `--matcher jev` | The user's own TypeSafe API key (console.typesafe.ai). It is a secret: keep it in `.env` (mode `0600`) or the environment, never in a flag. sple never writes it. | `ts_…` |
+| `SPLE_JEV_MODEL` | No | The Jev model ID. Defaults to `jev-1.13.0`. Use a versioned ID; an alias such as `jev-latest` can change answers without notice. | `jev-1.13.0` |
+
+- The name `TYPESAFE_API_KEY` is the SDK's own, so a key that is already set for other TypeSafe tools works here too.
+- sple passes `apiKey`, `baseURL` (`https://api.typesafe.ai`), `defaultModel` and `logLevel` (`warn`) to the SDK explicitly. As a result, `TYPESAFE_BASE_URL`, `TYPESAFE_DEFAULT_MODEL` and `TYPESAFE_LOG_LEVEL` have no effect: a stray environment setting can't redirect requests, and the SDK's `debug` level, which logs request bodies, can't be switched on.
+- The key is used only when the run's matcher is `jev`, and it is never written to a run file, report or log.

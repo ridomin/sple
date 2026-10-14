@@ -642,3 +642,33 @@ interface MigrateOutput {
 
 **Summary and exit code:** per-track failures are printed as in A9. With no skips and no failures, stderr gets `sple: migrated <n> playlist(s)` (dry run: `sple: [dry-run] matched <n> playlist(s); nothing was created`) and the exit code is 0. Otherwise stderr gets `sple: migrated <k> of <m> playlists; <s> skipped, <f> track(s) failed to add (see above)` (only the parts that apply). The exit code follows §5 priority over the skips' codes, plus 1 for track failures, and `--json` adds the `PartialFailure` `ErrorOutput`.
 
+
+## Amendment 7 (`--matcher`, Proposed with ADR 0011)
+
+- **Date:** 2026-10-14
+- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-jev-match-judge.md) is Accepted.
+- **Why:** the opt-in `jev` matcher (ADR 0009 Amendment 3) is chosen per run.
+
+### Usage
+
+`import` (Amendment 4) and `migrate` (Amendment 6) gain `[--matcher basic|jev]`. The default is `basic`.
+
+### Validation (exit 2, before any request)
+
+| Condition | Message |
+|---|---|
+| a value other than `basic` or `jev` | `--matcher must be basic or jev` |
+| `jev`, and `TYPESAFE_API_KEY` is unset or empty (environment or `.env`) | `--matcher jev needs TYPESAFE_API_KEY (set it in <configDir>/.env)` |
+| `--resume` with `--matcher` | `--resume cannot be combined with --matcher` (the start-only list in Amendments 4 and 6) |
+| `--resume` of a run whose `matcher` is `jev`, and the key is unset | the same message as the second row |
+
+### Run file
+
+`RunState.options` gains `matcher?: 'basic' | 'jev'`. If it is absent, the run uses `basic`, so existing run files stay valid and `schemaVersion` stays 1. A resume uses the saved value.
+
+### Output
+
+- **Before matching** (stderr, after the quota estimate), when `matcher` is `jev`: `Jev: up to <n> request(s) to TypeSafe (<model>)`. Here `<n>` is the number of tracks that Amendment 5's `countImportWork` counts a title search for.
+- **First Jev failure in a run** (stderr, once): `sple: warning: Jev request failed (<message>); using basic matching for affected tracks`. After a 401 the message continues with `; Jev is off for the rest of this run`. Later failures go only into the report (`MatchResult.error`).
+- **Report:** `matcher` and `jevModel`, plus the `Matcher:` line in the text report (ADR 0009 Amendment 3 §6). `ImportOutput` and `MigrateOutput` are otherwise unchanged.
+- Help text for `import` and `migrate` describes `--matcher` and states that `jev` sends track titles and artists to TypeSafe.

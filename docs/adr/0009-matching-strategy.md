@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-05); amended 2026-10-07 (Amendment 1)
 - **Date:** 2026-10-05
 - **Deciders:** project owner, architect
-- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface)
+- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface), [ADR 0011](0011-jev-match-judge.md) (Proposed: opt-in Jev judge for metadata hits)
 
 ## Context
 
@@ -101,6 +101,8 @@ Strategies **return null** to mean "no match found" and **throw only on fatal er
 A quota hit therefore does not corrupt the match state.
 
 ### No External Dependencies
+
+> Narrowed by Amendment 3 (Proposed): this applies to the `basic` scorer. The opt-in `jev` matcher calls the TypeSafe API through its SDK.
 
 Matching uses no fuzzy-matching or NLP libraries (like leven, fuzzy-wuzzy, or jaro-winkler). Simple word overlap is sufficient because:
 - Provider search APIs already do the heavy lifting
@@ -357,3 +359,101 @@ An entry is fresh while `now − fetchedAt < 30 days` (YouTube API Developer Pol
 - `sple auth logout --provider X` (and `--all`) deletes every entry that targets `X` or whose key starts with `X|`, whether or not tokens were stored. When any were deleted, `match_cache` is appended to the `Deleted:` line (ADR 0007 Amendment 3).
 - Concurrent sple processes are not locked against; the last write wins.
 
+## Amendment 3 (Jev matcher, Proposed with ADR 0011)
+
+- **Date:** 2026-10-14
+- **Status:** **Proposed.** It takes effect when [ADR 0011](0011-jev-match-judge.md) is Accepted, after spike S8 ([report](../spikes/jev-matching-spike.md)). Until then sple matches as Amendments 1–2 say, and nothing here is implemented.
+- **Why:** On Spotify → YouTube, the metadata score can't tell a cover, live or lyric re-upload from the same recording, and it rejects correct hits whose artist was guessed wrongly. ADR 0011 adds an opt-in judge, TypeSafe's Jev model, that re-ranks the metadata search hits. This amendment is the spec ports implement. ADR 0011 has the reasons, the alternatives and the risks.
+
+Constants marked † are provisional. S8 sets them, and this amendment is updated before it is accepted.
+
+### 1. Matcher
+
+A run has a `matcher`: `basic` (default) or `jev` (`--matcher`, ADR 0007 Amendment 7). With `basic`, the chain is A2 §1, unchanged. With `jev`, slot 4 runs `jev` instead of `metadata`:
+
+| # | Strategy | Applicable when | Call | Candidate |
+|---|---|---|---|---|
+| 1–3 | `known-ref`, `cache`, `isrc` | unchanged | unchanged | unchanged |
+| 4 | `jev` | `matcher` is `jev`, Jev is not switched off for the run (§5), and `track.title` is non-empty | the A1 §2 metadata search, then one Jev request when the shortlist is non-empty | §4 |
+
+`MatchCandidate.strategy` gains `'jev'` (ADR 0003 Amendment 4).
+
+### 2. Shortlist
+
+1. Search exactly like `metadata`: `searchTracks({ kind: 'metadata', title, artists, album, durationMs }, { limit: 10 })`.
+2. Score every hit with A1 §4, which gives `t`, `a` and `confidence`.
+3. Keep the hits that pass the **relaxed gate** `t > 0 || a > 0`†. Sort them by A1 `confidence`, highest first; this sort is stable, so ties keep the provider's order. Keep the first `K = 5`† and number them `c1…cK` in that order.
+4. An empty shortlist means no candidate (`null`), and no Jev request is made.
+
+### 3. Jev request
+
+One `POST https://api.typesafe.ai/v1/systemone` per track, through the TypeSafe SDK (ADR 0011 §6), with `model` = `SPLE_JEV_MODEL` or `jev-1.13.0`.
+
+```json
+{
+  "model": "jev-1.13.0",
+  "state": {
+    "source":     { "service": "<source display name>", "title": "…", "artists": ["…"], "album": "…" },
+    "candidates": { "c1": { "service": "<target display name>", "title": "…", "artists": ["…"], "album": "…" } }
+  },
+  "questions": {
+    "c1": {
+      "type": "score",
+      "instructions": "How does candidate c1 relate to the source track as a recording? Ignore words that only describe the upload, such as 'Official Video', 'Lyrics', 'Audio', 'HD' or a channel suffix like 'VEVO' or '- Topic'.",
+      "criteria": [
+        "A different song.",
+        "The same song but a different recording or version: live, remix, cover, acoustic, instrumental, karaoke, sped up or slowed, or re-recorded.",
+        "The same recording as the source; only the upload's packaging differs."
+      ]
+    }
+  }
+}
+```
+
+- There is one question per shortlisted candidate, with the id equal to the candidate key. Every question uses the same instructions (with its own id) and the same criteria. The wording is provisional†.
+- `album` is left out when it is absent. Durations, refs, ISRCs, tokens and account data are never sent.
+- `service` is the provider's display name (`Spotify`, `YouTube Music`).
+
+### 4. Combining (in code)
+
+For each shortlisted candidate `ci`, read its answer's `score` and `probabilities`:
+
+- `level = floor(score + 0.5)` (round half up), and `p2 = probabilities[2]`.
+- **Duration check:** it passes when either `durationMs` is missing or `|Δ| ≤ D` with `D = 10000` ms†.
+- `level = 2` and the check passes → eligible, `confidence = p2`.
+- `level = 2` and the check fails, or `level = 1` → eligible, `confidence = min(p2, 0.45)`†. The cap keeps a variant or a duration mismatch below the default `minConfidence` (0.5), so it is reported as `low-confidence`. A user who lowers `--min-confidence` below the cap accepts variants on purpose, just as with `basic`.
+- `level = 0` → rejected.
+- The eligible candidate with the highest `confidence` wins, and ties go to the lower `i`. The result is `{ ref, track, confidence, strategy: 'jev' }`. If nothing is eligible, the result is `null`, and the track is `unmatched` (the `basic` score is not consulted).
+- Confidence is a double and is not rounded. The engine applies `minConfidence` as in A1 §1.2.
+
+### 5. Jev errors
+
+Jev never stops a run, and its errors never take the A1 §1.4 path:
+
+- On any Jev failure the strategy returns the **A1 `metadata` result for the same hits**, with `strategy: 'metadata'`. That covers no response, a timeout, HTTP 401, 422, 429 or 529 after the SDK's retries, or an answer missing a question or `probabilities[2]`. The track's `MatchResult.error` is set to `jev: <message>` even when the fallback matched.
+- The first failure in a run prints one warning on stderr (ADR 0007 Amendment 7).
+- After a **401**, `jev` is not applicable for the rest of the run, so slot 4 runs `metadata`.
+- Jev errors are never `AuthRequiredError`, `QuotaExhaustedError` or `RateLimitError`, so a TypeSafe 429 can't be mistaken for a provider quota stop.
+
+### 6. Cache and report
+
+- **Cache (A2):** a `jev` candidate is written like an `isrc` or `metadata` one, and the entry's `strategy` may be `'jev'`. The key does not include the matcher. A fresh entry is reused by both matchers, and `--no-cache` forces a new decision.
+- **Report (A1 §6):** `MatchReport` gains `matcher?: 'basic' | 'jev'` (absent means `basic`) and `jevModel?: string`, the `model` field of the first Jev response in the run. `strategies[]` lists `jev` when it ran.
+- **Text report:** when `matcher` is `jev`, `Matcher: jev (<jevModel>)` follows the `Imported at` line. `jevModel` is `not called` when no Jev request was made.
+
+### 7. Test vectors
+
+These assume `minConfidence` 0.5 and the provisional constants. Each candidate passed the shortlist. "Score" and "p2" are Jev's answer, and the durations are in seconds.
+
+| Shortlist (score / p2 / source s / candidate s) | Result |
+|---|---|
+| c1: 1.90 / 0.92 / 243 / 245 | `matched`, c1, 0.92 |
+| c1: 1.20 / 0.30 / 243 / 243 | `low-confidence`, c1, 0.30 (level 1) |
+| c1: 1.80 / 0.85 / 301 / 420 | `low-confidence`, c1, 0.45 (duration cap) |
+| c1: 1.50 / 0.48 / – / 200 | `low-confidence`, c1, 0.48 (rounds to level 2, duration unknown) |
+| c1: 0.40 / 0.05 / 200 / 200 | `unmatched`, `null` (level 0) |
+| c1: 1.70 / 0.80 / 200 / 201; c2: 1.95 / 0.93 / 200 / 199 | `matched`, c2, 0.93 |
+| c1: 1.90 / 0.90 / 200 / 200; c2: 1.90 / 0.90 / 200 / 200 | `matched`, c1, 0.90 (tie, lower i) |
+| c1: 1.10 / 0.40 / 200 / 200; c2: 0.20 / 0.02 / 200 / 200 | `low-confidence`, c1, 0.40 |
+| c1: 1.99 / 0.97 / 200 / 230 | `low-confidence`, c1, 0.45 (Δ 30 s > D) |
+| request fails with 529 after retries; A1 accepts c2 at 0.85 | `matched`, c2, 0.85, `strategy: 'metadata'`, `error: 'jev: …'` |
