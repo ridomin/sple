@@ -382,3 +382,17 @@ YouTube example: 120 tracks to search and add, with 96 searches left today, need
 
 `--max-days` (§4.1) isn't implemented: a run simply stops at the quota and is resumed.
 
+
+## Amendment 6 (YouTube data and the local judge matcher, Proposed with ADR 0011)
+
+- **Date:** 2026-10-14
+- **Status:** **Rejected** (2026-10-14) together with [ADR 0011](0011-local-match-judge.md), after spike S8 showed the local judge doesn't beat `basic` matching. Kept as a record; nothing here is implemented.
+- **Why:** with `--matcher local` (ADR 0009 Amendment 3), the titles and guessed artists of the top YouTube search results are sent to a model server, so that it can pick the match. That is a new use of YouTube API data and needs to be squared with the Developer Policies cited in §4.1.
+
+| Topic | Rule |
+|---|---|
+| What is sent, and where | For each of the top 3 search hits: the video title and the artist names derived from it, with no video ID, channel ID, thumbnail, duration or statistics. It goes only to the server at `SPLE_LOCAL_JUDGE_URL`, which the user runs (by default `localhost`, such as LM Studio), and only with `--matcher local`. |
+| III.A.2.e (the privacy policy must explain sharing) | PRIVACY.md says what is sent, that it goes only to the server the user configures, and that it is opt-in, **before** the matcher ships. With the default `localhost` URL, nothing leaves the user's computer. |
+| III.E.4 (storage) | Unchanged. The model's answer is kept only as the match `confidence`, in the match cache and run files, under their existing 30-day limits. sple does not store the prompt. |
+| III.E.4.h (no "new or derived data or metrics") | The answer is used only to pick the matching track, as the `basic` score (A1 R3, ADR 0009) already does. It is not aggregated, published or used for any other purpose. **Closed by owner decision (2026-10-14):** sple is for personal use, and with the default `localhost` server the data never leaves the user's computer, so this is not a blocker. |
+| Quota | The judge uses no YouTube quota. The search is the one `metadata` already makes, so Amendment 5's estimate is unchanged. The request count is printed separately (ADR 0007 Amendment 7). |

@@ -642,3 +642,37 @@ interface MigrateOutput {
 
 **Summary and exit code:** per-track failures are printed as in A9. With no skips and no failures, stderr gets `sple: migrated <n> playlist(s)` (dry run: `sple: [dry-run] matched <n> playlist(s); nothing was created`) and the exit code is 0. Otherwise stderr gets `sple: migrated <k> of <m> playlists; <s> skipped, <f> track(s) failed to add (see above)` (only the parts that apply). The exit code follows §5 priority over the skips' codes, plus 1 for track failures, and `--json` adds the `PartialFailure` `ErrorOutput`.
 
+
+## Amendment 7 (`--matcher`, Proposed with ADR 0011)
+
+- **Date:** 2026-10-14
+- **Status:** **Rejected** (2026-10-14) together with [ADR 0011](0011-local-match-judge.md), after spike S8 showed the local judge doesn't beat `basic` matching. Kept as a record; nothing here is implemented.
+- **Why:** the opt-in `local` matcher (ADR 0009 Amendment 3) is chosen per run.
+
+### Usage
+
+`import` (Amendment 4) and `migrate` (Amendment 6) gain `[--matcher basic|local]`. The default is `basic`.
+
+### Validation (exit 2, before any request)
+
+| Condition | Message |
+|---|---|
+| a value other than `basic` or `local` | `--matcher must be basic or local` |
+| `local`, and `SPLE_LOCAL_JUDGE_MODEL` is unset or empty (environment or `.env`) | `--matcher local needs SPLE_LOCAL_JUDGE_MODEL (set it in <configDir>/.env)` |
+| `local`, and `SPLE_LOCAL_JUDGE_URL` is set but not an `http:` or `https:` URL | `SPLE_LOCAL_JUDGE_URL must be an http(s) URL` |
+| `--resume` with `--matcher` | `--resume cannot be combined with --matcher` (the start-only list in Amendments 4 and 6) |
+| `--resume` of a run whose `matcher` is `local`, and the model is unset | the same message as the second row |
+
+sple does not contact the server during validation. An unreachable server is a judge failure (ADR 0009 Amendment 3 §5), not a usage error.
+
+### Run file
+
+`RunState.options` gains `matcher?: 'basic' | 'local'`. If it is absent, the run uses `basic`, so existing run files stay valid and `schemaVersion` stays 1. A resume uses the saved value.
+
+### Output
+
+- **Before matching** (stderr, after the quota estimate), when `matcher` is `local`: `Local judge: up to <n> request(s) (<model> at <url>)`. Here `<n>` is the number of tracks that Amendment 5's `countImportWork` counts a title search for.
+- **First judge failure in a run** (stderr, once): `sple: warning: local judge request failed (<message>); using basic matching for affected tracks`. When the failure switches the judge off (ADR 0009 Amendment 3 §5), the message continues with `; the local judge is off for the rest of this run`. Later failures go only into the report (`MatchResult.error`).
+- **Another model answered** (stderr, once): `sple: warning: asked the local judge for <model>, but <answered model> answered`.
+- **Report:** `matcher` and `judgeModel`, plus the `Matcher:` line in the text report (ADR 0009 Amendment 3 §6). `ImportOutput` and `MigrateOutput` are otherwise unchanged.
+- Help text for `import` and `migrate` describes `--matcher` and states that `local` sends track titles and artists to the server at `SPLE_LOCAL_JUDGE_URL`.

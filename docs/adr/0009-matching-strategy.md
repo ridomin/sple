@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-10-05); amended 2026-10-07 (Amendment 1)
 - **Date:** 2026-10-05
 - **Deciders:** project owner, architect
-- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface)
+- **Related:** FR-MIG-2 (matching strategies), FR-EXP-7 (import), ADR 0003 (provider interface), [ADR 0011](0011-local-match-judge.md) (Rejected: opt-in local judge for metadata hits)
 
 ## Context
 
@@ -101,6 +101,8 @@ Strategies **return null** to mean "no match found" and **throw only on fatal er
 A quota hit therefore does not corrupt the match state.
 
 ### No External Dependencies
+
+> Amendment 3 proposed an opt-in local judge alongside the `basic` scorer; it was rejected after spike S8, so this section applies unchanged.
 
 Matching uses no fuzzy-matching or NLP libraries (like leven, fuzzy-wuzzy, or jaro-winkler). Simple word overlap is sufficient because:
 - Provider search APIs already do the heavy lifting
@@ -357,3 +359,128 @@ An entry is fresh while `now − fetchedAt < 30 days` (YouTube API Developer Pol
 - `sple auth logout --provider X` (and `--all`) deletes every entry that targets `X` or whose key starts with `X|`, whether or not tokens were stored. When any were deleted, `match_cache` is appended to the `Deleted:` line (ADR 0007 Amendment 3).
 - Concurrent sple processes are not locked against; the last write wins.
 
+
+## Amendment 3 (local judge matcher, Proposed with ADR 0011)
+
+- **Date:** 2026-10-14
+- **Status:** **Rejected** (2026-10-14) together with [ADR 0011](0011-local-match-judge.md). Spike S8 ([report](../spikes/local-judge-spike.md#results)) measured `basic` at 93% correct with 5% false accepts and the best judge setting at 84% / 4%, so sple keeps matching as Amendments 1–2 say. This amendment is kept as the record of what was evaluated; nothing here is implemented.
+- **Why:** On Spotify → YouTube, the metadata score can't tell a cover, live or lyric re-upload from the same recording, and it rejects correct hits whose artist was guessed wrongly. ADR 0011 adds an opt-in judge: a decision model on the user's own server (LM Studio) picks the matching recording among the top search hits. This amendment is the spec ports implement. ADR 0011 has the reasons, the alternatives and the risks.
+
+Constants marked † are provisional. S8 sets them, and this amendment is updated before it is accepted.
+
+### 1. Matcher
+
+A run has a `matcher`: `basic` (default) or `local` (`--matcher`, ADR 0007 Amendment 7). With `basic`, the chain is A2 §1, unchanged. With `local`, slot 4 runs `local` instead of `metadata`:
+
+| # | Strategy | Applicable when | Call | Candidate |
+|---|---|---|---|---|
+| 1–3 | `known-ref`, `cache`, `isrc` | unchanged | unchanged | unchanged |
+| 4 | `local` | `matcher` is `local`, the judge is not switched off for the run (§5), and `track.title` is non-empty | the A1 §2 metadata search, then one judge request when there is at least one hit | §4 |
+
+`MatchCandidate.strategy` gains `'local'` (ADR 0003 Amendment 4).
+
+### 2. Shortlist
+
+1. Search exactly like `metadata`: `searchTracks({ kind: 'metadata', title, artists, album, durationMs }, { limit: 10 })`.
+2. The shortlist is the first `K = 3`† hits **in the provider's order**, `h1…hK`. Fewer hits give a shorter shortlist.
+3. No hits means no candidate (`null`), and no request is made.
+
+### 3. Judge request
+
+One `POST <SPLE_LOCAL_JUDGE_URL>/responses` per track, with `fetch`, `content-type: application/json`, no credentials and a 30 s timeout. `SPLE_LOCAL_JUDGE_URL` defaults to `http://localhost:1234/v1`, with any trailing `/` removed.
+
+```json
+{
+  "model": "<SPLE_LOCAL_JUDGE_MODEL>",
+  "input": "<prompt>",
+  "max_output_tokens": 2,
+  "temperature": 0,
+  "top_logprobs": 20,
+  "include": ["message.output_text.logprobs"],
+  "reasoning": { "effort": "none" }
+}
+```
+
+**Prompt.** Option letters are `A`, `B`, … in shortlist order; the last letter (letter `K + 1` for a full shortlist) is "none". Lines are joined with `\n`:
+
+```
+State:
+<STATE>
+
+Question: <QUESTION>
+Options:
+[A] <option for h1>
+…
+[<none letter>] None of these is the same recording.
+
+Answer with the letter of the best option only.
+```
+
+- `STATE` is the compact `JSON.stringify` of `{ source: { service, title, artists, album? } }`, with the keys in that order and `album` left out when it is absent. `service` is the source provider's display name (`Spotify`).
+- `QUESTION`† is: `Which candidate is the same recording as the source track? Uploads that differ only in packaging (Official Video, Lyrics, Audio, HD, a '- Topic' or VEVO channel) count as the same recording. Live, remix, cover, karaoke, instrumental, sped up or re-recorded versions do not.`
+- A hit's option is `JSON.stringify(title)`, then ` by ` and the artists joined with `, ` when there are any, then ` from ` and `JSON.stringify(album)` when there is an album. In artist names every run of whitespace becomes one space, so a title or artist can't start a new line.
+- Durations, refs, ISRCs, tokens and account data are never sent.
+
+**Reading the answer.**
+1. Take the first `output` item of type `message`, then its first `output_text` content part, then the `top_logprobs` of that part's first `logprobs` entry: a list of `{ token, logprob }`.
+2. For each option letter `L`, `m(L)` is the sum of `exp(logprob)` over the entries whose `token`, trimmed and with one leading `[` removed, equals `L` exactly.
+3. `M` is the sum of `m(L)` over the option letters. If `M < 0.5`, or the path in step 1 is missing, the request has failed (§5).
+4. `p(L) = m(L) / M`. `judgeModel` is the response's top-level `model`.
+
+### 4. Combining (in code)
+
+Let `p(none)` be the probability of the last letter, and `hi` the shortlisted hit with the highest `p`; ties go to the earlier letter.
+
+- **A hit wins when `p(none) < 0.5`.** The winner is `hi`, and its raw confidence is `1 − p(none)`†: the probability that some shortlisted hit is the same recording.
+  - Several uploads of one recording (official video, `- Topic`, lyric video) split the probability between them. In S8's first 21 labelled tracks the top hit was right in 19, but its own `p` never reached 0.5, while `1 − p(none)` gave 81% correct with no false accepts.
+  - The duration check passes when either `durationMs` is missing or `|Δ| ≤ D` with `D = 10000` ms†. Then `confidence = 1 − p(none)`.
+  - Otherwise `confidence = min(1 − p(none), 0.45)`†.
+  - The result is `{ ref, track, confidence, strategy: 'local' }`.
+- **The alternative S8 also measures (`pick`):** the option with the highest `p` wins, hits and "none" alike, and a winning hit's raw confidence is its own `p(hi)`.
+- **"None" wins:** the result is the **A1 `metadata` result for the same 10 hits** with `confidence = min(c, 0.45)`† and `strategy: 'metadata'`, or `null` if A1 accepts no hit.†
+  - The judge disagrees with the scorer, so the match is kept but reported as `low-confidence` at the default threshold.
+  - S8 compares this with "unmatched" and with the uncapped A1 result.
+- The cap keeps doubtful picks below the default `minConfidence` (0.5). A user who lowers `--min-confidence` below the cap accepts them on purpose, as with `basic`.
+- Confidence is a double and is not rounded. The engine applies `minConfidence` as in A1 §1.2.
+
+### 5. Failures
+
+The judge never stops a run, and its errors never take the A1 §1.4 path:
+
+- On any failure, the strategy returns the **A1 `metadata` result for the same hits, uncapped**, with `strategy: 'metadata'`. The track's `MatchResult.error` is set to `local: <message>` even when the fallback matched. A failure is any of:
+  - `fetch` throws: connection refused, DNS, or the 30 s timeout;
+  - the HTTP status is not 2xx;
+  - the body is not JSON, or the answer can't be read (§3, `M < 0.5` or a missing path).
+- The first failure in a run prints one warning on stderr (ADR 0007 Amendment 7).
+- These failures switch `local` off for the rest of the run, so slot 4 runs `metadata`:
+  - a connection failure: the server isn't running or the URL is wrong;
+  - HTTP 404: the endpoint doesn't exist or the model isn't available.
+- There are no retries, and judge errors are never `AuthRequiredError`, `QuotaExhaustedError` or `RateLimitError`.
+- LM Studio does not return 404 for an unknown model ID; it answers with the model that is loaded. If a response's `model` differs from `SPLE_LOCAL_JUDGE_MODEL`, sple prints one warning per run (ADR 0007 Amendment 7) and still uses the answer. `judgeModel` records the model that answered.
+
+### 6. Cache and report
+
+- **Cache (A2):** a `local` candidate is written like an `isrc` or `metadata` one, and the entry's `strategy` may be `'local'`. The key does not include the matcher. A fresh entry is reused by both matchers, and `--no-cache` forces a new decision.
+- **Report (A1 §6):** `MatchReport` gains `matcher?: 'basic' | 'local'` (absent means `basic`) and `judgeModel?: string`, the `model` of the first judge response in the run. `strategies[]` lists `local` when it ran.
+- **Text report:** when `matcher` is `local`, `Matcher: local (<judgeModel>)` follows the `Imported at` line. `judgeModel` is `not called` when no request was made.
+
+### 7. Test vectors
+
+These assume `minConfidence` 0.5 and the provisional constants (confidence `1 − p(none)`), with three hits unless stated otherwise. "p" lists `p(A) / p(B) / p(C) / p(none)`; durations are in seconds (source / winning hit).
+
+| p | Durations | A1 over the same hits | Result |
+|---|---|---|---|
+| 0.70 / 0.05 / 0.05 / 0.20 | 243 / 245 | – | `matched`, h1, 0.80, `local` |
+| 0.10 / 0.60 / 0.05 / 0.25 | 200 / 208 | – | `matched`, h2, 0.75, `local` |
+| 0.55 / 0.05 / 0.05 / 0.35 | 301 / 420 | – | `low-confidence`, h1, 0.45, `local` (Δ 119 s > D) |
+| 0.48 / 0.02 / 0.02 / 0.48 | – / 200 | – | `matched`, h1, 0.52, `local` (`p(none)` < 0.5) |
+| 0.40 / 0.40 / 0.10 / 0.10 | 200 / 200 | – | `matched`, h1, 0.90, `local` (tie, earlier letter) |
+| 0.25 / 0.22 / 0.20 / 0.33 | 200 / 200 | – | `matched`, h1, 0.67, `local` (three uploads split the probability) |
+| 0.20 / 0.20 / 0.10 / 0.50 | – | accepts h2 at 0.85 | `low-confidence`, h2, 0.45, `metadata` (`p(none)` ≥ 0.5 means "none") |
+| 0.05 / 0.05 / 0.05 / 0.85 | – | accepts h2 at 0.85 | `low-confidence`, h2, 0.45, `metadata` |
+| 0.05 / 0.05 / 0.05 / 0.85 | – | accepts nothing | `unmatched` |
+| two hits: 0.30 / 0.60 / none 0.10 | 200 / – | – | `matched`, h2, 0.90, `local` (options A, B, C = none) |
+| letters carry `M` = 0.30 (the model began with `<think>`) | – | accepts h1 at 0.85 | `matched`, h1, 0.85, `metadata`, `error: 'local: …'` |
+| connection refused | – | accepts h1 at 0.85 | `matched`, h1, 0.85, `metadata`, `error: 'local: …'`; `local` is off for the rest of the run |
+
+**Readout.** The top log-probabilities give `A` 0.60, `[A` 0.10, `B` 0.15, `D` 0.08 and `<think>` 0.05, as probabilities. For three hits (options A–C, D = none): `M = 0.93`, `p(A) = 0.7527`, `p(B) = 0.1613`, `p(C) = 0`, `p(none) = 0.0860`. The answer is h1 (compare with a tolerance of 1e-4).

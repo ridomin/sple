@@ -225,6 +225,7 @@ The behavior is specified in [docs/requirements.md](docs/requirements.md) and th
 | [0008](docs/adr/0008-canonical-playlist-file.md) | Canonical playlist file (JSON, CSV) |
 | [0009](docs/adr/0009-matching-strategy.md) | Matching strategy and match report |
 | [0010](docs/adr/0010-http-oauth-and-token-refresh.md) | HTTP client, OAuth and token refresh |
+| [0011](docs/adr/0011-local-match-judge.md) | A local decision model as an opt-in judge for metadata matches (**Rejected** after spike S8) |
 
 ### Key Design Decisions
 

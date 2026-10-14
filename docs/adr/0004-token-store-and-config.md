@@ -200,3 +200,20 @@ Token refresh is transparent to the `Provider` interface and CLI.
 - **Write:** create the config directory if needed, read the current file (or start a new v1 document), replace `accounts[0]` for the provider, and write the whole file as UTF-8 JSON with 2-space indentation. On POSIX the file must be created with mode `0600` (never readable by others, even briefly): write a temp file in the same directory with mode `0600`, then rename it over `tokens.json`. Delete rewrites the file the same way.
 - **Delete (logout):** remove the provider's entry entirely; other providers are untouched. A missing file is not an error.
 - Concurrent writers are not locked against; the last write wins.
+
+## Amendment 2 (local judge matcher, Proposed with ADR 0011)
+
+- **Date:** 2026-10-14
+- **Status:** **Rejected** (2026-10-14) together with [ADR 0011](0011-local-match-judge.md), after spike S8 showed the local judge doesn't beat `basic` matching. Kept as a record; nothing here is implemented.
+- **Why:** the opt-in `local` matcher (ADR 0009 Amendment 3) needs to know which model server and model to ask.
+
+**Variables** (added to the §1 table):
+
+| Variable | Required | Description | Example |
+|---|---|---|---|
+| `SPLE_LOCAL_JUDGE_MODEL` | Only for `--matcher local` | The model ID as the server lists it (`GET <url>/models`). There is no default: model IDs are whatever the user loaded. | `jevk5` |
+| `SPLE_LOCAL_JUDGE_URL` | No | The base URL of an OpenAI-compatible server that implements `POST /responses` with `top_logprobs`. Defaults to `http://localhost:1234/v1` (LM Studio). Must be `http:` or `https:`. | `http://172.19.192.1:1234/v1` (WSL to a Windows host) |
+
+- Neither value is a secret, and no API key is sent. A server that requires one is not supported.
+- Both are read only when the run's matcher is `local`. The run file stores `matcher`, not the URL or model, so a resume uses the values current at resume time.
+- The report records the model that answered (`judgeModel`), never the URL.
