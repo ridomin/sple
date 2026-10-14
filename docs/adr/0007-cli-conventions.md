@@ -673,5 +673,6 @@ sple does not contact the server during validation. An unreachable server is a j
 
 - **Before matching** (stderr, after the quota estimate), when `matcher` is `local`: `Local judge: up to <n> request(s) (<model> at <url>)`. Here `<n>` is the number of tracks that Amendment 5's `countImportWork` counts a title search for.
 - **First judge failure in a run** (stderr, once): `sple: warning: local judge request failed (<message>); using basic matching for affected tracks`. When the failure switches the judge off (ADR 0009 Amendment 3 §5), the message continues with `; the local judge is off for the rest of this run`. Later failures go only into the report (`MatchResult.error`).
+- **Another model answered** (stderr, once): `sple: warning: asked the local judge for <model>, but <answered model> answered`.
 - **Report:** `matcher` and `judgeModel`, plus the `Matcher:` line in the text report (ADR 0009 Amendment 3 §6). `ImportOutput` and `MigrateOutput` are otherwise unchanged.
 - Help text for `import` and `migrate` describes `--matcher` and states that `local` sends track titles and artists to the server at `SPLE_LOCAL_JUDGE_URL`.

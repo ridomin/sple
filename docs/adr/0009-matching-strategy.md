@@ -453,6 +453,7 @@ The judge never stops a run, and its errors never take the A1 §1.4 path:
   - a connection failure: the server isn't running or the URL is wrong;
   - HTTP 404: the endpoint doesn't exist or the model isn't available.
 - There are no retries, and judge errors are never `AuthRequiredError`, `QuotaExhaustedError` or `RateLimitError`.
+- LM Studio does not return 404 for an unknown model ID; it answers with the model that is loaded. If a response's `model` differs from `SPLE_LOCAL_JUDGE_MODEL`, sple prints one warning per run (ADR 0007 Amendment 7) and still uses the answer. `judgeModel` records the model that answered.
 
 ### 6. Cache and report
 

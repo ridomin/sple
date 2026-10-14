@@ -50,6 +50,7 @@ OpenJev, the closest documented relative, is an independent project with a CC BY
 | `chat_template_kwargs.enable_thinking: false` is ignored, and the model starts with `<think>` | Send `reasoning: { effort: "none" }`; the first output token is then the answer letter |
 | The answer appears as `A` or `[A` (about 10% of the mass on `[A`) | A letter's probability sums every top token that is the letter after trimming and removing a leading `[` |
 | The model preset's Repeat Penalty (reported as `frequency_penalty: 1.1`) can't be overridden per request, not even with `0` or `1e-6` | Users should switch Repeat Penalty off in LM Studio. Turning it off (1) didn't change the smoke results |
+| An unknown model ID is not an error: the server answers with whichever model is loaded, and the response's `model` field names it | A typo in `SPLE_LOCAL_JUDGE_MODEL` would quietly use another model. sple prints one warning when the answering model differs (ADR 0009 A3 §5) |
 | With the model partly on the CPU: about 6 s per question. Fully on the GPU: **0.35–0.5 s** | About 1 minute per 150 tracks with one question per track |
 
 ## Smoke tests (2026-10-14)
@@ -108,6 +109,14 @@ All eight errors were "none" when a correct upload was present:
 
 Correct picks had p = 0.5–0.7.
 
+### 4. Harness check: end to end on a 6-track sample
+
+The six sets above went through the full harness as a hand-labelled fixture: 22 runs in 15 s, no failures. This checks the pipeline; it is not evaluation data.
+
+- **The fresh repeat matched exactly:** 0 changed picks, and the largest confidence change was 0.0003. Answers are deterministic at `temperature: 0`.
+- **`basic` matched none of the six.** YouTube-style titles fail the A1 title rule.
+- **Official music videos often fail the duration check.** Intros and outros make them longer than the album track (Adele's video runs 367 s against the album's 295 s), so a correct pick is capped to low-confidence. The D sweep has to measure what this costs.
+
 **Outcome:** the design moves to one choice among the provider's top K. A wrong pick is rare, while "none" is common. So what "none" does with the `basic` result is the main thing the evaluation must settle (ADR 0009 A3 §4).
 
 ## Proposed request
@@ -130,7 +139,7 @@ Durations are left out, and code compares them afterwards. **Cost:** about 200 i
 
 ## Evaluation protocol (to run)
 
-The harness in `scripts/spikes/decisions/` (branch `spike/s8-decisions-harness`) runs each step: `collect.ts` (step 2), `label.ts` (step 3) and `evaluate.ts` (steps 4–6). It is being moved from the OpenAI client to the local judge.
+The harness in `scripts/spikes/decisions/` (branch `spike/s8-decisions-harness`) runs each step: `collect.ts` (step 2), `label.ts` (step 3) and `evaluate.ts` (steps 4–6). `evaluate.ts` prints the results tables below, ready to paste.
 
 1. **Dataset.** Pick 150 Spotify tracks from one or two of the owner's playlists (`sple export`). The set should include at least 20 non-English titles, 15 tracks with live or remix versions in the catalogue, and 15 tracks whose artist name differs between services ("The Beatles" vs "Beatles", featured artists).
 2. **Hits.** Run the YouTube `searchTracks` call once per track with `limit: 10`. That is 150 searches, about 2 days of the 100-searches-per-day bucket. Save each track's hits in provider order to a local fixture outside the repo, so every later step is offline for YouTube.

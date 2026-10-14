@@ -47,7 +47,8 @@ With `--matcher local`, the `metadata` slot (ADR 0009 A2 §1, #4) runs `local` i
 The judge is an improvement layer. A failure never stops a run or changes provider error handling:
 
 - On any failure, the strategy returns the **`basic` metadata result** for that track (`strategy: 'metadata'`, uncapped) and records `local: <message>` in the result's `error`. That covers a connection error, a timeout (30 s), an HTTP error, and an answer without letters.
-- A connection failure (the server isn't running) or an HTTP 404 (the model or endpoint doesn't exist) also turns the judge off for the rest of the run. One warning is printed the first time the judge fails.
+- A connection failure (the server isn't running) or an HTTP 404 (the endpoint doesn't exist) also turns the judge off for the rest of the run. One warning is printed the first time the judge fails.
+- LM Studio answers an unknown model ID with whatever model is loaded, so sple warns once when the response's `model` differs from the one it asked for.
 - Judge errors are never mapped to `RateLimitError`, `QuotaExhaustedError` or `AuthRequiredError`, which ADR 0009 A1 §1.4 treats as run-stopping provider errors.
 
 ### 5. Results, cache and report
