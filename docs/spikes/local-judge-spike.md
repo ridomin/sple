@@ -1,7 +1,7 @@
 # Local match-judge spike (S8)
 
-- **Date:** 2026-10-14 (research and smoke tests); evaluation not yet run
-- **Status:** Smoke tests done against a local model in LM Studio; **evaluation pending** (needs the labelled fixture)
+- **Date:** 2026-10-14 (research, smoke tests and evaluation)
+- **Status:** **Evaluation run on 100 tracks: the judge does not beat `basic`; it fails the pass bar.** The decision on ADR 0011 is the owner's (see [Results](#results))
 - **Related:** [ADR 0011](../adr/0011-local-match-judge.md) (Proposed), [ADR 0009 Amendment 1 §4](../adr/0009-matching-strategy.md#4-metadata-score) (metadata score), [ADR 0009 Amendment 3](../adr/0009-matching-strategy.md#amendment-3-local-judge-matcher-proposed-with-adr-0011) (the spec), [ADR 0002](../adr/0002-youtube-music-provider.md) (YouTube quota and policies), [requirements FR-MIG-2, NFR-9](../requirements.md)
 - **Data handling:** results record counts and rates only. Labelled pairs (titles, artists, video IDs) stay in a local fixture outside the repo, and that fixture is deleted within 30 days (YouTube API Developer Policies III.E.4). The smoke-test cases below are hand-written from well-known songs, not YouTube API data.
 
@@ -10,9 +10,9 @@
 | Which judge? | Decided 2026-10-14 | A local decision model served by LM Studio, chosen by the owner. Hosted Jev and OpenAI Decisions were dropped (see [History](#history)) |
 | Can a local model in LM Studio return per-answer probabilities? | **Yes** (smoke test) | Only through `POST /v1/responses` with `top_logprobs`; see [LM Studio findings](#lm-studio-findings) |
 | Question shape: one rating per candidate, or one choice among the top hits? | **Choice** (smoke test) | One choice among the provider's top 3 plus "none". Per-candidate ratings scored 3–5/10; the choice made no wrong picks |
-| Does it beat the ADR 0009 scorer on Spotify → YouTube? | **Not run** | Gate for accepting ADR 0011 |
+| Does it beat the ADR 0009 scorer on Spotify → YouTube? | **No** (100 tracks) | `basic` 93% correct / 5% false accepts; the best judge setting 84% / 4%. The pass bar fails |
 | Confidence: the winning hit's own probability, or 1 − p(none)? | **1 − p(none)** (21 labelled tracks) | Several uploads of one recording split the probability; see [Early results](#early-results-21-tracks-2026-10-14) |
-| K, D, the cap and what "none" does | **Not run** | Filled in from the evaluation |
+| K, D, the cap and what "none" does | **Measured** | Best: K = 3, D = 15 s, "none" → the `basic` result (see [Results](#results)) |
 
 ## Why
 
@@ -178,14 +178,64 @@ The first 21 fully labelled tracks, all from one classic-rock playlist (English 
 
 ## Results
 
-_Full evaluation not run yet: 100 of 150 tracks collected, labelling in progress._
+**Dataset.** 100 tracks from five of the owner's Spotify playlists, with 993 YouTube results (2026-10-14):
+- 55 Rolling Stones tracks;
+- 28 Spanish-language and flamenco tracks (The Parrots, Niña Polaca, Venturi, Camarón, Paco de Lucía, Morente and others);
+- 17 other English-language tracks.
+
+Every track has a `same` result except 3.
+
+**Labels.** The owner's first pass used `D` as "next track", which marked every later result `different`. So the labels were redrafted from titles, artists and durations with the rule in the protocol (step 3), and the owner reviewed every changed label: 640 of 641 drafts were accepted. These labels are therefore less independent of the judge than a fresh hand-labelling would be.
+
+**Runs.** The full grid (K ∈ {3, 5}, D ∈ {5, 10, 15} s, three "none" rules, two confidence rules) plus `-a1`, `local-score` and a repeat: about 800 requests in 3.5 minutes, with no failures.
+
+Selected rows (`evaluate.ts` output). Percentages are of the 100 tracks.
 
 | Run | K | D (s) | "none" | Correct accept | False accept | Low-conf | Missed `same` | Failures | Time/track |
 |---|---|---|---|---|---|---|---|---|---|
-| basic | – | 5 | – | | | | | – | – |
+| **minConfidence 0.5** | | | | | | | | | |
+| basic | – | 5 | – | **93% (93)** | 5% (5) | 0% | 2% (2) | – | – |
+| local-any | 3 | 15 | basic | 84% (84) | 4% (4) | 12% (12) | 0% | 0 | 0.38 s |
+| local-any | 3 | 15 | unmatched | 70% (70) | 3% (3) | 12% (12) | 14% (14) | 0 | 0.38 s |
+| local-any | 3 | 15 | capped | 70% (70) | 3% (3) | 27% (27) | 0% | 0 | 0.38 s |
+| local-any | 5 | 15 | basic | 78% (78) | 3% (3) | 19% (19) | 0% | 0 | 0.38 s |
+| local-pick | 3 | 15 | basic | 50% (50) | 5% (5) | 44% (44) | 1% (1) | 0 | 0.38 s |
+| local-any-a1 | 3 | 15 | basic | 85% (85) | 5% (5) | 9% (9) | 1% (1) | 0 | 0.39 s |
+| local-score | 3 | 15 | – | 1% (1) | 0% | 99% (99) | 0% | 0 | 1.14 s |
+| local-any (repeat) | 3 | 15 | basic | 84% (84) | 4% (4) | 12% (12) | 0% | 0 | 0.38 s |
+| **minConfidence 0.8** | | | | | | | | | |
+| basic | – | 5 | – | **90% (90)** | 3% (3) | 5% (5) | 2% (2) | – | – |
+| local-any | 3 | 15 | basic | 13% (13) | 0% | 87% (87) | 0% | 0 | 0.38 s |
+| local-pick | 3 | 15 | basic | 44% (44) | 3% (3) | 52% (52) | 1% (1) | 0 | 0.38 s |
 
-**Model, settings and date:** –  
-**Decision:** pending.
+**Model, settings and date:** `jevk5` (LM Studio, Q8_0, Repeat Penalty off), cap 0.45, 2026-10-14. The repeat changed no picks; the largest confidence change was 0.0015.
+
+**By subset** (`local-any`, K = 3, D = 15 s, "none" → unmatched, i.e. the judge on its own, at 0.5):
+
+| Subset | basic | judge |
+|---|---|---|
+| Rolling Stones (55) | 55 correct | 44 correct, 9 missed, 2 low-confidence |
+| Other English (17) | 17 correct | 13 correct, 2 missed, 2 low-confidence |
+| Spanish / flamenco (28) | 21 correct, **5 false accepts**, 2 missed | 13 correct, 3 false accepts, 8 low-confidence, 3 missed, 1 correct "none" |
+
+### Findings
+
+- **`basic` is very strong on this data:** 93% correct at the default threshold. The pass bar, `basic` + 10 points, would need 103% and cannot be met. 50 more tracks from the remaining playlist couldn't change that.
+- **On English titles the judge only loses matches.** Its misses there are tracks where it answered "none". Its low-confidence results are correct picks that failed the duration check (music videos with intros).
+- **Every `basic` error is in the Spanish/flamenco subset**, mostly live sessions, demos and covers scoring high on word overlap.
+  - The judge fixes 4 of those 7 and turns 2 more into low-confidence.
+  - But it adds 3 false accepts of its own, all live or session versions that `basic` had got right.
+- **The confidence rule matters most.** The winning hit's own probability (`pick`) gets 50%, 1 − p(none) (`any`) gets 84%, and the per-candidate rating gets 1%. Its confidences cluster between 0.5 and 0.8, so at `--min-confidence 0.8` almost everything becomes low-confidence.
+- **An agreement hybrid doesn't help.** Keeping `basic`'s match only when the judge picks the same result cut false accepts to 1% but flagged 57% of tracks, because the two often pick different uploads of the same recording.
+
+### Decision
+
+**Recommendation: reject ADR 0011** under its own rule ("If S8 fails, mark this ADR and the five amendments Rejected"). Keep `basic` as the only matcher.
+
+- **Where the judge did help:** non-English titles and live/session uploads, the cases `basic` gets wrong. It isn't reliable enough there either: it fixed 4 of `basic`'s 7 errors but added 3 of its own.
+- **Revisiting it** would need a model that knows the music better, or a narrower role (for example, only flagging likely live or session uploads), plus a fresh S8 run. The harness supports both.
+
+**Owner decision:** pending.
 
 ## Sources
 
